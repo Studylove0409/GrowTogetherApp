@@ -1,0 +1,15 @@
+class Profile {
+  const Profile({
+    required this.name,
+    required this.partnerName,
+    required this.togetherDays,
+    required this.inviteCode,
+    required this.isBound,
+  });
+
+  final String name;
+  final String partnerName;
+  final int togetherDays;
+  final String inviteCode;
+  final bool isBound;
+}
