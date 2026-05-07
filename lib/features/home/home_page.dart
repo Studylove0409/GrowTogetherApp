@@ -35,7 +35,7 @@ class HomePage extends StatelessWidget {
                 const _HomeHeader(),
                 const SizedBox(height: AppSpacing.xl),
                 const _GrowthHeroCard(),
-                const SizedBox(height: AppSpacing.xl),
+                const SizedBox(height: AppSpacing.lg),
                 SectionHeader(
                   title: '今日重点计划',
                   actionLabel: '全部 ${todayPlans.length}',
@@ -111,7 +111,7 @@ class _GrowthHeroCard extends StatelessWidget {
       backgroundColor: AppColors.lightPink.withValues(alpha: 0.46),
       borderColor: Colors.white.withValues(alpha: 0.76),
       child: SizedBox(
-        height: 168,
+        height: 140,
         child: Stack(
           children: [
             Positioned(

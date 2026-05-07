@@ -70,7 +70,7 @@ class _RemindersPageState extends State<RemindersPage> {
                   child: SizedBox(
                     width: double.infinity,
                     child: PrimaryPillButton(
-                      label: '发送提醒',
+                      label: '轻轻提醒 TA',
                       icon: Icons.send_rounded,
                       height: 52,
                       onPressed: () => _showSnack(context, '发送提醒功能开发中'),

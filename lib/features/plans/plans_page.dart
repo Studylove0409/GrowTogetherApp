@@ -8,7 +8,6 @@ import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/app_scaffold.dart';
-import '../../shared/widgets/primary_pill_button.dart';
 import '../../shared/widgets/status_pill.dart';
 
 class PlansPage extends StatelessWidget {
@@ -80,11 +79,10 @@ class PlansPage extends StatelessWidget {
             Positioned(
               right: 16,
               bottom: 16,
-              child: PrimaryPillButton(
-                label: '创建计划',
-                icon: Icons.add_rounded,
-                height: 58,
+              child: FloatingActionButton(
                 onPressed: () => _showSnack(context, '创建计划功能开发中'),
+                backgroundColor: AppColors.deepPink,
+                child: const Icon(Icons.add_rounded, color: Colors.white),
               ),
             ),
           ],
@@ -172,24 +170,13 @@ class _OverviewCard extends StatelessWidget {
                 AppIconTile(icon: focusIcon, color: accentColor, size: 38),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        focusTitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.body.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      Text(
-                        focusSubtitle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTextStyles.caption,
-                      ),
-                    ],
+                  child: Text(
+                    focusTitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
