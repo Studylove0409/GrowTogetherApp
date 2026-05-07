@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../shared/utils/plan_icon_mapper.dart';
+
 enum PlanOwner { me, partner, together }
+
+enum PlanStatus { active, ended }
+
+enum TogetherStatus { bothDone, onlyMeDone, meNotDone }
 
 enum CheckinMood { happy, normal, tired, great }
 
@@ -28,7 +34,7 @@ class Plan {
     required this.title,
     required this.subtitle,
     required this.owner,
-    required this.icon,
+    required this.iconKey,
     required this.minutes,
     required this.completedDays,
     required this.totalDays,
@@ -39,6 +45,8 @@ class Plan {
     required this.endDate,
     required this.reminderTime,
     this.partnerDoneToday = false,
+    this.status = PlanStatus.active,
+    this.endedAt,
     this.checkins = const [],
   });
 
@@ -46,7 +54,7 @@ class Plan {
   final String title;
   final String subtitle;
   final PlanOwner owner;
-  final IconData icon;
+  final String iconKey;
   final int minutes;
   final int completedDays;
   final int totalDays;
@@ -57,22 +65,49 @@ class Plan {
   final DateTime endDate;
   final TimeOfDay reminderTime;
   final bool partnerDoneToday;
+  final PlanStatus status;
+  final DateTime? endedAt;
   final List<CheckinRecord> checkins;
+
+  IconData get icon => PlanIconMapper.iconData(iconKey);
+
+  Color get iconColor => PlanIconMapper.color(iconKey);
+
+  Color get iconBackgroundColor => PlanIconMapper.backgroundColor(iconKey);
 
   double get progress => totalDays == 0 ? 0 : completedDays / totalDays;
 
-  bool get canCurrentUserCheckin => owner != PlanOwner.partner;
+  int get remainingDays => (totalDays - completedDays).clamp(0, totalDays);
 
-  bool get canCurrentUserEdit => owner != PlanOwner.partner;
+  bool get isEnded => status == PlanStatus.ended;
+
+  bool get canCurrentUserCheckin =>
+      owner != PlanOwner.partner && !isEnded;
+
+  bool get canCurrentUserEdit =>
+      owner != PlanOwner.partner && !isEnded;
 
   bool get isTogetherDoneToday => doneToday && partnerDoneToday;
+
+  // 统一判定：当前计划是否完成（按角色视角）
+  bool get isDoneForCurrentUser => switch (owner) {
+    PlanOwner.me => doneToday,
+    PlanOwner.partner => partnerDoneToday,
+    PlanOwner.together => doneToday,
+  };
+
+  TogetherStatus get togetherStatus {
+    if (doneToday && partnerDoneToday) return TogetherStatus.bothDone;
+    if (doneToday && !partnerDoneToday) return TogetherStatus.onlyMeDone;
+    return TogetherStatus.meNotDone;
+  }
 
   Plan copyWith({
     String? id,
     String? title,
     String? subtitle,
     PlanOwner? owner,
-    IconData? icon,
+    String? iconKey,
     int? minutes,
     int? completedDays,
     int? totalDays,
@@ -83,6 +118,8 @@ class Plan {
     DateTime? endDate,
     TimeOfDay? reminderTime,
     bool? partnerDoneToday,
+    PlanStatus? status,
+    DateTime? endedAt,
     List<CheckinRecord>? checkins,
   }) {
     return Plan(
@@ -90,7 +127,7 @@ class Plan {
       title: title ?? this.title,
       subtitle: subtitle ?? this.subtitle,
       owner: owner ?? this.owner,
-      icon: icon ?? this.icon,
+      iconKey: iconKey ?? this.iconKey,
       minutes: minutes ?? this.minutes,
       completedDays: completedDays ?? this.completedDays,
       totalDays: totalDays ?? this.totalDays,
@@ -101,6 +138,8 @@ class Plan {
       endDate: endDate ?? this.endDate,
       reminderTime: reminderTime ?? this.reminderTime,
       partnerDoneToday: partnerDoneToday ?? this.partnerDoneToday,
+      status: status ?? this.status,
+      endedAt: endedAt ?? this.endedAt,
       checkins: checkins ?? this.checkins,
     );
   }

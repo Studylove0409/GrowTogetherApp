@@ -9,6 +9,10 @@ import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/status_pill.dart';
+import 'create_plan_page.dart';
+import 'my_plans_page.dart';
+import 'partner_plans_page.dart';
+import 'together_plans_page.dart';
 
 class PlansPage extends StatelessWidget {
   const PlansPage({super.key});
@@ -35,44 +39,50 @@ class PlansPage extends StatelessWidget {
                   32,
                 ),
                 children: [
-                const Center(child: Text('计划', style: AppTextStyles.display)),
-                const SizedBox(height: AppSpacing.xl),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _OverviewCard(
-                        title: '我的计划',
-                        icon: Icons.flag_rounded,
-                        accentColor: AppColors.deepPink,
-                        countColor: AppColors.deepPink,
-                        doneCount: _doneCount(myPlans),
-                        totalCount: myPlans.length,
-                        focusTitle: '学习英语 30 分钟',
-                        focusSubtitle: '每天进步一点点',
-                        focusIcon: Icons.menu_book_rounded,
-                        onTap: () => _showSnack(context, '计划列表功能开发中'),
+                  const Center(child: Text('计划', style: AppTextStyles.display)),
+                  const SizedBox(height: AppSpacing.xl),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _OverviewCard(
+                          title: '我的计划',
+                          icon: Icons.flag_rounded,
+                          accentColor: AppColors.deepPink,
+                          countColor: AppColors.deepPink,
+                          doneCount: _doneCount(myPlans),
+                          totalCount: myPlans.length,
+                          focusPlan: myPlans.isEmpty ? null : myPlans.first,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const MyPlansPage(),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: _OverviewCard(
-                        title: 'TA 的计划',
-                        icon: Icons.directions_run_rounded,
-                        accentColor: AppColors.success,
-                        countColor: AppColors.successText,
-                        doneCount: _doneCount(partnerPlans),
-                        totalCount: partnerPlans.length,
-                        focusTitle: '运动 45 分钟',
-                        focusSubtitle: '健康是爱的底色',
-                        focusIcon: Icons.fitness_center_rounded,
-                        onTap: () => _showSnack(context, '计划列表功能开发中'),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: _OverviewCard(
+                          title: 'TA 的计划',
+                          icon: Icons.directions_run_rounded,
+                          accentColor: AppColors.success,
+                          countColor: AppColors.successText,
+                          doneCount: _doneCount(partnerPlans),
+                          totalCount: partnerPlans.length,
+                          focusPlan: partnerPlans.isEmpty
+                              ? null
+                              : partnerPlans.first,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const PartnerPlansPage(),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                _TogetherPlansPanel(plans: visibleTogetherPlans),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  _TogetherPlansPanel(plans: visibleTogetherPlans),
                 ],
               ),
             ),
@@ -80,7 +90,11 @@ class PlansPage extends StatelessWidget {
               right: 16,
               bottom: 16,
               child: FloatingActionButton(
-                onPressed: () => _showSnack(context, '创建计划功能开发中'),
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CreatePlanPage(),
+                  ),
+                ),
                 backgroundColor: AppColors.deepPink,
                 child: const Icon(Icons.add_rounded, color: Colors.white),
               ),
@@ -100,9 +114,7 @@ class _OverviewCard extends StatelessWidget {
     required this.countColor,
     required this.doneCount,
     required this.totalCount,
-    required this.focusTitle,
-    required this.focusSubtitle,
-    required this.focusIcon,
+    required this.focusPlan,
     required this.onTap,
   });
 
@@ -112,9 +124,7 @@ class _OverviewCard extends StatelessWidget {
   final Color countColor;
   final int doneCount;
   final int totalCount;
-  final String focusTitle;
-  final String focusSubtitle;
-  final IconData focusIcon;
+  final Plan? focusPlan;
   final VoidCallback onTap;
 
   @override
@@ -167,11 +177,15 @@ class _OverviewCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                AppIconTile(icon: focusIcon, color: accentColor, size: 38),
+                AppIconTile(
+                  icon: focusPlan?.icon ?? icon,
+                  color: focusPlan?.iconColor ?? accentColor,
+                  size: 38,
+                ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    focusTitle,
+                    focusPlan?.title ?? '还没有计划',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.body.copyWith(
@@ -252,7 +266,11 @@ class _TogetherPlansPanel extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
           ],
           TextButton(
-            onPressed: () => _showSnack(context, '计划列表功能开发中'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const TogetherPlansPage(),
+              ),
+            ),
             style: TextButton.styleFrom(foregroundColor: AppColors.deepPink),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
@@ -294,7 +312,7 @@ class _TogetherPlanCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              AppIconTile(icon: plan.icon, color: plan.color, size: 58),
+              AppIconTile(icon: plan.icon, color: plan.iconColor, size: 58),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
@@ -317,9 +335,9 @@ class _TogetherPlanCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              const StatusPill(
-                label: '待打卡',
-                color: AppColors.deepPink,
+              StatusPill(
+                label: _togetherStatusLabel(plan.togetherStatus),
+                color: _togetherStatusColor(plan.togetherStatus),
                 compact: true,
               ),
             ],
@@ -415,33 +433,25 @@ List<Plan> _plansByOwner(List<Plan> plans, PlanOwner owner) {
 }
 
 List<Plan> _preferredTogetherPlans(List<Plan> plans) {
-  final preferredIds = {'plan_walk', 'plan_reading_together'};
-  final preferred = plans
-      .where((plan) => preferredIds.contains(plan.id))
-      .toList();
-  if (preferred.length >= 2) {
-    return preferred.take(2).toList();
-  }
-
-  final fallback = [
-    ...preferred,
-    ...plans.where((plan) => !preferredIds.contains(plan.id)),
-  ];
-  return fallback.take(2).toList();
+  return plans.take(2).toList();
 }
 
 int _doneCount(List<Plan> plans) {
-  return plans.where(_isDone).length;
+  return plans.where((plan) => plan.isDoneForCurrentUser).length;
 }
 
-bool _isDone(Plan plan) {
-  return switch (plan.owner) {
-    PlanOwner.me => plan.doneToday,
-    PlanOwner.partner => plan.partnerDoneToday,
-    PlanOwner.together => plan.doneToday,
+String _togetherStatusLabel(TogetherStatus status) {
+  return switch (status) {
+    TogetherStatus.bothDone => '双方已完成',
+    TogetherStatus.onlyMeDone => '我已打卡',
+    TogetherStatus.meNotDone => '待打卡',
   };
 }
 
-void _showSnack(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+Color _togetherStatusColor(TogetherStatus status) {
+  return switch (status) {
+    TogetherStatus.bothDone => AppColors.successText,
+    TogetherStatus.onlyMeDone => AppColors.reminder,
+    TogetherStatus.meNotDone => AppColors.deepPink,
+  };
 }

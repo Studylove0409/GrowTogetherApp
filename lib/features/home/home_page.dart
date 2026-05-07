@@ -3,14 +3,21 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/mock/mock_data.dart';
 import '../../data/mock/mock_store.dart';
 import '../../data/models/plan.dart';
+import '../../features/plans/create_plan_page.dart';
+import '../../features/plans/my_plans_page.dart';
+import '../../features/plans/partner_plans_page.dart';
 import '../../features/plans/plan_detail_page.dart';
+import '../../features/plans/together_plans_page.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/empty_state_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
 import '../../shared/widgets/section_header.dart';
+import 'growth_record_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -20,8 +27,13 @@ class HomePage extends StatelessWidget {
     return AnimatedBuilder(
       animation: MockStore.instance,
       builder: (context, _) {
-        final todayPlans = MockStore.instance.getTodayFocusPlans();
-        final doneCount = todayPlans.where(_isDoneForHome).length;
+        final allPlans = MockStore.instance.getPlans();
+        final myPlans =
+            allPlans.where((p) => p.owner == PlanOwner.me).toList();
+        final partnerPlans =
+            allPlans.where((p) => p.owner == PlanOwner.partner).toList();
+        final togetherPlans =
+            allPlans.where((p) => p.owner == PlanOwner.together).toList();
 
         return AppScaffold(
           child: ListView(
@@ -32,42 +44,133 @@ class HomePage extends StatelessWidget {
               32,
             ),
             children: [
-                const _HomeHeader(),
-                const SizedBox(height: AppSpacing.xl),
-                const _GrowthHeroCard(),
-                const SizedBox(height: AppSpacing.lg),
-                SectionHeader(
-                  title: '今日重点计划',
-                  actionLabel: '全部 ${todayPlans.length}',
-                  onAction: () => _showSnack(context, '计划列表功能开发中'),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                for (final plan in todayPlans) ...[
-                  PlanListTile(
-                    plan: plan,
-                    statusLabel: _statusLabel(plan),
-                    statusColor: _statusColor(plan),
-                    statusIcon: _statusIcon(plan),
-                    onTap: () => _openPlan(context, plan),
+              const _HomeHeader(),
+              const SizedBox(height: AppSpacing.xl),
+              const _GrowthHeroCard(),
+              const SizedBox(height: AppSpacing.lg),
+              _HomePlanSection(
+                title: '我的今日计划',
+                plans: myPlans,
+                emptyMessage: '还没有自己的计划哦～',
+                emptyActionLabel: '写下一个小目标',
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const MyPlansPage(),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
-                ],
-                const SizedBox(height: AppSpacing.md),
-                SectionHeader(title: '今日完成统计'),
-                const SizedBox(height: AppSpacing.md),
-                _TodayStatsCard(
-                  doneCount: doneCount,
-                  totalCount: todayPlans.length,
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _GrowthRecordEntry(),
-              ],
-            ),
-          );
+                onPlanTap: (plan) => _openPlan(context, plan),
+                onEmptyAction: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CreatePlanPage(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _HomePlanSection(
+                title: 'TA 的今日计划',
+                plans: partnerPlans,
+                emptyMessage: 'TA 还没有计划哦～',
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PartnerPlansPage(),
+                  ),
+                ),
+                onPlanTap: (plan) => _openPlan(context, plan),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _HomePlanSection(
+                title: '共同计划',
+                plans: togetherPlans,
+                emptyMessage: '还没有共同计划哦～',
+                emptyActionLabel: '一起定个小目标',
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const TogetherPlansPage(),
+                  ),
+                ),
+                onPlanTap: (plan) => _openPlan(context, plan),
+                onEmptyAction: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CreatePlanPage(),
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const _GrowthRecordEntry(),
+            ],
+          ),
+        );
       },
     );
   }
 }
+
+// ========================= 首页计划区块 =========================
+
+class _HomePlanSection extends StatelessWidget {
+  const _HomePlanSection({
+    required this.title,
+    required this.plans,
+    required this.emptyMessage,
+    this.emptyActionLabel,
+    required this.onViewAll,
+    required this.onPlanTap,
+    this.onEmptyAction,
+  });
+
+  final String title;
+  final List<Plan> plans;
+  final String emptyMessage;
+  final String? emptyActionLabel;
+  final VoidCallback onViewAll;
+  final ValueChanged<Plan> onPlanTap;
+  final VoidCallback? onEmptyAction;
+
+  @override
+  Widget build(BuildContext context) {
+    if (plans.isEmpty) {
+      return Column(
+        children: [
+          SectionHeader(title: title),
+          const SizedBox(height: AppSpacing.sm),
+          EmptyStateCard(
+            message: emptyMessage,
+            actionLabel: emptyActionLabel,
+            onAction: onEmptyAction,
+          ),
+        ],
+      );
+    }
+
+    final visible = plans.take(2).toList();
+
+    return Column(
+      children: [
+        SectionHeader(
+          title: title,
+          actionLabel: '全部 ${plans.length}',
+          onAction: onViewAll,
+        ),
+        const SizedBox(height: AppSpacing.md),
+        for (final plan in visible) ...[
+          PlanListTile(
+            plan: plan,
+            statusLabel: _statusLabel(plan),
+            statusColor: _statusColor(plan),
+            statusIcon: _statusIcon(plan),
+            showReminderTime: false,
+            onTap: () => onPlanTap(plan),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ],
+    );
+  }
+}
+
+// ========================= 空区块卡片 =========================
+
+// ========================= 顶部头部 =========================
 
 class _HomeHeader extends StatelessWidget {
   const _HomeHeader();
@@ -99,6 +202,8 @@ class _HomeHeader extends StatelessWidget {
     );
   }
 }
+
+// ========================= 成长 Hero 卡片 =========================
 
 class _GrowthHeroCard extends StatelessWidget {
   const _GrowthHeroCard();
@@ -144,12 +249,12 @@ class _GrowthHeroCard extends StatelessWidget {
                     child: RichText(
                       text: TextSpan(
                         style: AppTextStyles.display.copyWith(fontSize: 44),
-                        children: const [
+                        children: [
                           TextSpan(
-                            text: '7',
-                            style: TextStyle(color: AppColors.deepPink),
+                            text: '${MockData.profile.togetherDays}',
+                            style: const TextStyle(color: AppColors.deepPink),
                           ),
-                          TextSpan(text: ' 天啦'),
+                          const TextSpan(text: ' 天啦'),
                         ],
                       ),
                     ),
@@ -236,101 +341,7 @@ class _CalendarIllustration extends StatelessWidget {
   }
 }
 
-class _TodayStatsCard extends StatelessWidget {
-  const _TodayStatsCard({required this.doneCount, required this.totalCount});
-
-  final int doneCount;
-  final int totalCount;
-
-  @override
-  Widget build(BuildContext context) {
-    final remaining = (totalCount - doneCount).clamp(0, totalCount);
-    final progress = totalCount == 0 ? 0.0 : doneCount / totalCount;
-
-    return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _StatBlock(
-                value: '$doneCount',
-                label: '已完成',
-                color: AppColors.success,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              _StatBlock(
-                value: '$remaining',
-                label: '待完成',
-                color: AppColors.reminder,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              _StatBlock(
-                value: '${(progress * 100).round()}%',
-                label: '完成率',
-                color: AppColors.deepPink,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 12,
-              backgroundColor: AppColors.lightPink.withValues(alpha: 0.66),
-              color: AppColors.deepPink,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatBlock extends StatelessWidget {
-  const _StatBlock({
-    required this.value,
-    required this.label,
-    required this.color,
-  });
-
-  final String value;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.16),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                style: AppTextStyles.title.copyWith(
-                  color: color == AppColors.success
-                      ? AppColors.successText
-                      : color,
-                  fontSize: 28,
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(label, style: AppTextStyles.caption),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// ========================= 成长记录入口 =========================
 
 class _GrowthRecordEntry extends StatelessWidget {
   const _GrowthRecordEntry();
@@ -340,7 +351,11 @@ class _GrowthRecordEntry extends StatelessWidget {
     return AppCard(
       borderRadius: 28,
       backgroundColor: AppColors.lightPink.withValues(alpha: 0.42),
-      onTap: () => _showSnack(context, '成长记录功能开发中'),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => const GrowthRecordPage(),
+        ),
+      ),
       child: Row(
         children: [
           const AppIconTile(
@@ -378,6 +393,8 @@ class _GrowthRecordEntry extends StatelessWidget {
   }
 }
 
+// ========================= 心形气泡 =========================
+
 class _HeartBubble extends StatelessWidget {
   const _HeartBubble({required this.size});
 
@@ -405,13 +422,7 @@ class _HeartBubble extends StatelessWidget {
   }
 }
 
-bool _isDoneForHome(Plan plan) {
-  return switch (plan.owner) {
-    PlanOwner.me => plan.doneToday,
-    PlanOwner.partner => plan.partnerDoneToday,
-    PlanOwner.together => plan.doneToday,
-  };
-}
+// ========================= 辅助函数 =========================
 
 String _statusLabel(Plan plan) {
   return switch (plan.owner) {
@@ -422,11 +433,11 @@ String _statusLabel(Plan plan) {
 }
 
 Color _statusColor(Plan plan) {
-  return _isDoneForHome(plan) ? AppColors.successText : AppColors.deepPink;
+  return plan.isDoneForCurrentUser ? AppColors.successText : AppColors.deepPink;
 }
 
 IconData _statusIcon(Plan plan) {
-  return _isDoneForHome(plan)
+  return plan.isDoneForCurrentUser
       ? Icons.check_circle_rounded
       : Icons.radio_button_unchecked_rounded;
 }
@@ -435,8 +446,4 @@ void _openPlan(BuildContext context, Plan plan) {
   Navigator.of(context).push(
     MaterialPageRoute<void>(builder: (_) => PlanDetailPage(planId: plan.id)),
   );
-}
-
-void _showSnack(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }

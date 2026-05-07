@@ -37,8 +37,11 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 72,
+    return Material(
+      color: Colors.transparent,
+      clipBehavior: Clip.antiAlias,
+      child: Container(
+        height: 72,
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
       decoration: BoxDecoration(
         color: const Color(0xFFF9F1EE),
@@ -63,6 +66,7 @@ class AppBottomNavBar extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }
@@ -89,41 +93,38 @@ class _BottomNavButton extends StatelessWidget {
         button: true,
         selected: selected,
         label: item.label,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(22),
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.lightPink.withValues(alpha: 0.72)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  selected ? item.selectedIcon : item.icon,
-                  size: 23,
+        child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          height: double.infinity,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.lightPink.withValues(alpha: 0.72)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(22),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                selected ? item.selectedIcon : item.icon,
+                size: 23,
+                color: color,
+              ),
+              const SizedBox(height: 3),
+              Text(
+                item.label,
+                style: TextStyle(
                   color: color,
+                  fontSize: 12,
+                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                  letterSpacing: 0,
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  item.label,
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 12,
-                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                    letterSpacing: 0,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
       ),
     );
   }

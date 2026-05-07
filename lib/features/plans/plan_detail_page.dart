@@ -5,9 +5,12 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../data/mock/mock_store.dart';
 import '../../data/models/plan.dart';
-import '../../features/checkin/checkin_page.dart';
+import '../../data/models/reminder.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../checkin/checkin_page.dart';
+import 'checkin_record_page.dart';
+import 'create_plan_page.dart';
 
 class PlanDetailPage extends StatelessWidget {
   const PlanDetailPage({super.key, required this.planId});
@@ -28,7 +31,14 @@ class PlanDetailPage extends StatelessWidget {
         }
 
         return Scaffold(
-          appBar: AppBar(title: const Text('计划详情')),
+          backgroundColor: AppColors.background,
+          appBar: AppBar(
+            title: const Text('计划详情', style: AppTextStyles.section),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
           body: SafeArea(
             top: false,
             child: ListView(
@@ -41,70 +51,295 @@ class PlanDetailPage extends StatelessWidget {
               children: [
                 _PlanHeroCard(plan: plan),
                 const SizedBox(height: AppSpacing.md),
-                _PlanInfoCard(plan: plan),
+                _PlanStatusCard(plan: plan),
+                const SizedBox(height: AppSpacing.md),
+                _PlanProgressCard(plan: plan),
                 if (plan.owner == PlanOwner.together) ...[
                   const SizedBox(height: AppSpacing.md),
-                  _TogetherCheckinStatusCard(plan: plan),
+                  _TogetherCheckinCard(plan: plan),
                 ],
                 const SizedBox(height: AppSpacing.md),
-                _RecentCheckinsCard(records: plan.checkins),
+                _RecentCheckinsCard(
+                  plan: plan,
+                  onViewAll: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CheckinRecordPage(planId: plan.id),
+                      ),
+                    );
+                  },
+                ),
+                if (plan.canCurrentUserEdit && !plan.isEnded) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _buildEndPlanButton(context, plan),
+                ],
               ],
             ),
           ),
-          bottomNavigationBar: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                AppSpacing.md,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              plan.canCurrentUserEdit ? '功能开发中' : '不能修改 TA 的计划',
-                            ),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
-                      child: const Text('编辑计划'),
+          bottomNavigationBar: plan.isEnded
+              ? null
+              : SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md,
+                      AppSpacing.sm,
+                      AppSpacing.md,
+                      AppSpacing.md,
                     ),
+                    child: _buildBottomButton(context, plan),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: PrimaryButton(
-                      label: plan.canCurrentUserCheckin ? '去打卡' : '仅可查看',
-                      icon: Icons.check_circle_rounded,
-                      onPressed: () {
-                        if (!plan.canCurrentUserCheckin) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('不能代替 TA 打卡'),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                          return;
-                        }
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => CheckinPage(planId: plan.id),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ],
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _buildBottomButton(BuildContext context, Plan plan) {
+    if (plan.isEnded) {
+      return const SizedBox.shrink();
+    }
+
+    if (!plan.canCurrentUserCheckin && !plan.canCurrentUserEdit) {
+      return PrimaryButton(
+        label: '提醒 TA',
+        icon: Icons.notifications_rounded,
+        onPressed: () => _showRemindSheet(context, plan),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => CreatePlanPage(existingPlan: plan),
+                ),
+              );
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.deepPink,
+              side: const BorderSide(color: AppColors.deepPink),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
               ),
             ),
+            child: const Text(
+              '编辑计划',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: PrimaryButton(
+            label: '去打卡',
+            icon: Icons.check_circle_rounded,
+            onPressed: plan.canCurrentUserCheckin
+                ? () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => CheckinPage(planId: plan.id),
+                      ),
+                    );
+                  }
+                : () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('不能代替 TA 打卡'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showRemindSheet(BuildContext context, Plan plan) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.xl,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('提醒 TA', style: AppTextStyles.section),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                '关联计划：${plan.title}',
+                style: AppTextStyles.caption,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              for (final (label, icon, message) in _remindTypes) ...[
+                _RemindTypeTile(
+                  label: label,
+                  icon: icon,
+                  message: message,
+                  onTap: () {
+                    final store = MockStore.instance;
+                    store.sendReminder(
+                      Reminder(
+                        title: label,
+                        message: '$message（计划：${plan.title}）',
+                        time: TimeOfDay.now().format(context),
+                        icon: icon,
+                        sentByMe: true,
+                        color: AppColors.primary,
+                      ),
+                    );
+                    Navigator.of(context).pop();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('提醒已经飞过去啦～'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: AppSpacing.sm),
+              ],
+            ],
           ),
         );
       },
+    );
+  }
+
+  static const _remindTypes = [
+    ('温柔提醒', Icons.alarm_rounded, '今天的小任务还没完成哦～要不要现在开始呀？'),
+    ('认真监督', Icons.assignment_turned_in_rounded, '不许偷偷摆烂哦，要不要现在开始一点点？'),
+    ('鼓励一下', Icons.thumb_up_alt_rounded, '你已经坚持很久啦，再完成一天！'),
+    ('夸夸对方', Icons.favorite_rounded, '今天的你也很努力，值得夸夸！'),
+  ];
+
+  Widget _buildEndPlanButton(BuildContext context, Plan plan) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () => _confirmEndPlan(context, plan),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.reminder,
+          side: const BorderSide(color: AppColors.reminder),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+        ),
+        child: const Text(
+          '结束计划',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        ),
+      ),
+    );
+  }
+
+  void _confirmEndPlan(BuildContext context, Plan plan) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(28),
+          ),
+          title: const Text('确认结束计划'),
+          content: Text('确定要结束「${plan.title}」吗？\n结束后的计划将不再出现在日常列表中，但打卡记录依然可以查看。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('再想想'),
+            ),
+            TextButton(
+              onPressed: () {
+                MockStore.instance.endPlan(plan.id);
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('计划已结束，辛苦啦～'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              },
+              style: TextButton.styleFrom(foregroundColor: AppColors.reminder),
+              child: const Text('确定结束'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RemindTypeTile extends StatelessWidget {
+  const _RemindTypeTile({
+    required this.label,
+    required this.icon,
+    required this.message,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final String message;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      borderRadius: 24,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.lightPink.withValues(alpha: 0.46),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: AppColors.deepPink, size: 24),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -117,96 +352,220 @@ class _PlanHeroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      backgroundColor: AppColors.lightPink,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      backgroundColor: AppColors.lightPink.withValues(alpha: 0.46),
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Icon(plan.icon, color: AppColors.deepPink),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(plan.title, style: AppTextStyles.title),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(_ownerLabel(plan.owner), style: AppTextStyles.caption),
-                  ],
-                ),
-              ),
-            ],
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: plan.iconBackgroundColor.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Icon(plan.icon, color: plan.iconColor),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(plan.dailyTask, style: AppTextStyles.body),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(plan.title, style: AppTextStyles.title),
+                const SizedBox(height: AppSpacing.xs),
+                Text(plan.subtitle, style: AppTextStyles.caption),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _PlanInfoCard extends StatelessWidget {
-  const _PlanInfoCard({required this.plan});
+class _PlanStatusCard extends StatelessWidget {
+  const _PlanStatusCard({required this.plan});
+
+  final Plan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    final (statusLabel, statusColor) = switch (plan.owner) {
+      PlanOwner.me => plan.doneToday
+          ? ('已打卡', AppColors.successText)
+          : ('待打卡', AppColors.deepPink),
+      PlanOwner.partner => plan.partnerDoneToday
+          ? ('TA 已打卡', AppColors.successText)
+          : ('TA 待打卡', AppColors.deepPink),
+      PlanOwner.together => switch (plan.togetherStatus) {
+        TogetherStatus.bothDone => ('双方已完成', AppColors.successText),
+        TogetherStatus.onlyMeDone => ('我已打卡', AppColors.reminder),
+        TogetherStatus.meNotDone => ('我待打卡', AppColors.deepPink),
+      },
+    };
+
+    return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: statusColor.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(
+              statusColor == AppColors.successText
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              color: statusColor,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '今日状态',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.secondaryText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  statusLabel,
+                  style: AppTextStyles.title.copyWith(color: statusColor),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          if (plan.owner == PlanOwner.together)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color:
+                    (plan.partnerDoneToday
+                            ? AppColors.success
+                            : AppColors.reminder)
+                        .withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                plan.partnerDoneToday ? 'TA 已打卡' : 'TA 待打卡',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: plan.partnerDoneToday
+                      ? AppColors.successText
+                      : AppColors.reminder,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanProgressCard extends StatelessWidget {
+  const _PlanProgressCard({required this.plan});
 
   final Plan plan;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('计划进度', style: AppTextStyles.section),
-          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              _InfoPill(label: '已坚持', value: '${plan.completedDays} 天'),
+              _StatBlock(label: '已坚持', value: '${plan.completedDays} 天'),
               const SizedBox(width: AppSpacing.sm),
-              _InfoPill(
-                value: '${(plan.progress * 100).round()}%',
+              _StatBlock(
                 label: '完成率',
+                value: '${(plan.progress * 100).round()}%',
               ),
               const SizedBox(width: AppSpacing.sm),
-              _InfoPill(label: '今日状态', value: _todayStatusLabel(plan)),
+              _StatBlock(label: '总天数', value: '${plan.totalDays} 天'),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
             child: LinearProgressIndicator(
-              value: plan.progress,
-              minHeight: 10,
+              value: plan.progress.clamp(0, 1),
+              minHeight: 12,
+              backgroundColor: AppColors.lightPink.withValues(alpha: 0.66),
               color: AppColors.deepPink,
-              backgroundColor: AppColors.lightPink,
             ),
           ),
           const SizedBox(height: AppSpacing.md),
           Text(
-            '${_formatDate(plan.startDate)} - ${_formatDate(plan.endDate)} · 每天 ${plan.reminderTime.format(context)} 提醒',
+            '提醒 ${plan.reminderTime.format(context)}  ·  ${_formatDate(plan.startDate)} - ${_formatDate(plan.endDate)}',
             style: AppTextStyles.caption,
           ),
         ],
       ),
     );
   }
+
+  String _formatDate(DateTime date) {
+    return '${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+  }
 }
 
-class _TogetherCheckinStatusCard extends StatelessWidget {
-  const _TogetherCheckinStatusCard({required this.plan});
+class _StatBlock extends StatelessWidget {
+  const _StatBlock({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.lightPink.withValues(alpha: 0.46),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: AppTextStyles.title.copyWith(
+                color: AppColors.deepPink,
+                fontSize: 24,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(label, style: AppTextStyles.caption),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TogetherCheckinCard extends StatelessWidget {
+  const _TogetherCheckinCard({required this.plan});
 
   final Plan plan;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -214,15 +573,13 @@ class _TogetherCheckinStatusCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           _CheckinStatusRow(
             label: '我',
-            subtitle: '只能更新自己的打卡状态',
-            checked: plan.doneToday,
+            done: plan.doneToday,
             activeColor: AppColors.success,
           ),
           const Divider(height: 20, color: AppColors.line),
           _CheckinStatusRow(
             label: 'TA',
-            subtitle: 'TA 完成后这里会显示 TA 的状态',
-            checked: plan.partnerDoneToday,
+            done: plan.partnerDoneToday,
             activeColor: AppColors.primary,
           ),
         ],
@@ -234,14 +591,12 @@ class _TogetherCheckinStatusCard extends StatelessWidget {
 class _CheckinStatusRow extends StatelessWidget {
   const _CheckinStatusRow({
     required this.label,
-    required this.subtitle,
-    required this.checked,
+    required this.done,
     required this.activeColor,
   });
 
   final String label;
-  final String subtitle;
-  final bool checked;
+  final bool done;
   final Color activeColor;
 
   @override
@@ -249,23 +604,17 @@ class _CheckinStatusRow extends StatelessWidget {
     return Row(
       children: [
         Icon(
-          checked
+          done
               ? Icons.check_circle_rounded
               : Icons.radio_button_unchecked_rounded,
-          color: checked ? activeColor : AppColors.secondaryText,
+          color: done ? activeColor : AppColors.secondaryText,
         ),
         const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$label${checked ? '已打卡' : '待打卡'}',
-                style: AppTextStyles.body,
-              ),
-              const SizedBox(height: 2),
-              Text(subtitle, style: AppTextStyles.caption),
-            ],
+        Text(
+          '$label${done ? '已打卡' : '待打卡'}',
+          style: AppTextStyles.body.copyWith(
+            fontWeight: FontWeight.w700,
+            color: done ? activeColor : AppColors.secondaryText,
           ),
         ),
       ],
@@ -273,69 +622,86 @@ class _CheckinStatusRow extends StatelessWidget {
   }
 }
 
-class _InfoPill extends StatelessWidget {
-  const _InfoPill({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.lightPink,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          children: [
-            Text(value, style: AppTextStyles.section),
-            const SizedBox(height: 2),
-            Text(label, style: AppTextStyles.caption),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _RecentCheckinsCard extends StatelessWidget {
-  const _RecentCheckinsCard({required this.records});
+  const _RecentCheckinsCard({required this.plan, required this.onViewAll});
 
-  final List<CheckinRecord> records;
+  final Plan plan;
+  final VoidCallback onViewAll;
 
   @override
   Widget build(BuildContext context) {
-    final visibleRecords = records.take(3).toList();
+    final records = plan.checkins.take(3).toList();
 
     return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('最近打卡记录', style: AppTextStyles.section),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('最近打卡记录', style: AppTextStyles.section),
+              ),
+              TextButton(
+                onPressed: onViewAll,
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  '打卡记录',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
+                    color: AppColors.deepPink,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.sm),
-          if (visibleRecords.isEmpty)
-            Text('还没有打卡记录，今天开始也很好。', style: AppTextStyles.caption)
+          if (records.isEmpty)
+            Text('还没有打卡记录', style: AppTextStyles.caption)
           else
-            ...visibleRecords.map(
-              (record) => ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: Icon(
-                  record.completed
-                      ? Icons.check_circle_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  color: record.completed
-                      ? AppColors.success
-                      : AppColors.reminder,
-                ),
-                title: Text(
-                  '${_formatDate(record.date)} · ${_actorLabel(record.actor)} · ${_moodLabel(record.mood)}',
-                  style: AppTextStyles.body,
-                ),
-                subtitle: Text(
-                  record.note.isEmpty ? '没有备注' : record.note,
-                  style: AppTextStyles.caption,
+            ...records.map(
+              (record) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Row(
+                  children: [
+                    Icon(
+                      record.completed
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      size: 18,
+                      color: record.completed
+                          ? AppColors.successText
+                          : AppColors.reminder,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${_formatDate(record.date)} · ${_moodLabel(record.mood)}',
+                            style: AppTextStyles.caption.copyWith(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          if (record.note.isNotEmpty)
+                            Text(
+                              record.note,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.caption,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -343,45 +709,17 @@ class _RecentCheckinsCard extends StatelessWidget {
       ),
     );
   }
-}
 
-String _ownerLabel(PlanOwner owner) {
-  return switch (owner) {
-    PlanOwner.me => '我的计划',
-    PlanOwner.partner => 'TA 的计划',
-    PlanOwner.together => '共同计划',
-  };
-}
+  String _formatDate(DateTime date) {
+    return '${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
 
-String _todayStatusLabel(Plan plan) {
-  return switch (plan.owner) {
-    PlanOwner.me => plan.doneToday ? '已完成' : '待打卡',
-    PlanOwner.partner => plan.partnerDoneToday ? 'TA 已完成' : 'TA 待打卡',
-    PlanOwner.together =>
-      plan.isTogetherDoneToday
-          ? '双方已完成'
-          : plan.doneToday
-          ? '我已完成'
-          : '我待打卡',
-  };
-}
-
-String _actorLabel(CheckinActor actor) {
-  return switch (actor) {
-    CheckinActor.me => '我',
-    CheckinActor.partner => 'TA',
-  };
-}
-
-String _moodLabel(CheckinMood mood) {
-  return switch (mood) {
-    CheckinMood.happy => '开心',
-    CheckinMood.normal => '一般',
-    CheckinMood.tired => '有点累',
-    CheckinMood.great => '超棒',
-  };
-}
-
-String _formatDate(DateTime date) {
-  return '${date.month.toString().padLeft(2, '0')}.${date.day.toString().padLeft(2, '0')}';
+  String _moodLabel(CheckinMood mood) {
+    return switch (mood) {
+      CheckinMood.happy => '开心',
+      CheckinMood.normal => '一般',
+      CheckinMood.tired => '有点累',
+      CheckinMood.great => '超棒',
+    };
+  }
 }

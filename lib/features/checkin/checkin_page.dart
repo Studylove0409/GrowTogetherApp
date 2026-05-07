@@ -6,6 +6,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../data/mock/mock_store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/primary_button.dart';
 
 class CheckinPage extends StatefulWidget {
@@ -49,17 +50,10 @@ class _CheckinPageState extends State<CheckinPage> {
               backgroundColor: AppColors.lightPink,
               child: Row(
                 children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: const Icon(
-                      Icons.check_circle_rounded,
-                      color: AppColors.deepPink,
-                    ),
+                  AppIconTile(
+                    icon: plan?.icon ?? Icons.check_circle_rounded,
+                    color: plan?.iconColor ?? AppColors.deepPink,
+                    size: 50,
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
@@ -72,7 +66,7 @@ class _CheckinPageState extends State<CheckinPage> {
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          plan?.dailyTask ?? '',
+                          plan?.subtitle ?? '',
                           style: AppTextStyles.caption,
                         ),
                       ],

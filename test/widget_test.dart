@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grow_together/app.dart';
 import 'package:grow_together/data/mock/mock_store.dart';
 import 'package:grow_together/data/models/plan.dart';
+import 'package:grow_together/features/plans/create_plan_page.dart';
+import 'package:grow_together/shared/utils/plan_icon_mapper.dart';
 
 void main() {
   testWidgets('GrowTogether shell shows the home page', (tester) async {
@@ -49,10 +51,12 @@ void main() {
       startDate: DateTime(2026, 5, 7),
       endDate: DateTime(2026, 5, 14),
       reminderTime: const TimeOfDay(hour: 20, minute: 0),
+      iconKey: 'music',
     );
 
     expect(store.getPlans().length, initialCount + 1);
     expect(store.getPlanById(plan.id)?.doneToday, isFalse);
+    expect(store.getPlanById(plan.id)?.iconKey, 'music');
 
     store.saveCheckin(
       planId: plan.id,
@@ -67,6 +71,127 @@ void main() {
     expect(updated.checkins.first.note, '完成打卡');
     expect(updated.partnerDoneToday, isFalse);
   });
+
+  testWidgets('CreatePlanPage shows icon grid and saves selected iconKey', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final initialCount = store.getPlans().length;
+
+    await tester.pumpWidget(const MaterialApp(home: CreatePlanPage()));
+
+    expect(find.text('我的计划'), findsOneWidget);
+    expect(find.text('共同计划'), findsOneWidget);
+    expect(find.text('TA 的计划'), findsNothing);
+
+    // 图标选择区标题存在
+    expect(find.text('选择图标'), findsOneWidget);
+
+    // 8 个预设图标都应显示
+    expect(find.text('学习'), findsOneWidget);
+    expect(find.text('写作业'), findsOneWidget);
+    expect(find.text('早起'), findsOneWidget);
+    expect(find.text('运动'), findsOneWidget);
+    expect(find.text('散步'), findsOneWidget);
+    expect(find.text('阅读'), findsOneWidget);
+    expect(find.text('音乐'), findsOneWidget);
+    expect(find.text('聊天'), findsOneWidget);
+
+    // "+ 自定义"入口存在
+    expect(find.text('自定义'), findsOneWidget);
+
+    // 点击预设图标 '写作业' 选中
+    await tester.tap(find.text('写作业'));
+    await tester.pumpAndSettle();
+
+    // 输入计划名称并保存
+    await tester.enterText(find.byType(TextField).first, '图标测试计划');
+    await tester.tap(find.text('保存计划'));
+    await tester.pumpAndSettle();
+
+    expect(store.getPlans().length, initialCount + 1);
+    expect(store.getPlans().first.title, '图标测试计划');
+    expect(store.getPlans().first.iconKey, 'edit');
+  });
+
+  testWidgets('CreatePlanPage "+ 自定义" opens BottomSheet', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: CreatePlanPage()));
+
+    // 点击 "+ 自定义"
+    await tester.tap(find.text('自定义'));
+    await tester.pumpAndSettle();
+
+    // BottomSheet 标题
+    expect(find.text('自定义图标'), findsOneWidget);
+
+    // 图标名称输入区
+    expect(find.text('图标名称'), findsOneWidget);
+    expect(find.text('请输入名称，例如：考研、存钱、编程'), findsOneWidget);
+
+    // 图标样式选择区
+    expect(find.text('图标样式'), findsOneWidget);
+    expect(find.text('书本'), findsOneWidget);
+    expect(find.text('星星'), findsOneWidget);
+    expect(find.text('爱心'), findsOneWidget);
+
+    // 颜色选择区
+    expect(find.text('颜色'), findsOneWidget);
+    expect(find.text('粉色'), findsOneWidget);
+    expect(find.text('紫色'), findsOneWidget);
+
+    // 保存按钮
+    expect(find.text('保存自定义图标'), findsOneWidget);
+  });
+
+  testWidgets(
+    'CreatePlanPage saves custom icon and shows its name in the grid',
+    (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: CreatePlanPage()));
+
+      // 打开自定义图标弹窗
+      await tester.tap(find.text('自定义'));
+      await tester.pumpAndSettle();
+
+      // 输入自定义名称
+      final nameField = find.widgetWithText(TextField, '请输入名称，例如：考研、存钱、编程');
+      await tester.enterText(nameField, '考研');
+
+      // 选择样式：星星
+      await tester.tap(find.text('星星'));
+      await tester.pumpAndSettle();
+
+      // 选择颜色：紫色
+      await tester.tap(find.text('紫色'));
+      await tester.pumpAndSettle();
+
+      // 保存
+      await tester.tap(find.text('保存自定义图标'));
+      await tester.pumpAndSettle();
+
+      // BottomSheet 关闭，图标选择区出现新图标 "考研"
+      expect(find.text('考研'), findsOneWidget);
+
+      // "考研" 是自定义图标，key 以 custom_ 开头
+      final allOptions = PlanIconMapper.options;
+      final customOption = allOptions.firstWhere(
+        (o) => o.label == '考研',
+        orElse: () => allOptions.first,
+      );
+      expect(customOption.isCustom, isTrue);
+      expect(customOption.key, startsWith('custom_'));
+
+      // 输入计划名称并保存
+      await tester.enterText(find.byType(TextField).first, '考研计划');
+      await tester.tap(find.text('保存计划'));
+      await tester.pumpAndSettle();
+
+      // 保存的计划使用自定义图标 key
+      final store = MockStore.instance;
+      expect(store.getPlans().first.iconKey, customOption.key);
+      // iconKey 能正确解析出自定义名称
+      expect(PlanIconMapper.label(customOption.key), '考研');
+    },
+  );
 
   test(
     'MockStore blocks partner plan checkin and keeps together statuses separate',

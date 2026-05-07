@@ -1,0 +1,36 @@
+import 'package:flutter/material.dart';
+
+import '../../data/mock/mock_store.dart';
+import '../../data/models/plan.dart';
+import 'plan_detail_page.dart';
+import 'plan_list_scaffold.dart';
+
+class PartnerPlansPage extends StatelessWidget {
+  const PartnerPlansPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: MockStore.instance,
+      builder: (context, _) {
+        final allPlans = MockStore.instance.getPlansByOwner(PlanOwner.partner);
+        return PlanListScaffold(
+          title: 'TA 的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: allPlans,
+          planCountLabel: '共 ${allPlans.length} 个计划',
+          owner: PlanOwner.partner,
+          showAddButton: false,
+          onAdd: () {},
+          onTapPlan: (plan) {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => PlanDetailPage(planId: plan.id),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
