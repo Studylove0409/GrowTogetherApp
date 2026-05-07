@@ -45,10 +45,10 @@ class AppTheme {
         titleTextStyle: AppTextStyles.section,
       ),
       cardTheme: CardThemeData(
-        color: AppColors.surface,
+        color: AppColors.paper,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(32)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -56,7 +56,7 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: BorderRadius.circular(30),
           ),
           textStyle: const TextStyle(
             fontSize: 15,
@@ -78,7 +78,7 @@ class AppTheme {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.74),
+        fillColor: AppColors.paper.withValues(alpha: 0.86),
         hintStyle: AppTextStyles.caption,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
@@ -86,11 +86,11 @@ class AppTheme {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: const BorderSide(color: AppColors.paperLine),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
-          borderSide: const BorderSide(color: AppColors.line),
+          borderSide: const BorderSide(color: AppColors.paperLine),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22),
@@ -98,8 +98,10 @@ class AppTheme {
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 72,
+        height: 76,
         elevation: 0,
+        backgroundColor: Colors.transparent,
+        indicatorColor: AppColors.lightPink.withValues(alpha: 0.76),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
           return IconThemeData(

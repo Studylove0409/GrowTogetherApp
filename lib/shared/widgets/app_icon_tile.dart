@@ -26,14 +26,24 @@ class AppIconTile extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            color.withValues(alpha: 0.28),
-            Colors.white.withValues(alpha: 0.66),
+            color.withValues(alpha: 0.20),
+            AppColors.paper.withValues(alpha: 0.88),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(borderRadius ?? size * 0.38),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.66)),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.86),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.10),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Icon(
         icon,

@@ -15,8 +15,8 @@ class AppBottomNavBar extends StatelessWidget {
   static const _items = [
     _BottomNavItem(
       label: '首页',
-      icon: Icons.favorite_border_rounded,
-      selectedIcon: Icons.favorite_rounded,
+      icon: Icons.home_outlined,
+      selectedIcon: Icons.home_rounded,
     ),
     _BottomNavItem(
       label: '计划',
@@ -30,8 +30,8 @@ class AppBottomNavBar extends StatelessWidget {
     ),
     _BottomNavItem(
       label: '我的',
-      icon: Icons.person_outline_rounded,
-      selectedIcon: Icons.person_rounded,
+      icon: Icons.face_6_outlined,
+      selectedIcon: Icons.face_6_rounded,
     ),
   ];
 
@@ -41,32 +41,35 @@ class AppBottomNavBar extends StatelessWidget {
       color: Colors.transparent,
       clipBehavior: Clip.antiAlias,
       child: Container(
-        height: 72,
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9F1EE),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.82)),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.10),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+        height: 78,
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+        decoration: BoxDecoration(
+          color: AppColors.paper.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(32),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.92),
+            width: 2,
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          for (var index = 0; index < _items.length; index++)
-            Expanded(
-              child: _BottomNavButton(
-                item: _items[index],
-                selected: selectedIndex == index,
-                onTap: () => onSelected(index),
-              ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.14),
+              blurRadius: 22,
+              offset: const Offset(0, 10),
             ),
-        ],
-      ),
+          ],
+        ),
+        child: Row(
+          children: [
+            for (var index = 0; index < _items.length; index++)
+              Expanded(
+                child: _BottomNavButton(
+                  item: _items[index],
+                  selected: selectedIndex == index,
+                  onTap: () => onSelected(index),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -94,37 +97,45 @@ class _BottomNavButton extends StatelessWidget {
         selected: selected,
         label: item.label,
         child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          height: double.infinity,
-          decoration: BoxDecoration(
-            color: selected
-                ? AppColors.lightPink.withValues(alpha: 0.72)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(22),
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                selected ? item.selectedIcon : item.icon,
-                size: 23,
-                color: color,
-              ),
-              const SizedBox(height: 3),
-              Text(
-                item.label,
-                style: TextStyle(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppColors.lightPink.withValues(alpha: 0.78)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(26),
+              border: selected
+                  ? Border.all(
+                      color: Colors.white.withValues(alpha: 0.90),
+                      width: 1.5,
+                    )
+                  : null,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  selected ? item.selectedIcon : item.icon,
+                  size: 23,
                   color: color,
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
-                  letterSpacing: 0,
                 ),
-              ),
-            ],
+                const SizedBox(height: 3),
+                Text(
+                  item.label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

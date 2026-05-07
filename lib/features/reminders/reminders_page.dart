@@ -31,55 +31,53 @@ class _RemindersPageState extends State<RemindersPage> {
 
         return AppScaffold(
           child: Column(
-              children: [
-                const SizedBox(height: AppSpacing.lg),
-                const _ReminderTitle(),
-                const SizedBox(height: AppSpacing.lg),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                  ),
-                  child: _ReminderTabs(
-                    showReceived: _showReceived,
-                    onChanged: (value) => setState(() => _showReceived = value),
-                  ),
+            children: [
+              const SizedBox(height: AppSpacing.lg),
+              const _ReminderTitle(),
+              const SizedBox(height: AppSpacing.lg),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+                child: _ReminderTabs(
+                  showReceived: _showReceived,
+                  onChanged: (value) => setState(() => _showReceived = value),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                Expanded(
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      0,
-                      AppSpacing.md,
-                      32,
-                    ),
-                    itemCount: reminders.length,
-                    itemBuilder: (context, index) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: ReminderCard(reminder: reminders[index]),
-                    ),
-                  ),
-                ),
-                Padding(
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Expanded(
+                child: ListView.builder(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.md,
-                    AppSpacing.sm,
+                    0,
                     AppSpacing.md,
-                    32,
+                    16,
                   ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: PrimaryPillButton(
-                      label: '轻轻提醒 TA',
-                      icon: Icons.send_rounded,
-                      height: 52,
-                      onPressed: () => _showSnack(context, '发送提醒功能开发中'),
-                    ),
+                  itemCount: reminders.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: ReminderCard(reminder: reminders[index]),
                   ),
                 ),
-              ],
-            ),
-          );
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  122,
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: PrimaryPillButton(
+                    label: '轻轻提醒 TA',
+                    icon: Icons.send_rounded,
+                    height: 52,
+                    onPressed: () => _showSnack(context, '发送提醒功能开发中'),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
       },
     );
   }

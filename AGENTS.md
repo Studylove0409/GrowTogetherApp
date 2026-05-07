@@ -131,6 +131,20 @@ flutter test             # 运行测试
 flutter build apk        # 构建 Android APK
 ```
 
+## Agent skills
+
+### Issue tracker
+
+工单以 markdown 文件存放在 `.scratch/<feature-slug>/` 目录下。详见 `docs/agents/issue-tracker.md`。
+
+### Triage labels
+
+使用默认五标签词汇：`needs-triage`、`needs-info`、`ready-for-agent`、`ready-for-human`、`wontfix`。详见 `docs/agents/triage-labels.md`。
+
+### Domain docs
+
+单上下文布局：`CONTEXT.md` + `docs/adr/` 在仓库根目录。详见 `docs/agents/domain.md`。
+
 ## 注意事项
 
 - 项目原本设计为微信小程序（DESIGN.md 中有 rpx 单位和 WXML 规范），当前已转为 Flutter 实现。Flutter 代码中的尺寸单位为逻辑像素（dp），不要混用 rpx

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -8,6 +9,7 @@ import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/sticker_asset.dart';
 import '../../shared/widgets/status_pill.dart';
 import 'create_plan_page.dart';
 import 'my_plans_page.dart';
@@ -36,7 +38,7 @@ class PlansPage extends StatelessWidget {
                   AppSpacing.md,
                   AppSpacing.lg,
                   AppSpacing.md,
-                  32,
+                  132,
                 ),
                 children: [
                   const Center(child: Text('计划', style: AppTextStyles.display)),
@@ -88,7 +90,7 @@ class PlansPage extends StatelessWidget {
             ),
             Positioned(
               right: 16,
-              bottom: 16,
+              bottom: 112,
               child: FloatingActionButton(
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
@@ -379,51 +381,13 @@ class _CoupleDecoration extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 74,
-      height: 62,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 8,
-            bottom: 4,
-            child: _SoftPerson(color: AppColors.deepPink),
-          ),
-          Positioned(
-            right: 4,
-            bottom: 4,
-            child: _SoftPerson(color: AppColors.reminder),
-          ),
-          Positioned(
-            right: 4,
-            top: 0,
-            child: Icon(
-              Icons.favorite_rounded,
-              size: 18,
-              color: AppColors.deepPink.withValues(alpha: 0.74),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SoftPerson extends StatelessWidget {
-  const _SoftPerson({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 38,
-      height: 38,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.70),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: const Icon(Icons.face_rounded, color: Colors.white, size: 19),
+    return const StickerAsset(
+      assetPath: AppAssets.coupleAnimals,
+      placeholderIcon: Icons.diversity_1_rounded,
+      width: 86,
+      height: 70,
+      borderRadius: 28,
+      backgroundColor: AppColors.peach,
     );
   }
 }

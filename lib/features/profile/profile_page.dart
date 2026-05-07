@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/theme/app_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -11,6 +12,7 @@ import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/profile_menu_item.dart';
 import '../../shared/widgets/status_pill.dart';
+import '../../shared/widgets/sticker_asset.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key, required this.onOpenPlans});
@@ -27,29 +29,29 @@ class ProfilePage extends StatelessWidget {
           AppSpacing.md,
           AppSpacing.lg,
           AppSpacing.md,
-          32,
+          132,
         ),
         children: [
-            const Center(child: Text('我的', style: AppTextStyles.display)),
-            const SizedBox(height: AppSpacing.xl),
-            _ProfileInfoCard(
-              name: profile.name,
-              partnerName: profile.partnerName,
-              togetherDays: profile.togetherDays,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            _InviteCodeCard(inviteCode: profile.inviteCode),
-            const SizedBox(height: AppSpacing.lg),
-            _SettingsList(onOpenPlans: onOpenPlans),
-            const SizedBox(height: AppSpacing.xl),
-            PrimaryButton(
-              label: '退出登录',
-              icon: Icons.logout_rounded,
-              onPressed: () => _showSnack(context, '退出登录功能开发中'),
-            ),
-          ],
-        ),
-      );
+          const Center(child: Text('我的', style: AppTextStyles.display)),
+          const SizedBox(height: AppSpacing.xl),
+          _ProfileInfoCard(
+            name: profile.name,
+            partnerName: profile.partnerName,
+            togetherDays: profile.togetherDays,
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          _InviteCodeCard(inviteCode: profile.inviteCode),
+          const SizedBox(height: AppSpacing.lg),
+          _SettingsList(onOpenPlans: onOpenPlans),
+          const SizedBox(height: AppSpacing.xl),
+          PrimaryButton(
+            label: '退出登录',
+            icon: Icons.logout_rounded,
+            onPressed: () => _showSnack(context, '退出登录功能开发中'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -108,17 +110,9 @@ class _CuteAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 78,
-      height: 78,
+    return DecoratedBox(
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [AppColors.lightPink, AppColors.primary],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        border: Border.all(color: Colors.white, width: 3),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withValues(alpha: 0.18),
@@ -127,28 +121,23 @@ class _CuteAvatar extends StatelessWidget {
           ),
         ],
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.face_rounded,
-              color: AppColors.deepPink,
-              size: 34,
-            ),
+      child: ClipOval(
+        child: Container(
+          width: 78,
+          height: 78,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.white, width: 3),
           ),
-          const Positioned(
-            top: 7,
-            right: 12,
-            child: Icon(Icons.favorite_rounded, color: Colors.white, size: 16),
+          child: const StickerAsset(
+            assetPath: AppAssets.bearAvatar,
+            placeholderIcon: Icons.face_6_rounded,
+            width: 78,
+            height: 78,
+            borderRadius: 999,
+            backgroundColor: AppColors.lightPink,
           ),
-        ],
+        ),
       ),
     );
   }

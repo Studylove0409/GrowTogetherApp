@@ -11,7 +11,7 @@ void main() {
     await tester.pumpWidget(const GrowTogetherApp());
 
     expect(find.text('一起进步呀'), findsWidgets);
-    expect(find.text('今日重点计划'), findsOneWidget);
+    expect(find.text('我的今日计划'), findsOneWidget);
     expect(find.text('首页'), findsOneWidget);
     expect(find.text('计划'), findsOneWidget);
     expect(find.text('提醒'), findsOneWidget);
@@ -37,7 +37,7 @@ void main() {
 
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
-    expect(find.text('今日重点计划'), findsOneWidget);
+    expect(find.text('我的今日计划'), findsOneWidget);
   });
 
   test('MockStore creates plan and saves checkin', () {

@@ -5,22 +5,34 @@ import 'app_colors.dart';
 class AppTextStyles {
   const AppTextStyles._();
 
-  static const fontFamily = 'sans-serif';
+  static const String? fontFamily = null;
 
   static const display = TextStyle(
-    fontSize: 30,
+    fontSize: 32,
     height: 1.18,
     fontWeight: FontWeight.w900,
     color: AppColors.text,
     letterSpacing: 0,
+    fontFamilyFallback: [
+      'PingFang SC',
+      'Hiragino Sans GB',
+      'Microsoft YaHei',
+      'sans-serif',
+    ],
   );
 
   static const title = TextStyle(
-    fontSize: 22,
+    fontSize: 23,
     height: 1.25,
     fontWeight: FontWeight.w900,
     color: AppColors.text,
     letterSpacing: 0,
+    fontFamilyFallback: [
+      'PingFang SC',
+      'Hiragino Sans GB',
+      'Microsoft YaHei',
+      'sans-serif',
+    ],
   );
 
   static const section = TextStyle(

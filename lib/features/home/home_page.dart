@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -17,6 +18,7 @@ import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/empty_state_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
 import '../../shared/widgets/section_header.dart';
+import '../../shared/widgets/sticker_asset.dart';
 import 'growth_record_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -28,12 +30,13 @@ class HomePage extends StatelessWidget {
       animation: MockStore.instance,
       builder: (context, _) {
         final allPlans = MockStore.instance.getPlans();
-        final myPlans =
-            allPlans.where((p) => p.owner == PlanOwner.me).toList();
-        final partnerPlans =
-            allPlans.where((p) => p.owner == PlanOwner.partner).toList();
-        final togetherPlans =
-            allPlans.where((p) => p.owner == PlanOwner.together).toList();
+        final myPlans = allPlans.where((p) => p.owner == PlanOwner.me).toList();
+        final partnerPlans = allPlans
+            .where((p) => p.owner == PlanOwner.partner)
+            .toList();
+        final togetherPlans = allPlans
+            .where((p) => p.owner == PlanOwner.together)
+            .toList();
 
         return AppScaffold(
           child: ListView(
@@ -41,7 +44,7 @@ class HomePage extends StatelessWidget {
               AppSpacing.md,
               AppSpacing.lg,
               AppSpacing.md,
-              32,
+              132,
             ),
             children: [
               const _HomeHeader(),
@@ -54,9 +57,7 @@ class HomePage extends StatelessWidget {
                 emptyMessage: '还没有自己的计划哦～',
                 emptyActionLabel: '写下一个小目标',
                 onViewAll: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const MyPlansPage(),
-                  ),
+                  MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
                 ),
                 onPlanTap: (plan) => _openPlan(context, plan),
                 onEmptyAction: () => Navigator.of(context).push(
@@ -228,7 +229,18 @@ class _GrowthHeroCard extends StatelessWidget {
                 color: Colors.white.withValues(alpha: 0.54),
               ),
             ),
-            Positioned(right: 14, top: 20, child: _CalendarIllustration()),
+            const Positioned(
+              right: 2,
+              top: 6,
+              bottom: -6,
+              child: StickerAsset(
+                assetPath: AppAssets.calendarCharacter,
+                placeholderIcon: Icons.calendar_month_rounded,
+                width: 112,
+                height: 132,
+                borderRadius: 30,
+              ),
+            ),
             Positioned.fill(
               right: 116,
               child: Column(
@@ -277,70 +289,6 @@ class _GrowthHeroCard extends StatelessWidget {
   }
 }
 
-class _CalendarIllustration extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Transform.rotate(
-      angle: -0.08,
-      child: Container(
-        width: 92,
-        height: 92,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.82),
-          borderRadius: BorderRadius.circular(26),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.deepPink.withValues(alpha: 0.16),
-              blurRadius: 18,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                height: 24,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
-                ),
-              ),
-            ),
-            const Positioned(
-              top: 10,
-              left: 18,
-              child: Icon(Icons.circle, size: 8, color: Colors.white),
-            ),
-            const Positioned(
-              top: 10,
-              right: 18,
-              child: Icon(Icons.circle, size: 8, color: Colors.white),
-            ),
-            const Center(
-              child: Icon(
-                Icons.calendar_month_rounded,
-                size: 44,
-                color: AppColors.primary,
-              ),
-            ),
-            const Positioned(
-              right: 10,
-              bottom: 12,
-              child: Icon(
-                Icons.favorite_rounded,
-                color: AppColors.deepPink,
-                size: 20,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ========================= 成长记录入口 =========================
 
 class _GrowthRecordEntry extends StatelessWidget {
@@ -351,11 +299,9 @@ class _GrowthRecordEntry extends StatelessWidget {
     return AppCard(
       borderRadius: 28,
       backgroundColor: AppColors.lightPink.withValues(alpha: 0.42),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          builder: (_) => const GrowthRecordPage(),
-        ),
-      ),
+      onTap: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute<void>(builder: (_) => const GrowthRecordPage())),
       child: Row(
         children: [
           const AppIconTile(

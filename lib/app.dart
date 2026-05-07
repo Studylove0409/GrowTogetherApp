@@ -44,7 +44,7 @@ class _GrowTogetherShellState extends State<GrowTogetherShell> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      extendBody: false,
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: IndexedStack(index: _selectedIndex, children: pages),
@@ -52,7 +52,7 @@ class _GrowTogetherShellState extends State<GrowTogetherShell> {
       bottomNavigationBar: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
           child: AppBottomNavBar(
             selectedIndex: _selectedIndex,
             onSelected: (index) {
