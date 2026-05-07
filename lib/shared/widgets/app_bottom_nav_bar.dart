@@ -58,17 +58,45 @@ class AppBottomNavBar extends StatelessWidget {
             ),
           ],
         ),
-        child: Row(
-          children: [
-            for (var index = 0; index < _items.length; index++)
-              Expanded(
-                child: _BottomNavButton(
-                  item: _items[index],
-                  selected: selectedIndex == index,
-                  onTap: () => onSelected(index),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth = constraints.maxWidth / _items.length;
+
+            return Stack(
+              children: [
+                AnimatedPositioned(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeOutCubic,
+                  left: itemWidth * selectedIndex,
+                  top: 0,
+                  bottom: 0,
+                  width: itemWidth,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: AppColors.lightPink.withValues(alpha: 0.78),
+                      borderRadius: BorderRadius.circular(26),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.90),
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-          ],
+                Row(
+                  children: [
+                    for (var index = 0; index < _items.length; index++)
+                      Expanded(
+                        child: _BottomNavButton(
+                          item: _items[index],
+                          selected: selectedIndex == index,
+                          onTap: () => onSelected(index),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -97,23 +125,10 @@ class _BottomNavButton extends StatelessWidget {
         selected: selected,
         label: item.label,
         child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
           onTap: onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
+          child: SizedBox(
             height: double.infinity,
-            decoration: BoxDecoration(
-              color: selected
-                  ? AppColors.lightPink.withValues(alpha: 0.78)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(26),
-              border: selected
-                  ? Border.all(
-                      color: Colors.white.withValues(alpha: 0.90),
-                      width: 1.5,
-                    )
-                  : null,
-            ),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
