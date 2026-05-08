@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
@@ -15,11 +16,9 @@ class CheckinRecordPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final plan = MockStore.instance.getPlanById(planId);
-        if (plan == null) {
+    final store = context.watch<Store>();
+    final plan = store.getPlanById(planId);
+    if (plan == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('打卡记录')),
             body: const Center(child: Text('计划不存在')),
@@ -102,8 +101,6 @@ class CheckinRecordPage extends StatelessWidget {
             ),
           ),
         );
-      },
-    );
   }
 }
 

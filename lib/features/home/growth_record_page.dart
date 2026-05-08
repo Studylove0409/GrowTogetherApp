@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_data.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 
@@ -38,12 +38,10 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final plans = widget.plans ?? MockStore.instance.getAllPlans();
-        final profile = MockData.profile;
-        final checkins = _filterCheckins(
+    final store = context.watch<Store>();
+    final plans = widget.plans ?? store.getAllPlans();
+    final profile = store.getProfile();
+    final checkins = _filterCheckins(
           plans.expand((plan) => plan.checkins).toList(),
           _filter,
         );
@@ -137,8 +135,6 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
             ),
           ),
         );
-      },
-    );
   }
 
   List<CheckinRecord> _filterCheckins(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import 'create_plan_page.dart';
 import 'plan_detail_page.dart';
@@ -11,11 +12,9 @@ class MyPlansPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final allPlans = MockStore.instance.getPlansByOwner(PlanOwner.me);
-        return PlanListScaffold(
+    final store = context.watch<Store>();
+    final allPlans = store.getPlansByOwner(PlanOwner.me);
+    return PlanListScaffold(
           title: '我的计划',
           filterOptions: const ['全部', '待打卡', '已完成'],
           plans: allPlans,
@@ -36,7 +35,5 @@ class MyPlansPage extends StatelessWidget {
             );
           },
         );
-      },
-    );
   }
 }

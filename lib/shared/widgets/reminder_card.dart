@@ -8,13 +8,16 @@ import 'app_card.dart';
 import 'app_icon_tile.dart';
 
 class ReminderCard extends StatelessWidget {
-  const ReminderCard({super.key, required this.reminder});
+  const ReminderCard({super.key, required this.reminder, this.onTap});
 
   final Reminder reminder;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final type = reminder.type;
     return AppCard(
+      onTap: onTap,
       borderRadius: 28,
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
@@ -33,16 +36,16 @@ class ReminderCard extends StatelessWidget {
           ),
           Row(
             children: [
-              AppIconTile(icon: reminder.icon, color: reminder.color, size: 58),
+              AppIconTile(icon: type.icon, color: type.color, size: 58),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(reminder.title, style: AppTextStyles.title),
+                    Text(type.label, style: AppTextStyles.title),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      reminder.message,
+                      reminder.content,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.caption.copyWith(fontSize: 14),
@@ -52,7 +55,7 @@ class ReminderCard extends StatelessWidget {
               ),
               const SizedBox(width: AppSpacing.sm),
               Text(
-                reminder.time,
+                _formatTime(reminder.createdAt),
                 style: AppTextStyles.body.copyWith(
                   color: AppColors.secondaryText,
                   fontWeight: FontWeight.w700,
@@ -63,5 +66,9 @@ class ReminderCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatTime(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }

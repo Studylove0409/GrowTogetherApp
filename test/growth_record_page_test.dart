@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
+import 'package:grow_together/data/mock/mock_store.dart';
 import 'package:grow_together/data/models/plan.dart';
+import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/home/growth_record_page.dart';
 
 void main() {
   testWidgets('GrowthRecordPage filters weekly stats by actor', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(home: GrowthRecordPage(today: DateTime(2026, 5, 7))),
+      MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: GrowthRecordPage(today: DateTime(2026, 5, 7)))),
     );
 
     expect(find.text('全部'), findsOneWidget);
@@ -40,7 +44,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: GrowthRecordPage(today: DateTime(2026, 5, 7))),
+      MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: GrowthRecordPage(today: DateTime(2026, 5, 7)))),
     );
 
     expect(find.text('2026 年 5 月'), findsOneWidget);
@@ -60,7 +64,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: GrowthRecordPage(today: DateTime(2026, 5, 7))),
+      MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: GrowthRecordPage(today: DateTime(2026, 5, 7)))),
     );
 
     await tester.tap(find.byKey(const ValueKey('calendar-day-2026-5-7')));
@@ -76,7 +80,7 @@ void main() {
     'GrowthRecordPage builds timeline from checkins and handles empty data',
     (tester) async {
       await tester.pumpWidget(
-        MaterialApp(home: GrowthRecordPage(today: DateTime(2026, 5, 7))),
+        MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: GrowthRecordPage(today: DateTime(2026, 5, 7)))),
       );
       await tester.drag(find.byType(ListView), const Offset(0, -520));
       await tester.pumpAndSettle();
@@ -98,10 +102,13 @@ void main() {
 
       await tester.pumpWidget(
         MaterialApp(
-          home: GrowthRecordPage(
-            key: const ValueKey('empty-growth-record-page'),
-            today: DateTime(2026, 5, 7),
-            plans: const <Plan>[],
+          home: ChangeNotifierProvider<Store>.value(
+            value: MockStore.instance,
+            child: GrowthRecordPage(
+              key: const ValueKey('empty-growth-record-page'),
+              today: DateTime(2026, 5, 7),
+              plans: const <Plan>[],
+            ),
           ),
         ),
       );

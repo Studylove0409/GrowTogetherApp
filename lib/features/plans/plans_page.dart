@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
@@ -14,6 +15,7 @@ import '../../shared/widgets/status_pill.dart';
 import 'create_plan_page.dart';
 import 'my_plans_page.dart';
 import 'partner_plans_page.dart';
+import 'plan_detail_page.dart';
 import 'together_plans_page.dart';
 
 class PlansPage extends StatelessWidget {
@@ -21,14 +23,12 @@ class PlansPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final plans = MockStore.instance.getPlans();
-        final myPlans = _plansByOwner(plans, PlanOwner.me);
-        final partnerPlans = _plansByOwner(plans, PlanOwner.partner);
-        final togetherPlans = _plansByOwner(plans, PlanOwner.together);
-        final visibleTogetherPlans = _preferredTogetherPlans(togetherPlans);
+    final store = context.watch<Store>();
+    final plans = store.getPlans();
+    final myPlans = _plansByOwner(plans, PlanOwner.me);
+    final partnerPlans = _plansByOwner(plans, PlanOwner.partner);
+    final togetherPlans = _plansByOwner(plans, PlanOwner.together);
+    final visibleTogetherPlans = _preferredTogetherPlans(togetherPlans);
 
         return Stack(
           children: [
@@ -103,8 +103,6 @@ class PlansPage extends StatelessWidget {
             ),
           ],
         );
-      },
-    );
   }
 }
 
@@ -264,7 +262,14 @@ class _TogetherPlansPanel extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           for (final plan in plans) ...[
-            _TogetherPlanCard(plan: plan),
+            _TogetherPlanCard(
+              plan: plan,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => PlanDetailPage(planId: plan.id),
+                ),
+              ),
+            ),
             const SizedBox(height: AppSpacing.md),
           ],
           TextButton(
@@ -297,13 +302,17 @@ class _TogetherPlansPanel extends StatelessWidget {
 }
 
 class _TogetherPlanCard extends StatelessWidget {
-  const _TogetherPlanCard({required this.plan});
+  const _TogetherPlanCard({required this.plan, required this.onTap});
 
   final Plan plan;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(26),
+      child: Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.72),
@@ -372,6 +381,7 @@ class _TogetherPlanCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

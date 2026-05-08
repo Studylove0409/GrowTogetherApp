@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
@@ -16,11 +17,9 @@ class TogetherPlansPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final allPlans = MockStore.instance.getPlansByOwner(PlanOwner.together);
-        return PlanListScaffold(
+    final store = context.watch<Store>();
+    final allPlans = store.getPlansByOwner(PlanOwner.together);
+    return PlanListScaffold(
           title: '共同计划',
           filterOptions: const ['全部', '待打卡', '已完成'],
           plans: allPlans,
@@ -44,8 +43,6 @@ class TogetherPlansPage extends StatelessWidget {
           },
           headerBuilder: (context) => _TogetherHeader(plans: allPlans),
         );
-      },
-    );
   }
 }
 

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import 'core/config/supabase_config.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'data/mock/mock_store.dart';
+import 'data/store/store.dart';
+import 'data/supabase/supabase_store.dart';
 import 'features/home/home_page.dart';
 import 'features/plans/plans_page.dart';
 import 'features/profile/profile_page.dart';
@@ -13,12 +18,15 @@ class GrowTogetherApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: '一起进步呀',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.light,
-      home: const GrowTogetherShell(),
+    return ChangeNotifierProvider<Store>.value(
+      value: SupabaseConfig.isConfigured ? SupabaseStore() : MockStore.instance,
+      child: MaterialApp(
+        title: '一起进步呀',
+        debugShowCheckedModeBanner: false,
+        theme: AppTheme.light,
+        darkTheme: AppTheme.light,
+        home: const GrowTogetherShell(),
+      ),
     );
   }
 }
@@ -39,9 +47,13 @@ class _GrowTogetherShellState extends State<GrowTogetherShell> {
       const HomePage(),
       const PlansPage(),
       const RemindersPage(),
-      ProfilePage(onOpenPlans: () => setState(() => _selectedIndex = 1)),
+      ProfilePage(
+        isSelected: _selectedIndex == 3,
+        onOpenPlans: () => setState(() => _selectedIndex = 1),
+      ),
     ];
 
+    final store = context.watch<Store>();
     return Scaffold(
       backgroundColor: AppColors.background,
       extendBody: true,
@@ -58,6 +70,7 @@ class _GrowTogetherShellState extends State<GrowTogetherShell> {
             onSelected: (index) {
               setState(() => _selectedIndex = index);
             },
+            reminderBadgeCount: store.unreadReminderCount,
           ),
         ),
       ),

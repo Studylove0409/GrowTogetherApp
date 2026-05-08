@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_scaffold.dart';
-import '../../shared/widgets/primary_pill_button.dart';
+import '../plans/plan_detail_page.dart';
 import '../../shared/widgets/reminder_card.dart';
 
 class RemindersPage extends StatefulWidget {
@@ -21,13 +22,11 @@ class _RemindersPageState extends State<RemindersPage> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final reminders = MockStore.instance
-            .getReminders()
-            .where((reminder) => reminder.sentByMe != _showReceived)
-            .toList();
+    final store = context.watch<Store>();
+    final reminders = store
+        .getReminders()
+        .where((reminder) => reminder.sentByMe != _showReceived)
+        .toList();
 
         return AppScaffold(
           child: Column(
@@ -54,32 +53,24 @@ class _RemindersPageState extends State<RemindersPage> {
                   itemCount: reminders.length,
                   itemBuilder: (context, index) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: ReminderCard(reminder: reminders[index]),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.sm,
-                  AppSpacing.md,
-                  122,
-                ),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: PrimaryPillButton(
-                    label: '轻轻提醒 TA',
-                    icon: Icons.send_rounded,
-                    height: 52,
-                    onPressed: () => _showSnack(context, '发送提醒功能开发中'),
+                    child: ReminderCard(
+                      reminder: reminders[index],
+                      onTap: reminders[index].planId != null
+                          ? () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => PlanDetailPage(
+                                    planId: reminders[index].planId!,
+                                  ),
+                                ),
+                              )
+                          : null,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
         );
-      },
-    );
   }
 }
 
@@ -190,8 +181,4 @@ class _ReminderTabItem extends StatelessWidget {
       ),
     );
   }
-}
-
-void _showSnack(BuildContext context, String message) {
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 }

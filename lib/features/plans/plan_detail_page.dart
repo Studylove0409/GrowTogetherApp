@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../data/models/reminder.dart';
 import '../../shared/widgets/app_card.dart';
@@ -19,11 +20,9 @@ class PlanDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final plan = MockStore.instance.getPlanById(planId);
-        if (plan == null) {
+    final store = context.watch<Store>();
+    final plan = store.getPlanById(planId);
+    if (plan == null) {
           return Scaffold(
             appBar: AppBar(title: const Text('计划详情')),
             body: const Center(child: Text('计划不存在')),
@@ -90,8 +89,6 @@ class PlanDetailPage extends StatelessWidget {
                   ),
                 ),
         );
-      },
-    );
   }
 
   Widget _buildBottomButton(BuildContext context, Plan plan) {
@@ -192,25 +189,32 @@ class PlanDetailPage extends StatelessWidget {
                   label: label,
                   icon: icon,
                   message: message,
-                  onTap: () {
-                    final store = MockStore.instance;
-                    store.sendReminder(
-                      Reminder(
-                        title: label,
-                        message: '$message（计划：${plan.title}）',
-                        time: TimeOfDay.now().format(context),
-                        icon: icon,
-                        sentByMe: true,
-                        color: AppColors.primary,
-                      ),
-                    );
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('提醒已经飞过去啦～'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                  onTap: () async {
+                    final type = _remindTypeFromLabel(label);
+                    try {
+                      await context.read<Store>().sendReminder(
+                        planId: plan.id,
+                        type: type,
+                        content: '$message（计划：${plan.title}）',
+                      );
+                      if (!context.mounted) return;
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('提醒已经飞过去啦～'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    } catch (error) {
+                      if (!context.mounted) return;
+                      Navigator.of(context).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('发送提醒失败，请稍后再试'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
                   },
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -228,6 +232,13 @@ class PlanDetailPage extends StatelessWidget {
     ('鼓励一下', Icons.thumb_up_alt_rounded, '你已经坚持很久啦，再完成一天！'),
     ('夸夸对方', Icons.favorite_rounded, '今天的你也很努力，值得夸夸！'),
   ];
+
+  static ReminderType _remindTypeFromLabel(String label) => switch (label) {
+    '认真监督' => ReminderType.strict,
+    '鼓励一下' => ReminderType.encourage,
+    '夸夸对方' => ReminderType.praise,
+    _ => ReminderType.gentle,
+  };
 
   Widget _buildEndPlanButton(BuildContext context, Plan plan) {
     return SizedBox(
@@ -266,15 +277,27 @@ class PlanDetailPage extends StatelessWidget {
               child: const Text('再想想'),
             ),
             TextButton(
-              onPressed: () {
-                MockStore.instance.endPlan(plan.id);
-                Navigator.of(context).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('计划已结束，辛苦啦～'),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
+              onPressed: () async {
+                try {
+                  await context.read<Store>().endPlan(plan.id);
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('计划已结束，辛苦啦～'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                } catch (error) {
+                  if (!context.mounted) return;
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('结束计划失败，请稍后再试'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
               },
               style: TextButton.styleFrom(foregroundColor: AppColors.reminder),
               child: const Text('确定结束'),

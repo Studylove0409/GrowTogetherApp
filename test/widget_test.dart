@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+
 import 'package:grow_together/app.dart';
 import 'package:grow_together/data/mock/mock_store.dart';
 import 'package:grow_together/data/models/plan.dart';
+import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
+import 'package:grow_together/data/models/reminder.dart';
 import 'package:grow_together/shared/utils/plan_icon_mapper.dart';
+import 'package:grow_together/shared/widgets/reminder_card.dart';
 
 void main() {
   testWidgets('GrowTogether shell shows the home page', (tester) async {
@@ -33,20 +38,21 @@ void main() {
 
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
-    expect(find.text('LOVE5208'), findsOneWidget);
+    expect(find.text('待绑定'), findsOneWidget);
+    expect(find.text('我们的空间邀请码'), findsOneWidget);
 
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();
     expect(find.text('我的今日计划'), findsOneWidget);
   });
 
-  test('MockStore creates plan and saves checkin', () {
+  test('MockStore creates plan and saves checkin', () async {
     final store = MockStore.instance;
     final initialCount = store.getPlans().length;
 
-    final plan = store.createPlan(
+    final plan = await store.createPlan(
       title: '测试计划',
-      owner: PlanOwner.together,
+      isShared: true,
       dailyTask: '每天一起复盘 10 分钟',
       startDate: DateTime(2026, 5, 7),
       endDate: DateTime(2026, 5, 14),
@@ -78,7 +84,7 @@ void main() {
     final store = MockStore.instance;
     final initialCount = store.getPlans().length;
 
-    await tester.pumpWidget(const MaterialApp(home: CreatePlanPage()));
+    await tester.pumpWidget(MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: const CreatePlanPage())));
 
     expect(find.text('我的计划'), findsOneWidget);
     expect(find.text('共同计划'), findsOneWidget);
@@ -115,7 +121,7 @@ void main() {
   });
 
   testWidgets('CreatePlanPage "+ 自定义" opens BottomSheet', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: CreatePlanPage()));
+    await tester.pumpWidget(MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: const CreatePlanPage())));
 
     // 点击 "+ 自定义"
     await tester.tap(find.text('自定义'));
@@ -146,7 +152,7 @@ void main() {
   testWidgets(
     'CreatePlanPage saves custom icon and shows its name in the grid',
     (tester) async {
-      await tester.pumpWidget(const MaterialApp(home: CreatePlanPage()));
+      await tester.pumpWidget(MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: const CreatePlanPage())));
 
       // 打开自定义图标弹窗
       await tester.tap(find.text('自定义'));
@@ -195,14 +201,14 @@ void main() {
 
   test(
     'MockStore blocks partner plan checkin and keeps together statuses separate',
-    () {
+    () async {
       final store = MockStore.instance;
       final partnerPlan = store.getPlans().firstWhere(
         (plan) => plan.owner == PlanOwner.partner,
       );
       final beforePartner = store.getPlanById(partnerPlan.id)!;
 
-      store.saveCheckin(
+      await store.saveCheckin(
         planId: partnerPlan.id,
         completed: true,
         mood: CheckinMood.happy,
@@ -213,9 +219,9 @@ void main() {
       expect(afterPartner.doneToday, beforePartner.doneToday);
       expect(afterPartner.checkins.length, beforePartner.checkins.length);
 
-      final togetherPlan = store.createPlan(
+      final togetherPlan = await store.createPlan(
         title: '共同测试计划',
-        owner: PlanOwner.together,
+        isShared: true,
         dailyTask: '各自完成自己的打卡',
         startDate: DateTime(2026, 5, 7),
         endDate: DateTime(2026, 5, 14),
@@ -235,4 +241,29 @@ void main() {
       expect(updatedTogether.isTogetherDoneToday, isFalse);
     },
   );
+
+  testWidgets('ReminderCard calls onTap when tapped', (tester) async {
+    var tapped = false;
+    final reminder = Reminder(
+      id: 'test-reminder',
+      type: ReminderType.gentle,
+      content: '测试提醒内容',
+      fromUserId: 'user-a',
+      toUserId: 'user-b',
+      planId: 'plan-123',
+      createdAt: DateTime(2026, 5, 8, 10, 30),
+    );
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: ReminderCard(
+          reminder: reminder,
+          onTap: () => tapped = true,
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('测试提醒内容'));
+    expect(tapped, isTrue);
+  });
 }

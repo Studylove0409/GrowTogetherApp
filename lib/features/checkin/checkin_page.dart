@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
@@ -31,7 +32,8 @@ class _CheckinPageState extends State<CheckinPage> {
 
   @override
   Widget build(BuildContext context) {
-    final plan = MockStore.instance.getPlanById(widget.planId);
+    final store = context.read<Store>();
+    final plan = store.getPlanById(widget.planId);
     final canCheckin = plan?.canCurrentUserCheckin ?? false;
 
     return Scaffold(
@@ -167,21 +169,32 @@ class _CheckinPageState extends State<CheckinPage> {
           child: PrimaryButton(
             label: '保存打卡',
             icon: Icons.save_rounded,
-            onPressed: canCheckin ? _saveCheckin : _showCannotCheckin,
+            onPressed: canCheckin ? () => _saveCheckin() : _showCannotCheckin,
           ),
         ),
       ),
     );
   }
 
-  void _saveCheckin() {
-    MockStore.instance.saveCheckin(
-      planId: widget.planId,
-      completed: _completed,
-      mood: _mood,
-      note: _noteController.text,
-    );
-    Navigator.of(context).pop();
+  Future<void> _saveCheckin() async {
+    try {
+      await context.read<Store>().saveCheckin(
+        planId: widget.planId,
+        completed: _completed,
+        mood: _mood,
+        note: _noteController.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('打卡失败，请稍后再试'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showCannotCheckin() {

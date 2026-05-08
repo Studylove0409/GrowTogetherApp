@@ -7,10 +7,12 @@ class AppBottomNavBar extends StatelessWidget {
     super.key,
     required this.selectedIndex,
     required this.onSelected,
+    this.reminderBadgeCount = 0,
   });
 
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final int reminderBadgeCount;
 
   static const _items = [
     _BottomNavItem(
@@ -86,10 +88,42 @@ class AppBottomNavBar extends StatelessWidget {
                   children: [
                     for (var index = 0; index < _items.length; index++)
                       Expanded(
-                        child: _BottomNavButton(
-                          item: _items[index],
-                          selected: selectedIndex == index,
-                          onTap: () => onSelected(index),
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            _BottomNavButton(
+                              item: _items[index],
+                              selected: selectedIndex == index,
+                              onTap: () => onSelected(index),
+                            ),
+                            if (index == 2 && reminderBadgeCount > 0)
+                              Positioned(
+                                top: 4,
+                                right: itemWidth * 0.22,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.deepPink,
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                  child: Text(
+                                    reminderBadgeCount > 99
+                                        ? '99+'
+                                        : '$reminderBadgeCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                   ],

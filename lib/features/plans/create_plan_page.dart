@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_store.dart';
+import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../shared/utils/plan_icon_mapper.dart';
 import '../../shared/widgets/app_card.dart';
@@ -193,14 +194,14 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           child: PrimaryButton(
             label: widget.existingPlan != null ? '保存修改' : '保存计划',
             icon: Icons.save_rounded,
-            onPressed: _savePlan,
+            onPressed: () => _savePlan(),
           ),
         ),
       ),
     );
   }
 
-  void _savePlan() {
+  Future<void> _savePlan() async {
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
 
@@ -210,35 +211,43 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     }
 
     final existing = widget.existingPlan;
-    if (existing != null) {
-      MockStore.instance.updatePlan(
-        planId: existing.id,
-        title: name,
-        dailyTask: description.isEmpty ? name : description,
-        iconKey: _selectedIconKey,
-        reminderTime: _reminderTime,
-        startDate: _startDate,
-        endDate: _endDate,
-      );
-    } else {
-      MockStore.instance.createPlan(
-        title: name,
-        owner: _owner,
-        dailyTask: description.isEmpty ? name : description,
-        startDate: _startDate,
-        endDate: _endDate,
-        reminderTime: _reminderTime,
-        iconKey: _selectedIconKey,
-      );
-    }
+    final store = context.read<Store>();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(existing != null ? '计划已更新' : '计划已保存'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-    Navigator.of(context).pop();
+    try {
+      if (existing != null) {
+        await store.updatePlan(
+          planId: existing.id,
+          title: name,
+          dailyTask: description.isEmpty ? name : description,
+          iconKey: _selectedIconKey,
+          reminderTime: _reminderTime,
+          startDate: _startDate,
+          endDate: _endDate,
+        );
+      } else {
+        await store.createPlan(
+          title: name,
+          isShared: _owner == PlanOwner.together,
+          dailyTask: description.isEmpty ? name : description,
+          startDate: _startDate,
+          endDate: _endDate,
+          reminderTime: _reminderTime,
+          iconKey: _selectedIconKey,
+        );
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(existing != null ? '计划已更新' : '计划已保存'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.of(context).pop();
+    } catch (error) {
+      if (!mounted) return;
+      _showError('保存失败，请稍后再试');
+    }
   }
 
   void _showError(String message) {

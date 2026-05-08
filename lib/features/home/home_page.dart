@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/theme/app_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../data/mock/mock_data.dart';
-import '../../data/mock/mock_store.dart';
 import '../../data/models/plan.dart';
+import '../../data/store/store.dart';
 import '../../features/plans/create_plan_page.dart';
 import '../../features/plans/my_plans_page.dart';
 import '../../features/plans/partner_plans_page.dart';
@@ -26,17 +26,15 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: MockStore.instance,
-      builder: (context, _) {
-        final allPlans = MockStore.instance.getPlans();
-        final myPlans = allPlans.where((p) => p.owner == PlanOwner.me).toList();
-        final partnerPlans = allPlans
-            .where((p) => p.owner == PlanOwner.partner)
-            .toList();
-        final togetherPlans = allPlans
-            .where((p) => p.owner == PlanOwner.together)
-            .toList();
+    final store = context.watch<Store>();
+    final allPlans = store.getPlans();
+    final myPlans = allPlans.where((p) => p.owner == PlanOwner.me).toList();
+    final partnerPlans = allPlans
+        .where((p) => p.owner == PlanOwner.partner)
+        .toList();
+    final togetherPlans = allPlans
+        .where((p) => p.owner == PlanOwner.together)
+        .toList();
 
         return AppScaffold(
           child: ListView(
@@ -92,7 +90,9 @@ class HomePage extends StatelessWidget {
                 onPlanTap: (plan) => _openPlan(context, plan),
                 onEmptyAction: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
-                    builder: (_) => const CreatePlanPage(),
+                    builder: (_) => const CreatePlanPage(
+                      defaultOwner: PlanOwner.together,
+                    ),
                   ),
                 ),
               ),
@@ -101,8 +101,6 @@ class HomePage extends StatelessWidget {
             ],
           ),
         );
-      },
-    );
   }
 }
 
@@ -263,7 +261,7 @@ class _GrowthHeroCard extends StatelessWidget {
                         style: AppTextStyles.display.copyWith(fontSize: 44),
                         children: [
                           TextSpan(
-                            text: '${MockData.profile.togetherDays}',
+                            text: '${context.watch<Store>().getProfile().togetherDays}',
                             style: const TextStyle(color: AppColors.deepPink),
                           ),
                           const TextSpan(text: ' 天啦'),

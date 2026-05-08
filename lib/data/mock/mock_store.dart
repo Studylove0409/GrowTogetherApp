@@ -1,88 +1,81 @@
 import 'package:flutter/material.dart';
 
+import '../../core/notification/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/utils/plan_icon_mapper.dart';
 import '../models/plan.dart';
+import '../models/profile.dart';
 import '../models/reminder.dart';
+import '../store/store.dart';
 import 'mock_data.dart';
 
-class MockStore extends ChangeNotifier {
+/// Mock 实现的 Store。
+///
+/// 当前数据来源为内存 mock。后续 SupabaseStore 实现同一接口后，
+/// 顶层 Provider 切换注入即可，页面层零改动。
+class MockStore extends Store {
   MockStore._()
     : _plans = List.of(MockData.plans),
       _reminders = List.of(MockData.reminders);
 
   static final MockStore instance = MockStore._();
 
+  // ========================= 数据源 =========================
+
   final List<Plan> _plans;
   final List<Reminder> _reminders;
 
-  List<Plan> getPlans() =>
-      List.unmodifiable(_plans.where((p) => !p.isEnded));
+  // ========================= Profile =========================
 
+  @override
+  Profile getProfile() => MockData.profile;
+
+  @override
+  Future<void> refreshProfile() async {}
+
+  // ========================= Plan =========================
+
+  @override
+  List<Plan> getPlans() {
+    return List.unmodifiable(_plans.where((p) => !p.isEnded));
+  }
+
+  @override
   List<Plan> getPlansByOwner(PlanOwner owner) {
     return _plans.where((plan) => plan.owner == owner && !plan.isEnded).toList();
   }
 
-  /// 按优先级排序后取前 3 条：我待打卡 > TA 待打卡 > 已完成
+  @override
   List<Plan> getTodayFocusPlans() {
     final active = _plans.where((p) => !p.isEnded).toList()
       ..sort(_comparePlanPriority);
     return List.unmodifiable(active.take(3));
   }
 
-  List<Plan> getAllPlans() => List.unmodifiable(_plans);
-
-  /// 优先级：0=我待打卡, 1=TA待打卡, 2=已完成
-  static int planPriority(Plan plan) {
-    // 我待打卡：我的计划未完成，或共同计划中我未完成
-    final myUndone = switch (plan.owner) {
-      PlanOwner.me => !plan.doneToday,
-      PlanOwner.together => !plan.doneToday,
-      PlanOwner.partner => false,
-    };
-    if (myUndone) return 0;
-
-    // TA 待打卡：TA 的计划未完成，或共同计划中 TA 未完成（但我已完成）
-    final partnerUndone = switch (plan.owner) {
-      PlanOwner.partner => !plan.partnerDoneToday,
-      PlanOwner.together => !plan.partnerDoneToday,
-      PlanOwner.me => false,
-    };
-    if (partnerUndone) return 1;
-
-    return 2; // 已完成
+  @override
+  List<Plan> getAllPlans() {
+    return List.unmodifiable(_plans);
   }
 
-  static int _comparePlanPriority(Plan a, Plan b) {
-    return planPriority(a).compareTo(planPriority(b));
-  }
-
-  List<CheckinRecord> getCheckinRecords(String planId) {
-    final plan = getPlanById(planId);
-    if (plan == null) return [];
-    return List.unmodifiable(plan.checkins);
-  }
-
+  @override
   Plan? getPlanById(String id) {
     for (final plan in _plans) {
-      if (plan.id == id) {
-        return plan;
-      }
+      if (plan.id == id) return plan;
     }
     return null;
   }
 
-  List<Reminder> getReminders() => List.unmodifiable(_reminders);
-
-  Plan createPlan({
+  @override
+  Future<Plan> createPlan({
     required String title,
-    required PlanOwner owner,
+    required bool isShared,
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay reminderTime,
     String iconKey = PlanIconMapper.defaultKey,
-  }) {
+  }) async {
+    final owner = isShared ? PlanOwner.together : PlanOwner.me;
     final totalDays = endDate.difference(startDate).inDays + 1;
     final plan = Plan(
       id: 'plan_${DateTime.now().microsecondsSinceEpoch}',
@@ -94,9 +87,7 @@ class MockStore extends ChangeNotifier {
       completedDays: 0,
       totalDays: totalDays < 1 ? 1 : totalDays,
       doneToday: false,
-      color: owner == PlanOwner.together
-          ? AppColors.primary
-          : AppColors.reminder,
+      color: isShared ? AppColors.primary : AppColors.reminder,
       dailyTask: dailyTask,
       startDate: startDate,
       endDate: endDate,
@@ -105,24 +96,83 @@ class MockStore extends ChangeNotifier {
 
     _plans.insert(0, plan);
     notifyListeners();
+    _scheduleReminder(plan);
     return plan;
   }
 
-  void saveCheckin({
+  @override
+  Future<void> updatePlan({
+    required String planId,
+    String? title,
+    String? dailyTask,
+    String? iconKey,
+    TimeOfDay? reminderTime,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+
+    final plan = _plans[index];
+    if (!plan.canCurrentUserEdit) return;
+
+    final totalDays = (endDate ?? plan.endDate)
+        .difference(startDate ?? plan.startDate)
+        .inDays + 1;
+
+    _plans[index] = plan.copyWith(
+      title: title,
+      subtitle: dailyTask ?? (dailyTask != null ? '' : null),
+      dailyTask: dailyTask,
+      iconKey: iconKey,
+      reminderTime: reminderTime,
+      startDate: startDate,
+      endDate: endDate,
+      totalDays: totalDays < 1 ? 1 : totalDays,
+    );
+    notifyListeners();
+    if (reminderTime != null) {
+      _scheduleReminder(_plans[index]);
+    }
+  }
+
+  @override
+  Future<void> endPlan(String planId) async {
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+
+    final plan = _plans[index];
+    if (!plan.canCurrentUserEdit) return;
+
+    _plans[index] = plan.copyWith(
+      status: PlanStatus.ended,
+      endedAt: DateTime.now(),
+    );
+    notifyListeners();
+    NotificationService.cancelPlanReminder(planId);
+  }
+
+  // ========================= Checkin =========================
+
+  @override
+  List<CheckinRecord> getCheckinRecords(String planId) {
+    final plan = getPlanById(planId);
+    if (plan == null) return [];
+    return List.unmodifiable(plan.checkins);
+  }
+
+  @override
+  Future<void> saveCheckin({
     required String planId,
     required bool completed,
     required CheckinMood mood,
     required String note,
-  }) {
+  }) async {
     final index = _plans.indexWhere((plan) => plan.id == planId);
-    if (index == -1) {
-      return;
-    }
+    if (index == -1) return;
 
     final plan = _plans[index];
-    if (!plan.canCurrentUserCheckin) {
-      return;
-    }
+    if (!plan.canCurrentUserCheckin) return;
 
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
@@ -156,72 +206,81 @@ class MockStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePlanStatus(String planId, {required bool doneToday}) {
+  @override
+  Future<void> updatePlanStatus(String planId, {required bool doneToday}) async {
     final index = _plans.indexWhere((plan) => plan.id == planId);
-    if (index == -1) {
-      return;
-    }
+    if (index == -1) return;
 
     final plan = _plans[index];
-    if (!plan.canCurrentUserCheckin) {
-      return;
-    }
+    if (!plan.canCurrentUserCheckin) return;
     _plans[index] = plan.copyWith(doneToday: doneToday);
     notifyListeners();
   }
 
-  void updatePlan({
+  // ========================= Reminder =========================
+
+  @override
+  List<Reminder> getReminders() {
+    return List.unmodifiable(_reminders);
+  }
+
+  @override
+  int get unreadReminderCount =>
+      _reminders.where((r) => !r.sentByMe && !r.isRead).length;
+
+  @override
+  Future<void> sendReminder({
     required String planId,
-    String? title,
-    String? dailyTask,
-    String? iconKey,
-    TimeOfDay? reminderTime,
-    DateTime? startDate,
-    DateTime? endDate,
-  }) {
-    final index = _plans.indexWhere((plan) => plan.id == planId);
-    if (index == -1) return;
-
-    final plan = _plans[index];
-    if (!plan.canCurrentUserEdit) return;
-
-    final totalDays = (endDate ?? plan.endDate)
-        .difference(startDate ?? plan.startDate)
-        .inDays + 1;
-
-    _plans[index] = plan.copyWith(
-      title: title,
-      subtitle: dailyTask ?? (dailyTask != null ? '' : null),
-      dailyTask: dailyTask,
-      iconKey: iconKey,
-      reminderTime: reminderTime,
-      startDate: startDate,
-      endDate: endDate,
-      totalDays: totalDays < 1 ? 1 : totalDays,
-    );
+    required ReminderType type,
+    required String content,
+  }) async {
+    _reminders.insert(0, Reminder(
+      id: 'rem_${DateTime.now().microsecondsSinceEpoch}',
+      type: type,
+      content: content,
+      fromUserId: 'current-user',
+      toUserId: 'partner',
+      sentByMe: true,
+      createdAt: DateTime.now(),
+    ));
     notifyListeners();
   }
 
-  void endPlan(String planId) {
-    final index = _plans.indexWhere((plan) => plan.id == planId);
-    if (index == -1) return;
+  // ========================= 辅助 =========================
 
-    final plan = _plans[index];
-    if (!plan.canCurrentUserEdit) return;
+  /// 计划优先级用于首页排序：我待打卡 > TA 待打卡 > 已完成
+  static int planPriority(Plan plan) {
+    final myUndone = switch (plan.owner) {
+      PlanOwner.me => !plan.doneToday,
+      PlanOwner.together => !plan.doneToday,
+      PlanOwner.partner => false,
+    };
+    if (myUndone) return 0;
 
-    _plans[index] = plan.copyWith(
-      status: PlanStatus.ended,
-      endedAt: DateTime.now(),
-    );
-    notifyListeners();
+    final partnerUndone = switch (plan.owner) {
+      PlanOwner.partner => !plan.partnerDoneToday,
+      PlanOwner.together => !plan.partnerDoneToday,
+      PlanOwner.me => false,
+    };
+    if (partnerUndone) return 1;
+
+    return 2;
   }
 
-  void sendReminder(Reminder reminder) {
-    _reminders.insert(0, reminder);
-    notifyListeners();
+  static int _comparePlanPriority(Plan a, Plan b) {
+    return planPriority(a).compareTo(planPriority(b));
   }
 
   bool _isSameDate(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  void _scheduleReminder(Plan plan) {
+    NotificationService.schedulePlanReminder(
+      planId: plan.id,
+      planTitle: plan.title,
+      hour: plan.reminderTime.hour,
+      minute: plan.reminderTime.minute,
+    );
   }
 }
