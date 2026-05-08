@@ -9,6 +9,7 @@ import 'package:grow_together/data/models/profile.dart';
 import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
 import 'package:grow_together/features/plans/plan_detail_page.dart';
+import 'package:grow_together/features/reminders/reminders_page.dart';
 import 'package:grow_together/data/models/reminder.dart';
 import 'package:grow_together/shared/utils/plan_icon_mapper.dart';
 import 'package:grow_together/shared/widgets/reminder_card.dart';
@@ -345,6 +346,32 @@ void main() {
       );
     },
   );
+
+  testWidgets('RemindersPage filters reminders by selected date', (
+    tester,
+  ) async {
+    final today = DateTime.now();
+    final yesterday = today.subtract(const Duration(days: 1));
+    final store = _ReminderDateFilterStore(today: today, yesterday: yesterday);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const RemindersPage(),
+        ),
+      ),
+    );
+
+    expect(find.text('今天的提醒'), findsOneWidget);
+    expect(find.text('昨天的提醒'), findsNothing);
+
+    await tester.tap(find.text(yesterday.day.toString().padLeft(2, '0')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('今天的提醒'), findsNothing);
+    expect(find.text('昨天的提醒'), findsOneWidget);
+  });
 }
 
 class _ReminderBadgeStore extends Store {
@@ -568,6 +595,125 @@ class _BlockedPromptReminderStore extends Store {
       'PostgrestException(message: prompt reminders are not allowed after completion, code: P0001, details: Bad Request, hint: null)',
     );
   }
+
+  @override
+  Future<void> markReceivedRemindersRead() async {}
+}
+
+class _ReminderDateFilterStore extends Store {
+  _ReminderDateFilterStore({
+    required DateTime today,
+    required DateTime yesterday,
+  }) : _reminders = [
+         Reminder(
+           id: 'today-reminder',
+           type: ReminderType.gentle,
+           content: '今天的提醒',
+           fromUserId: 'partner',
+           toUserId: 'me',
+           createdAt: DateTime(today.year, today.month, today.day, 9, 0),
+         ),
+         Reminder(
+           id: 'yesterday-reminder',
+           type: ReminderType.strict,
+           content: '昨天的提醒',
+           fromUserId: 'partner',
+           toUserId: 'me',
+           createdAt: DateTime(
+             yesterday.year,
+             yesterday.month,
+             yesterday.day,
+             9,
+             0,
+           ),
+         ),
+       ];
+
+  final List<Reminder> _reminders;
+
+  @override
+  Profile getProfile() => const Profile(
+    name: '测试',
+    partnerName: '对方',
+    togetherDays: 1,
+    inviteCode: 'TEST',
+    isBound: true,
+  );
+
+  @override
+  Future<void> refreshProfile() async {}
+
+  @override
+  List<Plan> getPlans() => [];
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) => [];
+
+  @override
+  List<Plan> getTodayFocusPlans() => [];
+
+  @override
+  List<Plan> getAllPlans() => [];
+
+  @override
+  Plan? getPlanById(String id) => null;
+
+  @override
+  Future<Plan> createPlan({
+    required String title,
+    required bool isShared,
+    required String dailyTask,
+    required DateTime startDate,
+    required DateTime endDate,
+    required TimeOfDay reminderTime,
+    String iconKey = PlanIconMapper.defaultKey,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> updatePlan({
+    required String planId,
+    String? title,
+    String? dailyTask,
+    String? iconKey,
+    TimeOfDay? reminderTime,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {}
+
+  @override
+  Future<void> endPlan(String planId) async {}
+
+  @override
+  List<CheckinRecord> getCheckinRecords(String planId) => [];
+
+  @override
+  Future<void> saveCheckin({
+    required String planId,
+    required bool completed,
+    required CheckinMood mood,
+    required String note,
+  }) async {}
+
+  @override
+  Future<void> updatePlanStatus(
+    String planId, {
+    required bool doneToday,
+  }) async {}
+
+  @override
+  List<Reminder> getReminders() => List.unmodifiable(_reminders);
+
+  @override
+  int get unreadReminderCount => _reminders.length;
+
+  @override
+  Future<void> sendReminder({
+    required String planId,
+    required ReminderType type,
+    required String content,
+  }) async {}
 
   @override
   Future<void> markReceivedRemindersRead() async {}
