@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -23,72 +24,72 @@ class PlanDetailPage extends StatelessWidget {
     final store = context.watch<Store>();
     final plan = store.getPlanById(planId);
     if (plan == null) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('计划详情')),
-            body: const Center(child: Text('计划不存在')),
-          );
-        }
+      return Scaffold(
+        appBar: AppBar(title: const Text('计划详情')),
+        body: const Center(child: Text('计划不存在')),
+      );
+    }
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('计划详情', style: AppTextStyles.section),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('计划详情', style: AppTextStyles.section),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        top: false,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.md,
+            32,
           ),
-          body: SafeArea(
-            top: false,
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                32,
-              ),
-              children: [
-                _PlanHeroCard(plan: plan),
-                const SizedBox(height: AppSpacing.md),
-                _PlanStatusCard(plan: plan),
-                const SizedBox(height: AppSpacing.md),
-                _PlanProgressCard(plan: plan),
-                if (plan.owner == PlanOwner.together) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _TogetherCheckinCard(plan: plan),
-                ],
-                const SizedBox(height: AppSpacing.md),
-                _RecentCheckinsCard(
-                  plan: plan,
-                  onViewAll: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => CheckinRecordPage(planId: plan.id),
-                      ),
-                    );
-                  },
-                ),
-                if (plan.canCurrentUserEdit && !plan.isEnded) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _buildEndPlanButton(context, plan),
-                ],
-              ],
-            ),
-          ),
-          bottomNavigationBar: plan.isEnded
-              ? null
-              : SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      AppSpacing.sm,
-                      AppSpacing.md,
-                      AppSpacing.md,
-                    ),
-                    child: _buildBottomButton(context, plan),
+          children: [
+            _PlanHeroCard(plan: plan),
+            const SizedBox(height: AppSpacing.md),
+            _PlanStatusCard(plan: plan),
+            const SizedBox(height: AppSpacing.md),
+            _PlanProgressCard(plan: plan),
+            if (plan.owner == PlanOwner.together) ...[
+              const SizedBox(height: AppSpacing.md),
+              _TogetherCheckinCard(plan: plan),
+            ],
+            const SizedBox(height: AppSpacing.md),
+            _RecentCheckinsCard(
+              plan: plan,
+              onViewAll: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => CheckinRecordPage(planId: plan.id),
                   ),
+                );
+              },
+            ),
+            if (plan.canCurrentUserEdit && !plan.isEnded) ...[
+              const SizedBox(height: AppSpacing.md),
+              _buildEndPlanButton(context, plan),
+            ],
+          ],
+        ),
+      ),
+      bottomNavigationBar: plan.isEnded
+          ? null
+          : SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.md,
                 ),
-        );
+                child: _buildBottomButton(context, plan),
+              ),
+            ),
+    );
   }
 
   Widget _buildBottomButton(BuildContext context, Plan plan) {
@@ -157,6 +158,9 @@ class PlanDetailPage extends StatelessWidget {
   }
 
   void _showRemindSheet(BuildContext context, Plan plan) {
+    final store = context.read<Store>();
+    final messenger = ScaffoldMessenger.of(context);
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppColors.surface,
@@ -179,10 +183,7 @@ class PlanDetailPage extends StatelessWidget {
             children: [
               Text('提醒 TA', style: AppTextStyles.section),
               const SizedBox(height: AppSpacing.xs),
-              Text(
-                '关联计划：${plan.title}',
-                style: AppTextStyles.caption,
-              ),
+              Text('关联计划：${plan.title}', style: AppTextStyles.caption),
               const SizedBox(height: AppSpacing.lg),
               for (final (label, icon, message) in _remindTypes) ...[
                 _RemindTypeTile(
@@ -191,26 +192,30 @@ class PlanDetailPage extends StatelessWidget {
                   message: message,
                   onTap: () async {
                     final type = _remindTypeFromLabel(label);
+                    final navigator = Navigator.of(context);
                     try {
-                      await context.read<Store>().sendReminder(
+                      await store.sendReminder(
                         planId: plan.id,
                         type: type,
                         content: '$message（计划：${plan.title}）',
                       );
                       if (!context.mounted) return;
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      navigator.pop();
+                      messenger.showSnackBar(
                         const SnackBar(
                           content: Text('提醒已经飞过去啦～'),
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
                     } catch (error) {
+                      if (kDebugMode) {
+                        debugPrint('sendReminder failed: $error');
+                      }
                       if (!context.mounted) return;
-                      Navigator.of(context).pop();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('发送提醒失败，请稍后再试'),
+                      navigator.pop();
+                      messenger.showSnackBar(
+                        SnackBar(
+                          content: Text(_reminderFailureMessage(error)),
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
@@ -239,6 +244,39 @@ class PlanDetailPage extends StatelessWidget {
     '夸夸对方' => ReminderType.praise,
     _ => ReminderType.gentle,
   };
+
+  static String _reminderFailureMessage(Object error) {
+    final message = error.toString();
+
+    if (message.contains('prompt reminders are not allowed after completion')) {
+      return 'TA 今天已经完成这个计划啦，换个夸夸会更合适';
+    }
+    if (message.contains('supervision is disabled for this plan')) {
+      return '这个计划没有开启互相监督，暂时不能提醒';
+    }
+    if (message.contains('plan is not in the current user couple') ||
+        message.contains('reminder users must belong to the plan couple') ||
+        message.contains('reminder couple_id must match plan') ||
+        message.contains(
+          'reminder couple_id must match sender active couple',
+        )) {
+      return '这个计划和当前情侣关系不一致，请刷新后再试';
+    }
+    if (message.contains('plan does not exist')) {
+      return '这个计划不存在或已被删除';
+    }
+    if (message.contains('authentication required')) {
+      return '登录状态已失效，请重新进入后再试';
+    }
+    if (message.contains('reminders can only be sent to an active partner')) {
+      return '绑定关系已变化，暂时不能发送提醒';
+    }
+    if (message.contains('reminders can only be linked to an active plan')) {
+      return '这个计划已结束，不能再发送提醒';
+    }
+
+    return '发送提醒失败，请稍后再试';
+  }
 
   Widget _buildEndPlanButton(BuildContext context, Plan plan) {
     return SizedBox(
@@ -270,7 +308,9 @@ class PlanDetailPage extends StatelessWidget {
             borderRadius: BorderRadius.circular(28),
           ),
           title: const Text('确认结束计划'),
-          content: Text('确定要结束「${plan.title}」吗？\n结束后的计划将不再出现在日常列表中，但打卡记录依然可以查看。'),
+          content: Text(
+            '确定要结束「${plan.title}」吗？\n结束后的计划将不再出现在日常列表中，但打卡记录依然可以查看。',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -414,12 +454,14 @@ class _PlanStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (statusLabel, statusColor) = switch (plan.owner) {
-      PlanOwner.me => plan.doneToday
-          ? ('已打卡', AppColors.successText)
-          : ('待打卡', AppColors.deepPink),
-      PlanOwner.partner => plan.partnerDoneToday
-          ? ('TA 已打卡', AppColors.successText)
-          : ('TA 待打卡', AppColors.deepPink),
+      PlanOwner.me =>
+        plan.doneToday
+            ? ('已打卡', AppColors.successText)
+            : ('待打卡', AppColors.deepPink),
+      PlanOwner.partner =>
+        plan.partnerDoneToday
+            ? ('TA 已打卡', AppColors.successText)
+            : ('TA 待打卡', AppColors.deepPink),
       PlanOwner.together => switch (plan.togetherStatus) {
         TogetherStatus.bothDone => ('双方已完成', AppColors.successText),
         TogetherStatus.onlyMeDone => ('我已打卡', AppColors.reminder),

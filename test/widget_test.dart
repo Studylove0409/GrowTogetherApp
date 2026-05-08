@@ -8,6 +8,7 @@ import 'package:grow_together/data/models/plan.dart';
 import 'package:grow_together/data/models/profile.dart';
 import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
+import 'package:grow_together/features/plans/plan_detail_page.dart';
 import 'package:grow_together/data/models/reminder.dart';
 import 'package:grow_together/shared/utils/plan_icon_mapper.dart';
 import 'package:grow_together/shared/widgets/reminder_card.dart';
@@ -312,6 +313,38 @@ void main() {
     await tester.tap(find.text('测试提醒内容'));
     expect(tapped, isTrue);
   });
+
+  testWidgets(
+    'PlanDetailPage shows friendly message when prompt reminder is blocked',
+    (tester) async {
+      final store = _BlockedPromptReminderStore();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider<Store>.value(
+            value: store,
+            child: const PlanDetailPage(planId: 'partner-plan'),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('提醒 TA'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('温柔提醒'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      expect(find.text('TA 今天已经完成这个计划啦，换个夸夸会更合适'), findsOneWidget);
+      expect(find.textContaining('PostgrestException'), findsNothing);
+      expect(
+        find.textContaining(
+          'prompt reminders are not allowed after completion',
+        ),
+        findsNothing,
+      );
+    },
+  );
 }
 
 class _ReminderBadgeStore extends Store {
@@ -426,4 +459,116 @@ class _ReminderBadgeStore extends Store {
     }
     notifyListeners();
   }
+}
+
+class _BlockedPromptReminderStore extends Store {
+  final Plan _plan = Plan(
+    id: 'partner-plan',
+    title: '阅读计划',
+    subtitle: '每天读 12 页',
+    owner: PlanOwner.partner,
+    iconKey: 'book',
+    minutes: 12,
+    completedDays: 0,
+    totalDays: 31,
+    doneToday: false,
+    partnerDoneToday: false,
+    color: Colors.pink,
+    dailyTask: '读 12 页书',
+    startDate: DateTime(2026, 5, 1),
+    endDate: DateTime(2026, 5, 31),
+    reminderTime: const TimeOfDay(hour: 20, minute: 0),
+  );
+
+  @override
+  Profile getProfile() => const Profile(
+    name: '测试',
+    partnerName: '对方',
+    togetherDays: 1,
+    inviteCode: 'TEST',
+    isBound: true,
+  );
+
+  @override
+  Future<void> refreshProfile() async {}
+
+  @override
+  List<Plan> getPlans() => [_plan];
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      owner == _plan.owner ? [_plan] : [];
+
+  @override
+  List<Plan> getTodayFocusPlans() => [_plan];
+
+  @override
+  List<Plan> getAllPlans() => [_plan];
+
+  @override
+  Plan? getPlanById(String id) => id == _plan.id ? _plan : null;
+
+  @override
+  Future<Plan> createPlan({
+    required String title,
+    required bool isShared,
+    required String dailyTask,
+    required DateTime startDate,
+    required DateTime endDate,
+    required TimeOfDay reminderTime,
+    String iconKey = PlanIconMapper.defaultKey,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> updatePlan({
+    required String planId,
+    String? title,
+    String? dailyTask,
+    String? iconKey,
+    TimeOfDay? reminderTime,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {}
+
+  @override
+  Future<void> endPlan(String planId) async {}
+
+  @override
+  List<CheckinRecord> getCheckinRecords(String planId) => [];
+
+  @override
+  Future<void> saveCheckin({
+    required String planId,
+    required bool completed,
+    required CheckinMood mood,
+    required String note,
+  }) async {}
+
+  @override
+  Future<void> updatePlanStatus(
+    String planId, {
+    required bool doneToday,
+  }) async {}
+
+  @override
+  List<Reminder> getReminders() => [];
+
+  @override
+  int get unreadReminderCount => 0;
+
+  @override
+  Future<void> sendReminder({
+    required String planId,
+    required ReminderType type,
+    required String content,
+  }) {
+    throw Exception(
+      'PostgrestException(message: prompt reminders are not allowed after completion, code: P0001, details: Bad Request, hint: null)',
+    );
+  }
+
+  @override
+  Future<void> markReceivedRemindersRead() async {}
 }

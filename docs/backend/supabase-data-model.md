@@ -45,7 +45,7 @@ In-app reminders between active partners.
 
 - MVP reminders are in-app messages, not phone push notifications.
 - Remote push can be added later as a delivery channel without changing the core reminder concept.
-- Same sender, receiver, plan, and Asia/Shanghai day is limited to three reminders.
+- Reminders are not capped per day.
 - `gentle` and `strict` reminders are prompt-style and cannot be sent after the receiver completed today's plan.
 
 ## Public RPCs
