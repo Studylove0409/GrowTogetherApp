@@ -20,29 +20,29 @@ class TogetherPlansPage extends StatelessWidget {
     final store = context.watch<Store>();
     final allPlans = store.getPlansByOwner(PlanOwner.together);
     return PlanListScaffold(
-          title: '共同计划',
-          filterOptions: const ['全部', '待打卡', '已完成'],
-          plans: allPlans,
-          planCountLabel: '共 ${allPlans.length} 个计划',
-          owner: PlanOwner.together,
-          onAdd: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const CreatePlanPage(
-                  defaultOwner: PlanOwner.together,
-                ),
-              ),
-            );
-          },
-          onTapPlan: (plan) {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PlanDetailPage(planId: plan.id),
-              ),
-            );
-          },
-          headerBuilder: (context) => _TogetherHeader(plans: allPlans),
+      title: '共同计划',
+      filterOptions: const ['全部', '待打卡', '已完成'],
+      plans: allPlans,
+      planCountLabel: '共 ${allPlans.length} 个计划',
+      owner: PlanOwner.together,
+      onRefresh: context.read<Store>().refreshPlans,
+      onAdd: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) =>
+                const CreatePlanPage(defaultOwner: PlanOwner.together),
+          ),
         );
+      },
+      onTapPlan: (plan) {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PlanDetailPage(planId: plan.id),
+          ),
+        );
+      },
+      headerBuilder: (context) => _TogetherHeader(plans: allPlans),
+    );
   }
 }
 
@@ -101,7 +101,11 @@ class _TogetherHeader extends StatelessWidget {
                           color: AppColors.deepPink.withValues(alpha: 0.70),
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: const Icon(Icons.face_rounded, color: Colors.white, size: 19),
+                        child: const Icon(
+                          Icons.face_rounded,
+                          color: Colors.white,
+                          size: 19,
+                        ),
                       ),
                     ),
                     Positioned(
@@ -114,7 +118,11 @@ class _TogetherHeader extends StatelessWidget {
                           color: AppColors.reminder.withValues(alpha: 0.70),
                           borderRadius: BorderRadius.circular(18),
                         ),
-                        child: const Icon(Icons.face_rounded, color: Colors.white, size: 19),
+                        child: const Icon(
+                          Icons.face_rounded,
+                          color: Colors.white,
+                          size: 19,
+                        ),
                       ),
                     ),
                     Positioned(

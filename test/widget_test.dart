@@ -8,6 +8,7 @@ import 'package:grow_together/data/models/plan.dart';
 import 'package:grow_together/data/models/profile.dart';
 import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
+import 'package:grow_together/features/home/home_page.dart';
 import 'package:grow_together/features/plans/plan_detail_page.dart';
 import 'package:grow_together/features/reminders/reminders_page.dart';
 import 'package:grow_together/data/models/reminder.dart';
@@ -24,6 +25,29 @@ void main() {
     expect(find.text('计划'), findsOneWidget);
     expect(find.text('提醒'), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
+  });
+
+  testWidgets('HomePage pull-to-refresh refreshes all store data', (
+    tester,
+  ) async {
+    final store = _RefreshSmokeStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const HomePage(),
+        ),
+      ),
+    );
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, 300));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(store.refreshAllCount, 1);
   });
 
   testWidgets('GrowTogether shell switches between the four tabs', (
@@ -104,6 +128,19 @@ void main() {
     expect(updated.completedDays, 1);
     expect(updated.checkins.first.note, '完成打卡');
     expect(updated.partnerDoneToday, isFalse);
+  });
+
+  test('MockStore exposes refresh entry points', () async {
+    final store = MockStore.instance;
+
+    await store.refreshProfile();
+    await store.refreshPlans();
+    await store.refreshReminders();
+    await store.refreshAll();
+
+    expect(store.getProfile().name, isNotEmpty);
+    expect(store.getPlans(), isNotEmpty);
+    expect(store.getReminders(), isNotEmpty);
   });
 
   testWidgets('CreatePlanPage shows icon grid and saves selected iconKey', (
@@ -486,6 +523,102 @@ class _ReminderBadgeStore extends Store {
     }
     notifyListeners();
   }
+}
+
+class _RefreshSmokeStore extends Store {
+  int refreshAllCount = 0;
+
+  @override
+  Profile getProfile() => const Profile(
+    name: '测试',
+    partnerName: '对方',
+    togetherDays: 9,
+    inviteCode: 'TEST',
+    isBound: true,
+  );
+
+  @override
+  Future<void> refreshProfile() async {}
+
+  @override
+  Future<void> refreshAll() async {
+    refreshAllCount += 1;
+  }
+
+  @override
+  List<Plan> getPlans() => [];
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) => [];
+
+  @override
+  List<Plan> getTodayFocusPlans() => [];
+
+  @override
+  List<Plan> getAllPlans() => [];
+
+  @override
+  Plan? getPlanById(String id) => null;
+
+  @override
+  Future<Plan> createPlan({
+    required String title,
+    required bool isShared,
+    required String dailyTask,
+    required DateTime startDate,
+    required DateTime endDate,
+    required TimeOfDay reminderTime,
+    String iconKey = PlanIconMapper.defaultKey,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> updatePlan({
+    required String planId,
+    String? title,
+    String? dailyTask,
+    String? iconKey,
+    TimeOfDay? reminderTime,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {}
+
+  @override
+  Future<void> endPlan(String planId) async {}
+
+  @override
+  List<CheckinRecord> getCheckinRecords(String planId) => [];
+
+  @override
+  Future<void> saveCheckin({
+    required String planId,
+    required bool completed,
+    required CheckinMood mood,
+    required String note,
+  }) async {}
+
+  @override
+  Future<void> updatePlanStatus(
+    String planId, {
+    required bool doneToday,
+  }) async {}
+
+  @override
+  List<Reminder> getReminders() => [];
+
+  @override
+  int get unreadReminderCount => 0;
+
+  @override
+  Future<void> sendReminder({
+    required String planId,
+    required ReminderType type,
+    required String content,
+  }) async {}
+
+  @override
+  Future<void> markReceivedRemindersRead() async {}
 }
 
 class _BlockedPromptReminderStore extends Store {

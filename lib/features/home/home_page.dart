@@ -36,71 +36,73 @@ class HomePage extends StatelessWidget {
         .where((p) => p.owner == PlanOwner.together)
         .toList();
 
-        return AppScaffold(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              AppSpacing.lg,
-              AppSpacing.md,
-              32,
-            ),
-            children: [
-              const _HomeHeader(),
-              const SizedBox(height: AppSpacing.xl),
-              const _GrowthHeroCard(),
-              const SizedBox(height: AppSpacing.lg),
-              _HomePlanSection(
-                title: '我的今日计划',
-                plans: myPlans,
-                emptyMessage: '还没有自己的计划哦～',
-                emptyActionLabel: '写下一个小目标',
-                onViewAll: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
-                ),
-                onPlanTap: (plan) => _openPlan(context, plan),
-                onEmptyAction: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const CreatePlanPage(),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              _HomePlanSection(
-                title: 'TA 的今日计划',
-                plans: partnerPlans,
-                emptyMessage: 'TA 还没有计划哦～',
-                onViewAll: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const PartnerPlansPage(),
-                  ),
-                ),
-                onPlanTap: (plan) => _openPlan(context, plan),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              _HomePlanSection(
-                title: '共同计划',
-                plans: togetherPlans,
-                emptyMessage: '还没有共同计划哦～',
-                emptyActionLabel: '一起定个小目标',
-                onViewAll: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const TogetherPlansPage(),
-                  ),
-                ),
-                onPlanTap: (plan) => _openPlan(context, plan),
-                onEmptyAction: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const CreatePlanPage(
-                      defaultOwner: PlanOwner.together,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              const _GrowthRecordEntry(),
-            ],
+    return AppScaffold(
+      child: RefreshIndicator(
+        color: AppColors.deepPink,
+        onRefresh: context.read<Store>().refreshAll,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.lg,
+            AppSpacing.md,
+            32,
           ),
-        );
+          children: [
+            const _HomeHeader(),
+            const SizedBox(height: AppSpacing.xl),
+            const _GrowthHeroCard(),
+            const SizedBox(height: AppSpacing.lg),
+            _HomePlanSection(
+              title: '我的今日计划',
+              plans: myPlans,
+              emptyMessage: '还没有自己的计划哦～',
+              emptyActionLabel: '写下一个小目标',
+              onViewAll: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
+              ),
+              onPlanTap: (plan) => _openPlan(context, plan),
+              onEmptyAction: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const CreatePlanPage()),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _HomePlanSection(
+              title: 'TA 的今日计划',
+              plans: partnerPlans,
+              emptyMessage: 'TA 还没有计划哦～',
+              onViewAll: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const PartnerPlansPage(),
+                ),
+              ),
+              onPlanTap: (plan) => _openPlan(context, plan),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _HomePlanSection(
+              title: '共同计划',
+              plans: togetherPlans,
+              emptyMessage: '还没有共同计划哦～',
+              emptyActionLabel: '一起定个小目标',
+              onViewAll: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const TogetherPlansPage(),
+                ),
+              ),
+              onPlanTap: (plan) => _openPlan(context, plan),
+              onEmptyAction: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      const CreatePlanPage(defaultOwner: PlanOwner.together),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const _GrowthRecordEntry(),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -261,7 +263,8 @@ class _GrowthHeroCard extends StatelessWidget {
                         style: AppTextStyles.display.copyWith(fontSize: 44),
                         children: [
                           TextSpan(
-                            text: '${context.watch<Store>().getProfile().togetherDays}',
+                            text:
+                                '${context.watch<Store>().getProfile().togetherDays}',
                             style: const TextStyle(color: AppColors.deepPink),
                           ),
                           const TextSpan(text: ' 天啦'),

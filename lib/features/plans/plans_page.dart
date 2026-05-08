@@ -30,79 +30,82 @@ class PlansPage extends StatelessWidget {
     final togetherPlans = _plansByOwner(plans, PlanOwner.together);
     final visibleTogetherPlans = _preferredTogetherPlans(togetherPlans);
 
-        return Stack(
-          children: [
-            AppScaffold(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.md,
-                  AppSpacing.lg,
-                  AppSpacing.md,
-                  32,
-                ),
-                children: [
-                  const Center(child: Text('计划', style: AppTextStyles.display)),
-                  const SizedBox(height: AppSpacing.xl),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _OverviewCard(
-                          title: '我的计划',
-                          icon: Icons.flag_rounded,
-                          accentColor: AppColors.deepPink,
-                          countColor: AppColors.deepPink,
-                          doneCount: _doneCount(myPlans),
-                          totalCount: myPlans.length,
-                          focusPlan: myPlans.isEmpty ? null : myPlans.first,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const MyPlansPage(),
-                            ),
+    return Stack(
+      children: [
+        AppScaffold(
+          child: RefreshIndicator(
+            color: AppColors.deepPink,
+            onRefresh: context.read<Store>().refreshPlans,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.lg,
+                AppSpacing.md,
+                32,
+              ),
+              children: [
+                const Center(child: Text('计划', style: AppTextStyles.display)),
+                const SizedBox(height: AppSpacing.xl),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: _OverviewCard(
+                        title: '我的计划',
+                        icon: Icons.flag_rounded,
+                        accentColor: AppColors.deepPink,
+                        countColor: AppColors.deepPink,
+                        doneCount: _doneCount(myPlans),
+                        totalCount: myPlans.length,
+                        focusPlan: myPlans.isEmpty ? null : myPlans.first,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const MyPlansPage(),
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: _OverviewCard(
-                          title: 'TA 的计划',
-                          icon: Icons.directions_run_rounded,
-                          accentColor: AppColors.success,
-                          countColor: AppColors.successText,
-                          doneCount: _doneCount(partnerPlans),
-                          totalCount: partnerPlans.length,
-                          focusPlan: partnerPlans.isEmpty
-                              ? null
-                              : partnerPlans.first,
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const PartnerPlansPage(),
-                            ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: _OverviewCard(
+                        title: 'TA 的计划',
+                        icon: Icons.directions_run_rounded,
+                        accentColor: AppColors.success,
+                        countColor: AppColors.successText,
+                        doneCount: _doneCount(partnerPlans),
+                        totalCount: partnerPlans.length,
+                        focusPlan: partnerPlans.isEmpty
+                            ? null
+                            : partnerPlans.first,
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const PartnerPlansPage(),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  _TogetherPlansPanel(plans: visibleTogetherPlans),
-                ],
-              ),
-            ),
-            Positioned(
-              right: 16,
-              bottom: 112,
-              child: FloatingActionButton(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => const CreatePlanPage(),
-                  ),
+                    ),
+                  ],
                 ),
-                backgroundColor: AppColors.deepPink,
-                child: const Icon(Icons.add_rounded, color: Colors.white),
-              ),
+                const SizedBox(height: AppSpacing.xl),
+                _TogetherPlansPanel(plans: visibleTogetherPlans),
+              ],
             ),
-          ],
-        );
+          ),
+        ),
+        Positioned(
+          right: 16,
+          bottom: 112,
+          child: FloatingActionButton(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => const CreatePlanPage()),
+            ),
+            backgroundColor: AppColors.deepPink,
+            child: const Icon(Icons.add_rounded, color: Colors.white),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -313,75 +316,75 @@ class _TogetherPlanCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(26),
       child: Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              AppIconTile(icon: plan.icon, color: plan.iconColor, size: 58),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      plan.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.title,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      '${plan.subtitle} ❤️',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption.copyWith(fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              StatusPill(
-                label: _togetherStatusLabel(plan.togetherStatus),
-                color: _togetherStatusColor(plan.togetherStatus),
-                compact: true,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              Text(
-                '已坚持 ${plan.completedDays} 天',
-                style: AppTextStyles.body.copyWith(
-                  color: AppColors.secondaryText,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: plan.progress.clamp(0, 1),
-                    minHeight: 8,
-                    backgroundColor: AppColors.lightPink.withValues(
-                      alpha: 0.68,
-                    ),
-                    color: AppColors.deepPink,
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.72)),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                AppIconTile(icon: plan.icon, color: plan.iconColor, size: 58),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        plan.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.title,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        '${plan.subtitle} ❤️',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.caption.copyWith(fontSize: 13),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: AppSpacing.sm),
+                StatusPill(
+                  label: _togetherStatusLabel(plan.togetherStatus),
+                  color: _togetherStatusColor(plan.togetherStatus),
+                  compact: true,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              children: [
+                Text(
+                  '已坚持 ${plan.completedDays} 天',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.secondaryText,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(999),
+                    child: LinearProgressIndicator(
+                      value: plan.progress.clamp(0, 1),
+                      minHeight: 8,
+                      backgroundColor: AppColors.lightPink.withValues(
+                        alpha: 0.68,
+                      ),
+                      color: AppColors.deepPink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
-    ),
     );
   }
 }

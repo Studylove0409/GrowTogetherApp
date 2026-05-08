@@ -42,99 +42,103 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
     final plans = widget.plans ?? store.getAllPlans();
     final profile = store.getProfile();
     final checkins = _filterCheckins(
-          plans.expand((plan) => plan.checkins).toList(),
-          _filter,
-        );
-        final timelineRecords = _buildTimelineRecords(plans);
+      plans.expand((plan) => plan.checkins).toList(),
+      _filter,
+    );
+    final timelineRecords = _buildTimelineRecords(plans);
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('成长记录', style: AppTextStyles.section),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('成长记录', style: AppTextStyles.section),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          color: AppColors.deepPink,
+          onRefresh: context.read<Store>().refreshAll,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              AppSpacing.xl,
             ),
-          ),
-          body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                AppSpacing.xl,
+            children: [
+              _FilterBar(
+                filter: _filter,
+                onChanged: (filter) => setState(() => _filter = filter),
               ),
-              children: [
-                _FilterBar(
-                  filter: _filter,
-                  onChanged: (filter) => setState(() => _filter = filter),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                _StatsOverviewCard(
-                  togetherDays: profile.togetherDays,
-                  checkins: checkins,
-                  today: _today,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _CheckinCalendar(
-                  checkins: checkins,
-                  currentMonth: _currentMonth,
-                  today: _today,
-                  onPreviousMonth: () => setState(() {
-                    _currentMonth = DateTime(
-                      _currentMonth.year,
-                      _currentMonth.month - 1,
-                    );
-                  }),
-                  onNextMonth: () => setState(() {
-                    _currentMonth = DateTime(
-                      _currentMonth.year,
-                      _currentMonth.month + 1,
-                    );
-                  }),
-                  onDaySelected: (date) =>
-                      _showDayRecords(context, plans, date),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _WeeklyTrendCard(
-                  checkins: checkins,
-                  today: _today,
-                  animationKey: _filter,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _GrowthTimeline(
-                  records: timelineRecords,
-                  emptyMessage: _filter == FilterType.all
-                      ? '还没有成长记录哦～开始打卡后这里会慢慢丰富起来～'
-                      : '该筛选下暂无数据',
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.favorite_rounded, size: 18),
-                    label: const Text('继续记录你们的小进步吧'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.deepPink,
-                      side: const BorderSide(color: AppColors.deepPink),
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.md,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                      ),
+              const SizedBox(height: AppSpacing.lg),
+              _StatsOverviewCard(
+                togetherDays: profile.togetherDays,
+                checkins: checkins,
+                today: _today,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _CheckinCalendar(
+                checkins: checkins,
+                currentMonth: _currentMonth,
+                today: _today,
+                onPreviousMonth: () => setState(() {
+                  _currentMonth = DateTime(
+                    _currentMonth.year,
+                    _currentMonth.month - 1,
+                  );
+                }),
+                onNextMonth: () => setState(() {
+                  _currentMonth = DateTime(
+                    _currentMonth.year,
+                    _currentMonth.month + 1,
+                  );
+                }),
+                onDaySelected: (date) => _showDayRecords(context, plans, date),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _WeeklyTrendCard(
+                checkins: checkins,
+                today: _today,
+                animationKey: _filter,
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _GrowthTimeline(
+                records: timelineRecords,
+                emptyMessage: _filter == FilterType.all
+                    ? '还没有成长记录哦～开始打卡后这里会慢慢丰富起来～'
+                    : '该筛选下暂无数据',
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.favorite_rounded, size: 18),
+                  label: const Text('继续记录你们的小进步吧'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.deepPink,
+                    side: const BorderSide(color: AppColors.deepPink),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.md,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
   }
 
   List<CheckinRecord> _filterCheckins(

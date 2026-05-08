@@ -15,25 +15,26 @@ class MyPlansPage extends StatelessWidget {
     final store = context.watch<Store>();
     final allPlans = store.getPlansByOwner(PlanOwner.me);
     return PlanListScaffold(
-          title: '我的计划',
-          filterOptions: const ['全部', '待打卡', '已完成'],
-          plans: allPlans,
-          planCountLabel: '共 ${allPlans.length} 个计划',
-          owner: PlanOwner.me,
-          onAdd: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const CreatePlanPage(defaultOwner: PlanOwner.me),
-              ),
-            );
-          },
-          onTapPlan: (plan) {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => PlanDetailPage(planId: plan.id),
-              ),
-            );
-          },
+      title: '我的计划',
+      filterOptions: const ['全部', '待打卡', '已完成'],
+      plans: allPlans,
+      planCountLabel: '共 ${allPlans.length} 个计划',
+      owner: PlanOwner.me,
+      onRefresh: context.read<Store>().refreshPlans,
+      onAdd: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const CreatePlanPage(defaultOwner: PlanOwner.me),
+          ),
         );
+      },
+      onTapPlan: (plan) {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PlanDetailPage(planId: plan.id),
+          ),
+        );
+      },
+    );
   }
 }

@@ -19,88 +19,90 @@ class CheckinRecordPage extends StatelessWidget {
     final store = context.watch<Store>();
     final plan = store.getPlanById(planId);
     if (plan == null) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('打卡记录')),
-            body: const Center(child: Text('计划不存在')),
-          );
-        }
+      return Scaffold(
+        appBar: AppBar(title: const Text('打卡记录')),
+        body: const Center(child: Text('计划不存在')),
+      );
+    }
 
-        final records = plan.checkins;
+    final records = plan.checkins;
 
-        return Scaffold(
-          backgroundColor: AppColors.background,
-          appBar: AppBar(
-            title: const Text('打卡记录', style: AppTextStyles.section),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: const Text('打卡记录', style: AppTextStyles.section),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ),
+      body: SafeArea(
+        child: RefreshIndicator(
+          color: AppColors.deepPink,
+          onRefresh: context.read<Store>().refreshPlans,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              32,
             ),
-          ),
-          body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.sm,
-                AppSpacing.md,
-                32,
+            children: [
+              _RecordPlanHeader(plan: plan),
+              const SizedBox(height: AppSpacing.md),
+              _MonthHeader(plan: plan),
+              const SizedBox(height: AppSpacing.lg),
+              _CalendarCard(plan: plan, records: records),
+              const SizedBox(height: AppSpacing.lg),
+              const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Text('最近打卡', style: AppTextStyles.section),
               ),
-              children: [
-                _RecordPlanHeader(plan: plan),
-                const SizedBox(height: AppSpacing.md),
-                _MonthHeader(plan: plan),
-                const SizedBox(height: AppSpacing.lg),
-                _CalendarCard(plan: plan, records: records),
-                const SizedBox(height: AppSpacing.lg),
-                const Padding(
-                  padding: EdgeInsets.only(left: 4),
-                  child: Text('最近打卡', style: AppTextStyles.section),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (records.isEmpty)
-                  Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 32),
-                      child: Text(
-                        '还没有打卡记录',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.secondaryText,
-                        ),
-                      ),
-                    ),
-                  )
-                else
-                  ...records.map(
-                    (record) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                      child: _CheckinTile(record: record),
-                    ),
-                  ),
-                const SizedBox(height: AppSpacing.lg),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.deepPink,
-                      side: const BorderSide(color: AppColors.deepPink),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                    ),
-                    child: const Text(
-                      '返回计划详情',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
+              const SizedBox(height: AppSpacing.md),
+              if (records.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 32),
+                    child: Text(
+                      '还没有打卡记录',
+                      style: AppTextStyles.caption.copyWith(
+                        color: AppColors.secondaryText,
                       ),
                     ),
                   ),
+                )
+              else
+                ...records.map(
+                  (record) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    child: _CheckinTile(record: record),
+                  ),
                 ),
-              ],
-            ),
+              const SizedBox(height: AppSpacing.lg),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.deepPink,
+                    side: const BorderSide(color: AppColors.deepPink),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+                  child: const Text(
+                    '返回计划详情',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
+        ),
+      ),
+    );
   }
 }
 

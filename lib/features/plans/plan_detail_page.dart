@@ -41,39 +41,44 @@ class PlanDetailPage extends StatelessWidget {
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            32,
-          ),
-          children: [
-            _PlanHeroCard(plan: plan),
-            const SizedBox(height: AppSpacing.md),
-            _PlanStatusCard(plan: plan),
-            const SizedBox(height: AppSpacing.md),
-            _PlanProgressCard(plan: plan),
-            if (plan.owner == PlanOwner.together) ...[
-              const SizedBox(height: AppSpacing.md),
-              _TogetherCheckinCard(plan: plan),
-            ],
-            const SizedBox(height: AppSpacing.md),
-            _RecentCheckinsCard(
-              plan: plan,
-              onViewAll: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (_) => CheckinRecordPage(planId: plan.id),
-                  ),
-                );
-              },
+        child: RefreshIndicator(
+          color: AppColors.deepPink,
+          onRefresh: context.read<Store>().refreshPlans,
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              32,
             ),
-            if (plan.canCurrentUserEdit && !plan.isEnded) ...[
+            children: [
+              _PlanHeroCard(plan: plan),
               const SizedBox(height: AppSpacing.md),
-              _buildEndPlanButton(context, plan),
+              _PlanStatusCard(plan: plan),
+              const SizedBox(height: AppSpacing.md),
+              _PlanProgressCard(plan: plan),
+              if (plan.owner == PlanOwner.together) ...[
+                const SizedBox(height: AppSpacing.md),
+                _TogetherCheckinCard(plan: plan),
+              ],
+              const SizedBox(height: AppSpacing.md),
+              _RecentCheckinsCard(
+                plan: plan,
+                onViewAll: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => CheckinRecordPage(planId: plan.id),
+                    ),
+                  );
+                },
+              ),
+              if (plan.canCurrentUserEdit && !plan.isEnded) ...[
+                const SizedBox(height: AppSpacing.md),
+                _buildEndPlanButton(context, plan),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       bottomNavigationBar: plan.isEnded

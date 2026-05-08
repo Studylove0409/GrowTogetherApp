@@ -14,6 +14,16 @@ abstract class Store extends ChangeNotifier {
   Profile getProfile();
   Future<void> refreshProfile();
 
+  // ========================= 刷新 =========================
+
+  Future<void> refreshPlans() async {}
+
+  Future<void> refreshReminders() async {}
+
+  Future<void> refreshAll() async {
+    await Future.wait([refreshProfile(), refreshPlans(), refreshReminders()]);
+  }
+
   // ========================= Plan 读 =========================
 
   List<Plan> getPlans();

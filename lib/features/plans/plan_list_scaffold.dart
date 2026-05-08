@@ -18,6 +18,7 @@ class PlanListScaffold extends StatefulWidget {
     required this.owner,
     required this.onAdd,
     required this.onTapPlan,
+    this.onRefresh,
     this.addButtonLabel,
     this.showAddButton = true,
     this.headerBuilder,
@@ -30,6 +31,7 @@ class PlanListScaffold extends StatefulWidget {
   final PlanOwner owner;
   final VoidCallback onAdd;
   final ValueChanged<Plan> onTapPlan;
+  final Future<void> Function()? onRefresh;
   final String? addButtonLabel;
   final bool showAddButton;
   final Widget Function(BuildContext)? headerBuilder;
@@ -75,42 +77,47 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         ],
       ),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md,
-            AppSpacing.sm,
-            AppSpacing.md,
-            32,
+        child: RefreshIndicator(
+          color: AppColors.deepPink,
+          onRefresh: widget.onRefresh ?? () async {},
+          child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.sm,
+              AppSpacing.md,
+              32,
+            ),
+            children: [
+              if (widget.headerBuilder != null) widget.headerBuilder!(context),
+              _FilterBar(
+                options: widget.filterOptions,
+                selectedIndex: _filterIndex,
+                onChanged: (index) => setState(() => _filterIndex = index),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Text(
+                  widget.planCountLabel,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.secondaryText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (filtered.isEmpty)
+                const _EmptyPlansHint()
+              else
+                ...filtered.map(
+                  (plan) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                    child: _buildPlanTile(plan),
+                  ),
+                ),
+            ],
           ),
-          children: [
-            if (widget.headerBuilder != null) widget.headerBuilder!(context),
-            _FilterBar(
-              options: widget.filterOptions,
-              selectedIndex: _filterIndex,
-              onChanged: (index) => setState(() => _filterIndex = index),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Padding(
-              padding: const EdgeInsets.only(left: 4),
-              child: Text(
-                widget.planCountLabel,
-                style: AppTextStyles.body.copyWith(
-                  color: AppColors.secondaryText,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            if (filtered.isEmpty)
-              const _EmptyPlansHint()
-            else
-              ...filtered.map(
-                (plan) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                  child: _buildPlanTile(plan),
-                ),
-              ),
-          ],
         ),
       ),
     );

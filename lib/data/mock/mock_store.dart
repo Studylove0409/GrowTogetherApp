@@ -33,6 +33,15 @@ class MockStore extends Store {
   @override
   Future<void> refreshProfile() async {}
 
+  @override
+  Future<void> refreshPlans() async {}
+
+  @override
+  Future<void> refreshReminders() async {}
+
+  @override
+  Future<void> refreshAll() async {}
+
   // ========================= Plan =========================
 
   @override

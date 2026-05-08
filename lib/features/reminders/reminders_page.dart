@@ -53,45 +53,57 @@ class _RemindersPageState extends State<RemindersPage> {
           ),
           const SizedBox(height: AppSpacing.lg),
           Expanded(
-            child: reminders.isEmpty
-                ? ListView(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      0,
-                      AppSpacing.md,
-                      32,
-                    ),
-                    children: [
-                      EmptyStateCard(
-                        message:
-                            '${_formatDateLabel(_selectedDate)}没有${_showReceived ? '收到' : '发出'}的提醒',
+            child: RefreshIndicator(
+              color: AppColors.deepPink,
+              onRefresh: () async {
+                final store = context.read<Store>();
+                await Future.wait([
+                  store.refreshPlans(),
+                  store.refreshReminders(),
+                ]);
+              },
+              child: reminders.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        32,
                       ),
-                    ],
-                  )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      0,
-                      AppSpacing.md,
-                      32,
-                    ),
-                    itemCount: reminders.length,
-                    itemBuilder: (context, index) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                      child: ReminderCard(
-                        reminder: reminders[index],
-                        onTap: reminders[index].planId != null
-                            ? () => Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                  builder: (_) => PlanDetailPage(
-                                    planId: reminders[index].planId!,
+                      children: [
+                        EmptyStateCard(
+                          message:
+                              '${_formatDateLabel(_selectedDate)}没有${_showReceived ? '收到' : '发出'}的提醒',
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.md,
+                        0,
+                        AppSpacing.md,
+                        32,
+                      ),
+                      itemCount: reminders.length,
+                      itemBuilder: (context, index) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: ReminderCard(
+                          reminder: reminders[index],
+                          onTap: reminders[index].planId != null
+                              ? () => Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                    builder: (_) => PlanDetailPage(
+                                      planId: reminders[index].planId!,
+                                    ),
                                   ),
-                                ),
-                              )
-                            : null,
+                                )
+                              : null,
+                        ),
                       ),
                     ),
-                  ),
+            ),
           ),
         ],
       ),

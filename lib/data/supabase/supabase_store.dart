@@ -168,6 +168,24 @@ class SupabaseStore extends Store {
     notifyListeners();
   }
 
+  @override
+  Future<void> refreshPlans() async {
+    await _loadPlans();
+    notifyListeners();
+  }
+
+  @override
+  Future<void> refreshReminders() async {
+    await _loadReminders();
+    notifyListeners();
+  }
+
+  @override
+  Future<void> refreshAll() async {
+    await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
+    notifyListeners();
+  }
+
   // ========================= Plan 读 =========================
 
   @override

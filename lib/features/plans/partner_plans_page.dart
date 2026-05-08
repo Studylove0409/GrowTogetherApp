@@ -20,6 +20,7 @@ class PartnerPlansPage extends StatelessWidget {
       planCountLabel: '共 ${allPlans.length} 个计划',
       owner: PlanOwner.partner,
       showAddButton: false,
+      onRefresh: context.read<Store>().refreshPlans,
       onAdd: () {},
       onTapPlan: (plan) {
         Navigator.of(context).push(
