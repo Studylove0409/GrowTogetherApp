@@ -14,17 +14,30 @@ class ReminderRepository {
     required String type,
     required String content,
   }) async {
-    await _supabase.rpc('send_reminder', params: {
-      'p_plan_id': planId,
-      'p_type': type,
-      'p_content': content,
-    });
+    await _supabase.rpc(
+      'send_reminder',
+      params: {'p_plan_id': planId, 'p_type': type, 'p_content': content},
+    );
   }
 
   Future<void> markReminderRead(String reminderId) async {
-    await _supabase.rpc('mark_reminder_read', params: {
-      'p_reminder_id': reminderId,
-    });
+    await _supabase.rpc(
+      'mark_reminder_read',
+      params: {'p_reminder_id': reminderId},
+    );
+  }
+
+  Future<void> markRemindersRead(List<String> reminderIds) async {
+    if (reminderIds.isEmpty) return;
+
+    final currentUserId = _currentUserId;
+    if (currentUserId == null) return;
+
+    await _supabase
+        .from('reminders')
+        .update({'is_read': true})
+        .eq('to_user_id', currentUserId)
+        .inFilter('id', reminderIds);
   }
 
   Future<List<Reminder>> fetchReminders() async {
@@ -48,7 +61,9 @@ class ReminderRepository {
         planId: row['plan_id'] as String?,
         isRead: row['is_read'] as bool? ?? false,
         sentByMe: fromUserId == currentUserId,
-        createdAt: DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal() ?? DateTime.now(),
+        createdAt:
+            DateTime.tryParse(row['created_at'] as String? ?? '')?.toLocal() ??
+            DateTime.now(),
       );
     }).toList();
   }

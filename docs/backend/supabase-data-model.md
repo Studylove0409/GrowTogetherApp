@@ -105,3 +105,11 @@ flutter run \
   --dart-define=SUPABASE_URL=https://kmeuuwqcngxhcfeevzsy.supabase.co \
   --dart-define=SUPABASE_ANON_KEY=<publishable-or-anon-key>
 ```
+
+Build release APKs with the wrapper script so the Supabase dart-defines are not forgotten:
+
+```bash
+SUPABASE_ANON_KEY=<publishable-or-anon-key> scripts/build_release_android.sh
+```
+
+Do not use plain `flutter build apk --release` for release testing. Without `SUPABASE_ANON_KEY`, the Flutter app falls back to `MockStore` and behaves like a static-data build.

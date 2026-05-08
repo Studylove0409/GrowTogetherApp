@@ -11,10 +11,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Run on a connected device/emulator (requires Supabase anon key)
-flutter run --dart-define=SUPABASE_ANON_KEY=sb_publishable_...
+flutter run \
+  --dart-define=SUPABASE_URL=https://kmeuuwqcngxhcfeevzsy.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_...
 
 # Run on a specific device
-flutter run -d <device-id> --dart-define=SUPABASE_ANON_KEY=...
+flutter run -d <device-id> \
+  --dart-define=SUPABASE_URL=https://kmeuuwqcngxhcfeevzsy.supabase.co \
+  --dart-define=SUPABASE_ANON_KEY=sb_publishable_...
+
+# Build Android release APK against Supabase.
+# Do not use plain `flutter build apk --release`; that creates a MockStore/static-data build.
+SUPABASE_ANON_KEY=sb_publishable_... scripts/build_release_android.sh
 
 # Analyze
 flutter analyze
@@ -27,6 +35,7 @@ flutter test test/widget_test.dart
 ```
 
 The app uses anonymous auth with Supabase — no email/password login. The `SUPABASE_ANON_KEY` dart-define is required; without it the app falls back to `MockStore`.
+Release APKs must be built with `scripts/build_release_android.sh` so the Supabase dart-defines are always included.
 
 ## Architecture
 

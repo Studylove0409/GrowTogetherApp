@@ -1,14 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'app.dart';
+import 'core/notification/fcm_service.dart';
 import 'core/notification/notification_service.dart';
 import 'data/supabase/supabase_bootstrap.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SupabaseBootstrap.initialize();
-  await NotificationService.init();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -19,4 +21,15 @@ Future<void> main() async {
     ),
   );
   runApp(const GrowTogetherApp());
+  unawaited(_initializeNotifications());
+}
+
+Future<void> _initializeNotifications() async {
+  try {
+    await NotificationService.init();
+    await FcmService.init();
+  } catch (error, stackTrace) {
+    debugPrint('Notification bootstrap skipped: $error');
+    debugPrintStack(stackTrace: stackTrace);
+  }
 }

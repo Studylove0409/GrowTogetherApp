@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -26,7 +28,6 @@ class SupabaseStore extends Store {
 
   List<Plan> _plans = [];
   List<Reminder> _reminders = [];
-  bool _remindersLoaded = false;
   Profile _profile = const Profile(
     name: '一起进步的你',
     partnerName: '加载中...',
@@ -40,6 +41,8 @@ class SupabaseStore extends Store {
   Future<void> _init() async {
     await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
     _subscribeRealtime();
+    _startAutoRefresh();
+    unawaited(_syncPlanReminders());
     notifyListeners();
   }
 
@@ -100,32 +103,22 @@ class SupabaseStore extends Store {
 
   Future<void> _loadReminders() async {
     try {
-      final previous = _reminders;
       _reminders = await _reminderRepo.fetchReminders();
-      if (_remindersLoaded) {
-        final prevIds = previous
-            .where((r) => !r.sentByMe && !r.isRead)
-            .map((r) => r.id)
-            .toSet();
-        for (final r in _reminders) {
-          if (!r.sentByMe && !r.isRead && !prevIds.contains(r.id)) {
-            NotificationService.showReminderReceived(
-              reminderId: r.id,
-              senderName: '你的另一半',
-              content: r.content,
-            );
-          }
-        }
-      }
-      _remindersLoaded = true;
     } catch (_) {}
   }
 
   // ========================= Realtime =========================
 
   RealtimeChannel? _channel;
+  Timer? _realtimeRetryTimer;
+  Timer? _autoRefreshTimer;
+  bool _autoRefreshInFlight = false;
+  bool _markingRemindersRead = false;
 
   void _subscribeRealtime() {
+    unawaited(_channel?.unsubscribe());
+    _realtimeRetryTimer?.cancel();
+
     final client = Supabase.instance.client;
     _channel = client.channel('store-changes');
 
@@ -154,7 +147,40 @@ class SupabaseStore extends Store {
             _loadReminders().then((_) => notifyListeners());
           },
         )
-        .subscribe();
+        .subscribe((status, error) {
+          if (status == RealtimeSubscribeStatus.subscribed) {
+            return;
+          }
+          debugPrint('Supabase realtime status: $status ${error ?? ''}');
+          if (status == RealtimeSubscribeStatus.channelError ||
+              status == RealtimeSubscribeStatus.timedOut ||
+              status == RealtimeSubscribeStatus.closed) {
+            _realtimeRetryTimer?.cancel();
+            _realtimeRetryTimer = Timer(
+              const Duration(seconds: 5),
+              _subscribeRealtime,
+            );
+          }
+        });
+  }
+
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel();
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(_refreshAllQuietly());
+    });
+  }
+
+  Future<void> _refreshAllQuietly() async {
+    if (_autoRefreshInFlight) return;
+    _autoRefreshInFlight = true;
+    try {
+      await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
+      await _syncPlanReminders();
+      notifyListeners();
+    } finally {
+      _autoRefreshInFlight = false;
+    }
   }
 
   // ========================= Profile =========================
@@ -171,6 +197,7 @@ class SupabaseStore extends Store {
   @override
   Future<void> refreshPlans() async {
     await _loadPlans();
+    await _syncPlanReminders();
     notifyListeners();
   }
 
@@ -182,8 +209,7 @@ class SupabaseStore extends Store {
 
   @override
   Future<void> refreshAll() async {
-    await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
-    notifyListeners();
+    await _refreshAllQuietly();
   }
 
   // ========================= Plan 读 =========================
@@ -267,6 +293,7 @@ class SupabaseStore extends Store {
       endDate: endDate,
     );
     await _loadPlans();
+    await _syncPlanReminders();
     notifyListeners();
     if (reminderTime != null) {
       final updated = getPlanById(planId);
@@ -351,21 +378,28 @@ class SupabaseStore extends Store {
 
   @override
   Future<void> markReceivedRemindersRead() async {
+    if (_markingRemindersRead) return;
+
     final unread = _reminders.where((r) => !r.sentByMe && !r.isRead).toList();
     if (unread.isEmpty) return;
 
+    _markingRemindersRead = true;
     _reminders = _reminders
         .map((r) => !r.sentByMe && !r.isRead ? r.copyWith(isRead: true) : r)
         .toList();
     notifyListeners();
 
     try {
-      for (final reminder in unread) {
-        await _reminderRepo.markReminderRead(reminder.id);
-      }
+      await _reminderRepo.markRemindersRead(unread.map((r) => r.id).toList());
       await _loadReminders();
       notifyListeners();
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('markReceivedRemindersRead failed: $error');
+      await _loadReminders();
+      notifyListeners();
+    } finally {
+      _markingRemindersRead = false;
+    }
   }
 
   // ========================= 辅助 =========================
@@ -406,5 +440,29 @@ class SupabaseStore extends Store {
       hour: plan.reminderTime.hour,
       minute: plan.reminderTime.minute,
     );
+  }
+
+  Future<void> _syncPlanReminders() async {
+    final activeReminderPlans = _plans.where(
+      (plan) => !plan.isEnded && plan.owner != PlanOwner.partner,
+    );
+    await Future.wait(
+      activeReminderPlans.map((plan) async {
+        await NotificationService.schedulePlanReminder(
+          planId: plan.id,
+          planTitle: plan.title,
+          hour: plan.reminderTime.hour,
+          minute: plan.reminderTime.minute,
+        );
+      }),
+    );
+  }
+
+  @override
+  void dispose() {
+    _realtimeRetryTimer?.cancel();
+    _autoRefreshTimer?.cancel();
+    unawaited(_channel?.unsubscribe());
+    super.dispose();
   }
 }

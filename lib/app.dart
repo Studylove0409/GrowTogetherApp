@@ -38,8 +38,30 @@ class GrowTogetherShell extends StatefulWidget {
   State<GrowTogetherShell> createState() => _GrowTogetherShellState();
 }
 
-class _GrowTogetherShellState extends State<GrowTogetherShell> {
+class _GrowTogetherShellState extends State<GrowTogetherShell>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
+  Future<void>? _resumeRefresh;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    _resumeRefresh ??= context.read<Store>().refreshAll().whenComplete(() {
+      _resumeRefresh = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

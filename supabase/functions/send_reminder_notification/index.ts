@@ -6,7 +6,7 @@ const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 async function getAccessToken(): Promise<string> {
   const clientEmail = Deno.env.get('FCM_CLIENT_EMAIL')!;
-  const privateKey = Deno.env.get('FCM_PRIVATE_KEY')!;
+  const privateKey = Deno.env.get('FCM_PRIVATE_KEY')!.replace(/\\n/g, '\n');
   const projectId = Deno.env.get('FCM_PROJECT_ID')!;
 
   const key = await importPKCS8(privateKey, 'RS256');
@@ -32,6 +32,9 @@ async function getAccessToken(): Promise<string> {
   });
 
   const data = await res.json();
+  if (!res.ok || !data.access_token) {
+    throw new Error(`Failed to mint FCM access token: ${JSON.stringify(data)}`);
+  }
   return data.access_token;
 }
 
@@ -62,15 +65,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const clientEmail = Deno.env.get('FCM_CLIENT_EMAIL');
-    if (!clientEmail) {
-      console.log('FCM not configured — missing service account');
+    const privateKey = Deno.env.get('FCM_PRIVATE_KEY');
+    const projectId = Deno.env.get('FCM_PROJECT_ID');
+    if (!clientEmail || !privateKey || !projectId) {
+      console.log('FCM not configured - missing service account');
       return new Response(JSON.stringify({ status: 'fcm_not_configured' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     const accessToken = await getAccessToken();
-    const projectId = Deno.env.get('FCM_PROJECT_ID')!;
 
     const fcmPayload = {
       message: {
