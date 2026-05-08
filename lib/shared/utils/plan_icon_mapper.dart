@@ -117,6 +117,7 @@ class PlanIconMapper {
   // --------------- 用户自定义图标 ---------------
 
   static final List<PlanIconOption> _customOptions = [];
+  static int _customCounter = 0;
 
   static List<PlanIconOption> get customOptions =>
       List.unmodifiable(_customOptions);
@@ -132,7 +133,7 @@ class PlanIconMapper {
     required Color color,
     required Color backgroundColor,
   }) {
-    final key = 'custom_${_customOptions.length}';
+    final key = 'custom_${_customCounter++}';
     _customOptions.add(PlanIconOption(
       key: key,
       label: label,
@@ -142,6 +143,20 @@ class PlanIconMapper {
       isCustom: true,
     ));
     return key;
+  }
+
+  /// 根据 key 删除一个自定义图标。删除成功返回 true，key 不存在或是预设图标返回 false。
+  static bool removeCustomOption(String key) {
+    final index = _customOptions.indexWhere((o) => o.key == key);
+    if (index == -1) return false;
+    _customOptions.removeAt(index);
+    return true;
+  }
+
+  /// 清空所有自定义图标（仅用于测试）。
+  static void clearCustomOptions() {
+    _customOptions.clear();
+    _customCounter = 0;
   }
 
   /// 根据 key 查找选项，找不到则返回第一个预设。

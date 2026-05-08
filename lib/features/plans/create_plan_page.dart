@@ -93,6 +93,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               onChanged: (key) => setState(() => _selectedIconKey = key),
               onCustomIconSaved: (key) =>
                   setState(() => _selectedIconKey = key),
+              onCustomIconDeleted: () => setState(() {}),
             ),
             const SizedBox(height: AppSpacing.md),
             _FormField(
@@ -264,11 +265,13 @@ class _PlanIconPicker extends StatelessWidget {
     required this.selectedKey,
     required this.onChanged,
     required this.onCustomIconSaved,
+    required this.onCustomIconDeleted,
   });
 
   final String selectedKey;
   final ValueChanged<String> onChanged;
   final ValueChanged<String> onCustomIconSaved;
+  final VoidCallback onCustomIconDeleted;
 
   @override
   Widget build(BuildContext context) {
@@ -312,6 +315,9 @@ class _PlanIconPicker extends StatelessWidget {
                       option: option,
                       selected: selectedKey == option.key,
                       onTap: () => onChanged(option.key),
+                      onLongPress: option.isCustom
+                          ? () => _confirmDeleteCustomIcon(context, option)
+                          : null,
                       width: itemWidth,
                     ),
                   // "+ 自定义" 入口
@@ -340,6 +346,58 @@ class _PlanIconPicker extends StatelessWidget {
       ),
     );
   }
+
+  Future<void> _confirmDeleteCustomIcon(
+    BuildContext context,
+    PlanIconOption option,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        title: Text(
+          '删除自定义图标',
+          style: AppTextStyles.title.copyWith(fontSize: 18),
+        ),
+        content: Text(
+          '确定要删除 "${option.label}" 图标吗？',
+          style: AppTextStyles.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(
+              '取消',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.secondaryText,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(
+              '删除',
+              style: AppTextStyles.body.copyWith(
+                color: AppColors.deepPink,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      PlanIconMapper.removeCustomOption(option.key);
+      if (selectedKey == option.key) {
+        onChanged(PlanIconMapper.defaultKey);
+      }
+      onCustomIconDeleted();
+    }
+  }
 }
 
 // ========================= 单个图标选项 =========================
@@ -349,12 +407,14 @@ class _PlanIconChoice extends StatelessWidget {
     required this.option,
     required this.selected,
     required this.onTap,
+    this.onLongPress,
     required this.width,
   });
 
   final PlanIconOption option;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final double width;
 
   @override
@@ -367,6 +427,7 @@ class _PlanIconChoice extends StatelessWidget {
         message: option.label,
         child: GestureDetector(
           onTap: onTap,
+          onLongPress: onLongPress,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 180),
             curve: Curves.easeOutCubic,
