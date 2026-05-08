@@ -42,7 +42,7 @@ class HomePage extends StatelessWidget {
               AppSpacing.md,
               AppSpacing.lg,
               AppSpacing.md,
-              132,
+              32,
             ),
             children: [
               const _HomeHeader(),

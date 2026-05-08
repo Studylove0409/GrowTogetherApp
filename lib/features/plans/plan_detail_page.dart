@@ -45,7 +45,7 @@ class PlanDetailPage extends StatelessWidget {
                 AppSpacing.md,
                 AppSpacing.sm,
                 AppSpacing.md,
-                120,
+                32,
               ),
               children: [
                 _PlanHeroCard(plan: plan),

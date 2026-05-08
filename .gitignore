@@ -44,3 +44,6 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 .mcp.json
+.agents/
+.codex/
+android/build/

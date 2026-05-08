@@ -38,7 +38,7 @@ class PlansPage extends StatelessWidget {
                   AppSpacing.md,
                   AppSpacing.lg,
                   AppSpacing.md,
-                  132,
+                  32,
                 ),
                 children: [
                   const Center(child: Text('计划', style: AppTextStyles.display)),

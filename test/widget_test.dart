@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:grow_together/app.dart';
 import 'package:grow_together/data/mock/mock_store.dart';
 import 'package:grow_together/data/models/plan.dart';
+import 'package:grow_together/data/models/profile.dart';
 import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
 import 'package:grow_together/data/models/reminder.dart';
@@ -46,6 +47,31 @@ void main() {
     expect(find.text('我的今日计划'), findsOneWidget);
   });
 
+  testWidgets(
+    'GrowTogether shell clears reminder badge after opening reminders',
+    (tester) async {
+      final store = _ReminderBadgeStore();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider<Store>.value(
+            value: store,
+            child: const GrowTogetherShell(),
+          ),
+        ),
+      );
+
+      expect(store.unreadReminderCount, 2);
+      expect(find.text('2'), findsOneWidget);
+
+      await tester.tap(find.text('提醒'));
+      await tester.pumpAndSettle();
+
+      expect(store.unreadReminderCount, 0);
+      expect(find.text('2'), findsNothing);
+    },
+  );
+
   test('MockStore creates plan and saves checkin', () async {
     final store = MockStore.instance;
     final initialCount = store.getPlans().length;
@@ -84,7 +110,14 @@ void main() {
     final store = MockStore.instance;
     final initialCount = store.getPlans().length;
 
-    await tester.pumpWidget(MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: const CreatePlanPage())));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: MockStore.instance,
+          child: const CreatePlanPage(),
+        ),
+      ),
+    );
 
     expect(find.text('我的计划'), findsOneWidget);
     expect(find.text('共同计划'), findsOneWidget);
@@ -121,7 +154,14 @@ void main() {
   });
 
   testWidgets('CreatePlanPage "+ 自定义" opens BottomSheet', (tester) async {
-    await tester.pumpWidget(MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: const CreatePlanPage())));
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: MockStore.instance,
+          child: const CreatePlanPage(),
+        ),
+      ),
+    );
 
     // 点击 "+ 自定义"
     await tester.tap(find.text('自定义'));
@@ -152,7 +192,14 @@ void main() {
   testWidgets(
     'CreatePlanPage saves custom icon and shows its name in the grid',
     (tester) async {
-      await tester.pumpWidget(MaterialApp(home: ChangeNotifierProvider<Store>.value(value: MockStore.instance, child: const CreatePlanPage())));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider<Store>.value(
+            value: MockStore.instance,
+            child: const CreatePlanPage(),
+          ),
+        ),
+      );
 
       // 打开自定义图标弹窗
       await tester.tap(find.text('自定义'));
@@ -254,16 +301,129 @@ void main() {
       createdAt: DateTime(2026, 5, 8, 10, 30),
     );
 
-    await tester.pumpWidget(MaterialApp(
-      home: Scaffold(
-        body: ReminderCard(
-          reminder: reminder,
-          onTap: () => tapped = true,
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ReminderCard(reminder: reminder, onTap: () => tapped = true),
         ),
       ),
-    ));
+    );
 
     await tester.tap(find.text('测试提醒内容'));
     expect(tapped, isTrue);
   });
+}
+
+class _ReminderBadgeStore extends Store {
+  final List<Reminder> _reminders = [
+    Reminder(
+      id: 'reminder-a',
+      type: ReminderType.gentle,
+      content: '提醒 A',
+      fromUserId: 'partner',
+      toUserId: 'me',
+      createdAt: DateTime(2026, 5, 8, 12, 0),
+    ),
+    Reminder(
+      id: 'reminder-b',
+      type: ReminderType.praise,
+      content: '提醒 B',
+      fromUserId: 'partner',
+      toUserId: 'me',
+      createdAt: DateTime(2026, 5, 8, 12, 5),
+    ),
+  ];
+
+  @override
+  Profile getProfile() => const Profile(
+    name: '测试',
+    partnerName: '对方',
+    togetherDays: 1,
+    inviteCode: 'TEST',
+    isBound: true,
+  );
+
+  @override
+  Future<void> refreshProfile() async {}
+
+  @override
+  List<Plan> getPlans() => [];
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) => [];
+
+  @override
+  List<Plan> getTodayFocusPlans() => [];
+
+  @override
+  List<Plan> getAllPlans() => [];
+
+  @override
+  Plan? getPlanById(String id) => null;
+
+  @override
+  Future<Plan> createPlan({
+    required String title,
+    required bool isShared,
+    required String dailyTask,
+    required DateTime startDate,
+    required DateTime endDate,
+    required TimeOfDay reminderTime,
+    String iconKey = PlanIconMapper.defaultKey,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> updatePlan({
+    required String planId,
+    String? title,
+    String? dailyTask,
+    String? iconKey,
+    TimeOfDay? reminderTime,
+    DateTime? startDate,
+    DateTime? endDate,
+  }) async {}
+
+  @override
+  Future<void> endPlan(String planId) async {}
+
+  @override
+  List<CheckinRecord> getCheckinRecords(String planId) => [];
+
+  @override
+  Future<void> saveCheckin({
+    required String planId,
+    required bool completed,
+    required CheckinMood mood,
+    required String note,
+  }) async {}
+
+  @override
+  Future<void> updatePlanStatus(
+    String planId, {
+    required bool doneToday,
+  }) async {}
+
+  @override
+  List<Reminder> getReminders() => List.unmodifiable(_reminders);
+
+  @override
+  int get unreadReminderCount =>
+      _reminders.where((r) => !r.sentByMe && !r.isRead).length;
+
+  @override
+  Future<void> sendReminder({
+    required String planId,
+    required ReminderType type,
+    required String content,
+  }) async {}
+
+  @override
+  Future<void> markReceivedRemindersRead() async {
+    for (var index = 0; index < _reminders.length; index++) {
+      _reminders[index] = _reminders[index].copyWith(isRead: true);
+    }
+    notifyListeners();
+  }
 }

@@ -103,7 +103,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 AppSpacing.md,
                 AppSpacing.lg,
                 AppSpacing.md,
-                132,
+                32,
               ),
               children: [
                 const Center(child: Text('我的', style: AppTextStyles.display)),

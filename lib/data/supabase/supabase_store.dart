@@ -38,11 +38,7 @@ class SupabaseStore extends Store {
   // ========================= 初始化 =========================
 
   Future<void> _init() async {
-    await Future.wait([
-      _loadProfile(),
-      _loadPlans(),
-      _loadReminders(),
-    ]);
+    await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
     _subscribeRealtime();
     notifyListeners();
   }
@@ -68,9 +64,9 @@ class SupabaseStore extends Store {
         final allCheckins = <String, List<CheckinRecord>>{};
         for (final row in checkinRows) {
           final planId = row['plan_id'] as String;
-          allCheckins.putIfAbsent(planId, () => []).add(
-            _rowToCheckinRecord(row),
-          );
+          allCheckins
+              .putIfAbsent(planId, () => [])
+              .add(_rowToCheckinRecord(row));
         }
 
         _plans = _plans.map((p) {
@@ -88,7 +84,9 @@ class SupabaseStore extends Store {
       completed: row['status'] == 'completed',
       mood: _toMood(row['mood'] as String?),
       note: row['note'] as String? ?? '',
-      actor: row['user_id'] == currentUserId ? CheckinActor.me : CheckinActor.partner,
+      actor: row['user_id'] == currentUserId
+          ? CheckinActor.me
+          : CheckinActor.partner,
     );
   }
 
@@ -132,31 +130,31 @@ class SupabaseStore extends Store {
     _channel = client.channel('store-changes');
 
     _channel!
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'plans',
-        callback: (_) {
-          _loadPlans().then((_) => notifyListeners());
-        },
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'checkins',
-        callback: (_) {
-          _loadPlans().then((_) => notifyListeners());
-        },
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'reminders',
-        callback: (_) {
-          _loadReminders().then((_) => notifyListeners());
-        },
-      )
-      .subscribe();
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'plans',
+          callback: (_) {
+            _loadPlans().then((_) => notifyListeners());
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'checkins',
+          callback: (_) {
+            _loadPlans().then((_) => notifyListeners());
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'reminders',
+          callback: (_) {
+            _loadReminders().then((_) => notifyListeners());
+          },
+        )
+        .subscribe();
   }
 
   // ========================= Profile =========================
@@ -179,7 +177,9 @@ class SupabaseStore extends Store {
 
   @override
   List<Plan> getPlansByOwner(PlanOwner owner) {
-    return _plans.where((plan) => plan.owner == owner && !plan.isEnded).toList();
+    return _plans
+        .where((plan) => plan.owner == owner && !plan.isEnded)
+        .toList();
   }
 
   @override
@@ -291,7 +291,10 @@ class SupabaseStore extends Store {
   }
 
   @override
-  Future<void> updatePlanStatus(String planId, {required bool doneToday}) async {
+  Future<void> updatePlanStatus(
+    String planId, {
+    required bool doneToday,
+  }) async {
     await _checkinRepo.upsertTodayCheckin(
       planId: planId,
       completed: doneToday,
@@ -326,6 +329,25 @@ class SupabaseStore extends Store {
     );
     await _loadReminders();
     notifyListeners();
+  }
+
+  @override
+  Future<void> markReceivedRemindersRead() async {
+    final unread = _reminders.where((r) => !r.sentByMe && !r.isRead).toList();
+    if (unread.isEmpty) return;
+
+    _reminders = _reminders
+        .map((r) => !r.sentByMe && !r.isRead ? r.copyWith(isRead: true) : r)
+        .toList();
+    notifyListeners();
+
+    try {
+      for (final reminder in unread) {
+        await _reminderRepo.markReminderRead(reminder.id);
+      }
+      await _loadReminders();
+      notifyListeners();
+    } catch (_) {}
   }
 
   // ========================= 辅助 =========================

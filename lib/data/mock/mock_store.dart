@@ -42,7 +42,9 @@ class MockStore extends Store {
 
   @override
   List<Plan> getPlansByOwner(PlanOwner owner) {
-    return _plans.where((plan) => plan.owner == owner && !plan.isEnded).toList();
+    return _plans
+        .where((plan) => plan.owner == owner && !plan.isEnded)
+        .toList();
   }
 
   @override
@@ -116,9 +118,11 @@ class MockStore extends Store {
     final plan = _plans[index];
     if (!plan.canCurrentUserEdit) return;
 
-    final totalDays = (endDate ?? plan.endDate)
-        .difference(startDate ?? plan.startDate)
-        .inDays + 1;
+    final totalDays =
+        (endDate ?? plan.endDate)
+            .difference(startDate ?? plan.startDate)
+            .inDays +
+        1;
 
     _plans[index] = plan.copyWith(
       title: title,
@@ -207,7 +211,10 @@ class MockStore extends Store {
   }
 
   @override
-  Future<void> updatePlanStatus(String planId, {required bool doneToday}) async {
+  Future<void> updatePlanStatus(
+    String planId, {
+    required bool doneToday,
+  }) async {
     final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index == -1) return;
 
@@ -234,16 +241,32 @@ class MockStore extends Store {
     required ReminderType type,
     required String content,
   }) async {
-    _reminders.insert(0, Reminder(
-      id: 'rem_${DateTime.now().microsecondsSinceEpoch}',
-      type: type,
-      content: content,
-      fromUserId: 'current-user',
-      toUserId: 'partner',
-      sentByMe: true,
-      createdAt: DateTime.now(),
-    ));
+    _reminders.insert(
+      0,
+      Reminder(
+        id: 'rem_${DateTime.now().microsecondsSinceEpoch}',
+        type: type,
+        content: content,
+        fromUserId: 'current-user',
+        toUserId: 'partner',
+        sentByMe: true,
+        createdAt: DateTime.now(),
+      ),
+    );
     notifyListeners();
+  }
+
+  @override
+  Future<void> markReceivedRemindersRead() async {
+    var changed = false;
+    for (var index = 0; index < _reminders.length; index++) {
+      final reminder = _reminders[index];
+      if (!reminder.sentByMe && !reminder.isRead) {
+        _reminders[index] = reminder.copyWith(isRead: true);
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   // ========================= 辅助 =========================

@@ -48,7 +48,7 @@ class _RemindersPageState extends State<RemindersPage> {
                     AppSpacing.md,
                     0,
                     AppSpacing.md,
-                    16,
+                    32,
                   ),
                   itemCount: reminders.length,
                   itemBuilder: (context, index) => Padding(

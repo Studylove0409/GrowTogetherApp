@@ -26,6 +26,30 @@ class Reminder {
   final bool isRead;
   final bool sentByMe;
   final DateTime createdAt;
+
+  Reminder copyWith({
+    String? id,
+    ReminderType? type,
+    String? content,
+    String? fromUserId,
+    String? toUserId,
+    String? planId,
+    bool? isRead,
+    bool? sentByMe,
+    DateTime? createdAt,
+  }) {
+    return Reminder(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      content: content ?? this.content,
+      fromUserId: fromUserId ?? this.fromUserId,
+      toUserId: toUserId ?? this.toUserId,
+      planId: planId ?? this.planId,
+      isRead: isRead ?? this.isRead,
+      sentByMe: sentByMe ?? this.sentByMe,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 }
 
 extension ReminderDisplay on ReminderType {

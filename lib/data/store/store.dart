@@ -70,4 +70,6 @@ abstract class Store extends ChangeNotifier {
     required ReminderType type,
     required String content,
   });
+
+  Future<void> markReceivedRemindersRead();
 }

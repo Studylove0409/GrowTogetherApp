@@ -46,7 +46,7 @@ class AppBottomNavBar extends StatelessWidget {
         height: 78,
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
         decoration: BoxDecoration(
-          color: AppColors.paper.withValues(alpha: 0.94),
+          color: AppColors.paper,
           borderRadius: BorderRadius.circular(32),
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.92),
@@ -89,6 +89,7 @@ class AppBottomNavBar extends StatelessWidget {
                     for (var index = 0; index < _items.length; index++)
                       Expanded(
                         child: Stack(
+                          fit: StackFit.expand,
                           clipBehavior: Clip.none,
                           children: [
                             _BottomNavButton(
@@ -109,7 +110,10 @@ class AppBottomNavBar extends StatelessWidget {
                                     color: AppColors.deepPink,
                                     borderRadius: BorderRadius.circular(999),
                                   ),
-                                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 16,
+                                    minHeight: 16,
+                                  ),
                                   child: Text(
                                     reminderBadgeCount > 99
                                         ? '99+'

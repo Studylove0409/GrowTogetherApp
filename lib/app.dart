@@ -56,22 +56,18 @@ class _GrowTogetherShellState extends State<GrowTogetherShell> {
     final store = context.watch<Store>();
     return Scaffold(
       backgroundColor: AppColors.background,
-      extendBody: true,
-      body: SafeArea(
-        bottom: false,
-        child: IndexedStack(index: _selectedIndex, children: pages),
-      ),
-      bottomNavigationBar: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          child: AppBottomNavBar(
-            selectedIndex: _selectedIndex,
-            onSelected: (index) {
-              setState(() => _selectedIndex = index);
-            },
-            reminderBadgeCount: store.unreadReminderCount,
-          ),
+      body: IndexedStack(index: _selectedIndex, children: pages),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+        child: AppBottomNavBar(
+          selectedIndex: _selectedIndex,
+          onSelected: (index) {
+            setState(() => _selectedIndex = index);
+            if (index == 2) {
+              store.markReceivedRemindersRead();
+            }
+          },
+          reminderBadgeCount: store.unreadReminderCount,
         ),
       ),
     );
