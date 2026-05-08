@@ -6,6 +6,7 @@
 
 - Flutter / Dart
 - Supabase Auth anonymous sign-in
+- Anonymous-to-email account upgrade on the Profile tab
 - Supabase Postgres, RLS, RPC, Realtime
 - Supabase Edge Function for partner reminder push
 - Firebase Cloud Messaging for Android push notifications
@@ -53,3 +54,21 @@ For a release candidate, install the APK on two Android devices and verify:
 - reminder badge clears and stays cleared after restart
 - local plan reminder notifications fire
 - partner reminders are delivered through FCM after `fcm_token` is saved
+
+## Account Recovery
+
+The first MVP identity is a Supabase anonymous user. To make the account recoverable, open the Profile tab and use the account protection card:
+
+```text
+Bind email -> confirm email -> set password
+```
+
+After that, the same user can sign in on another Android device with email and password. Supabase must have anonymous sign-ins, email auth, and manual identity linking enabled.
+
+Email verification redirects back into the Android app through:
+
+```text
+growtogether://auth-callback
+```
+
+Add this URL to Supabase Dashboard -> Authentication -> URL Configuration -> Redirect URLs. Without it, the verification email may open an invalid web page instead of returning to the app.

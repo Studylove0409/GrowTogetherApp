@@ -8,5 +8,7 @@ class SupabaseConfig {
 
   static const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
+  static const emailRedirectTo = 'growtogether://auth-callback';
+
   static bool get isConfigured => url.isNotEmpty && anonKey.isNotEmpty;
 }

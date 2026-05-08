@@ -51,6 +51,24 @@ class FcmService {
     }
   }
 
+  static Future<void> syncTokenToCurrentUser() async {
+    if (!SupabaseConfig.isConfigured || kIsWeb || !Platform.isAndroid) {
+      return;
+    }
+
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await _saveTokenToSupabase(token);
+      }
+    } catch (error) {
+      debugPrint('FCM token sync skipped: $error');
+    }
+  }
+
   static Future<void> _saveTokenToSupabase(String token) async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
