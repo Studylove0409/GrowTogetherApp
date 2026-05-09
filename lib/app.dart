@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'data/mock/mock_store.dart';
 import 'data/store/store.dart';
 import 'data/supabase/supabase_store.dart';
+import 'features/focus/focus_page.dart';
 import 'features/home/home_page.dart';
 import 'features/plans/plans_page.dart';
 import 'features/profile/profile_page.dart';
@@ -68,9 +71,10 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
     final pages = [
       const HomePage(),
       const PlansPage(),
-      const RemindersPage(),
+      FocusPage(isSelected: _selectedIndex == 2),
+      RemindersPage(onOpenFocus: () => setState(() => _selectedIndex = 2)),
       ProfilePage(
-        isSelected: _selectedIndex == 3,
+        isSelected: _selectedIndex == 4,
         onOpenPlans: () => setState(() => _selectedIndex = 1),
       ),
     ];
@@ -86,10 +90,15 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
           onSelected: (index) {
             setState(() => _selectedIndex = index);
             if (index == 2) {
-              store.markReceivedRemindersRead();
+              unawaited(store.refreshFocusSessions());
+            }
+            if (index == 3) {
+              unawaited(store.refreshFocusSessions());
+              unawaited(store.refreshReminders());
+              unawaited(store.markReceivedRemindersRead());
             }
           },
-          reminderBadgeCount: store.unreadReminderCount,
+          reminderBadgeCount: store.reminderBadgeCount,
         ),
       ),
     );

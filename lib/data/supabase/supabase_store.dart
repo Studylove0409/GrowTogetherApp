@@ -5,11 +5,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/notification/notification_service.dart';
 import '../../shared/utils/plan_icon_mapper.dart';
+import '../models/focus_session.dart';
 import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
 import '../store/store.dart';
 import 'checkin_repository.dart';
+import 'focus_session_repository.dart';
 import 'plan_repository.dart';
 import 'profile_repository.dart';
 import 'reminder_repository.dart';
@@ -21,6 +23,7 @@ class SupabaseStore extends Store {
 
   final _planRepo = const PlanRepository();
   final _checkinRepo = const CheckinRepository();
+  final _focusRepo = const FocusSessionRepository();
   final _reminderRepo = const ReminderRepository();
   final _profileRepo = const ProfileRepository();
 
@@ -28,6 +31,8 @@ class SupabaseStore extends Store {
 
   List<Plan> _plans = [];
   List<Reminder> _reminders = [];
+  List<FocusSession> _focusSessions = [];
+  final Set<String> _notifiedFocusInviteIds = {};
   Profile _profile = const Profile(
     name: '一起进步的你',
     partnerName: '加载中...',
@@ -39,7 +44,8 @@ class SupabaseStore extends Store {
   // ========================= 初始化 =========================
 
   Future<void> _init() async {
-    await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
+    await Future.wait([_loadProfile(), _loadFocusSessions(), _loadReminders()]);
+    await _loadPlans();
     _subscribeRealtime();
     _startAutoRefresh();
     unawaited(_syncPlanReminders());
@@ -77,6 +83,7 @@ class SupabaseStore extends Store {
           return p.copyWith(checkins: records);
         }).toList();
       }
+      _plans = _plans.map(_withLocalFocusMetrics).toList();
     } catch (_) {}
   }
 
@@ -105,6 +112,29 @@ class SupabaseStore extends Store {
     try {
       _reminders = await _reminderRepo.fetchReminders();
     } catch (_) {}
+  }
+
+  Future<void> _loadFocusSessions() async {
+    try {
+      final sessions = await _focusRepo.fetchFocusSessions();
+      _focusSessions = sessions;
+      _showNewFocusInviteNotifications(sessions);
+    } catch (_) {}
+  }
+
+  void _showNewFocusInviteNotifications(List<FocusSession> sessions) {
+    for (final session in sessions.where((session) => session.canJoin)) {
+      if (!_notifiedFocusInviteIds.add(session.id)) continue;
+
+      unawaited(
+        NotificationService.showPushNotification(
+          id: session.id.hashCode & 0x7fffffff,
+          title: '一起专注邀请',
+          body:
+              'TA 邀请你为「${session.planTitle}」专注 ${session.plannedDurationMinutes} 分钟',
+        ),
+      );
+    }
   }
 
   // ========================= Realtime =========================
@@ -147,6 +177,16 @@ class SupabaseStore extends Store {
             _loadReminders().then((_) => notifyListeners());
           },
         )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'focus_sessions',
+          callback: (_) async {
+            await _loadFocusSessions();
+            await _loadPlans();
+            notifyListeners();
+          },
+        )
         .subscribe((status, error) {
           if (status == RealtimeSubscribeStatus.subscribed) {
             return;
@@ -175,7 +215,12 @@ class SupabaseStore extends Store {
     if (_autoRefreshInFlight) return;
     _autoRefreshInFlight = true;
     try {
-      await Future.wait([_loadProfile(), _loadPlans(), _loadReminders()]);
+      await Future.wait([
+        _loadProfile(),
+        _loadFocusSessions(),
+        _loadReminders(),
+      ]);
+      await _loadPlans();
       await _syncPlanReminders();
       notifyListeners();
     } finally {
@@ -204,6 +249,13 @@ class SupabaseStore extends Store {
   @override
   Future<void> refreshReminders() async {
     await _loadReminders();
+    notifyListeners();
+  }
+
+  @override
+  Future<void> refreshFocusSessions() async {
+    await _loadFocusSessions();
+    await _loadPlans();
     notifyListeners();
   }
 
@@ -366,6 +418,129 @@ class SupabaseStore extends Store {
     notifyListeners();
   }
 
+  // ========================= Focus =========================
+
+  @override
+  List<FocusSession> getFocusSessions() {
+    return List.unmodifiable(_focusSessions);
+  }
+
+  @override
+  List<FocusSession> getTodayFocusSessions() {
+    final today = DateTime.now();
+    return List.unmodifiable(
+      _focusSessions.where(
+        (session) => session.isSameDay(today) && !session.isActive,
+      ),
+    );
+  }
+
+  @override
+  List<FocusSession> getActiveFocusSessions() {
+    return List.unmodifiable(
+      _focusSessions.where((session) => session.isActive),
+    );
+  }
+
+  @override
+  List<FocusSession> getIncomingFocusInvites() {
+    return List.unmodifiable(
+      _focusSessions.where((session) => session.canJoin),
+    );
+  }
+
+  @override
+  Future<void> saveFocusSession(FocusSession session) async {
+    final saved = await _focusRepo.insertCompletedSession(session);
+    if (saved != null) _upsertFocusSession(saved);
+    await _loadPlans();
+    notifyListeners();
+  }
+
+  @override
+  Future<FocusSession> createCoupleFocusInvite({
+    required Plan plan,
+    required int plannedDurationMinutes,
+  }) async {
+    final session = await _focusRepo.createCoupleInvite(
+      plan: plan,
+      plannedDurationMinutes: plannedDurationMinutes,
+    );
+    _upsertFocusSession(session);
+    notifyListeners();
+    return session;
+  }
+
+  @override
+  Future<FocusSession?> joinFocusSession(String sessionId) async {
+    final session = await _focusRepo.joinSession(sessionId);
+    if (session != null) _upsertFocusSession(session);
+    notifyListeners();
+    return session;
+  }
+
+  @override
+  Future<FocusSession?> startFocusSessionNow(String sessionId) async {
+    final session = await _focusRepo.startSessionNow(sessionId);
+    if (session != null) _upsertFocusSession(session);
+    notifyListeners();
+    return session;
+  }
+
+  @override
+  Future<FocusSession?> pauseFocusSession(String sessionId) async {
+    final session = await _focusRepo.pauseSession(sessionId);
+    if (session != null) _upsertFocusSession(session);
+    notifyListeners();
+    return session;
+  }
+
+  @override
+  Future<FocusSession?> resumeFocusSession(String sessionId) async {
+    final existing = getFocusSessionById(sessionId);
+    if (existing == null) return null;
+
+    final session = await _focusRepo.resumeSession(existing);
+    if (session != null) _upsertFocusSession(session);
+    notifyListeners();
+    return session;
+  }
+
+  @override
+  Future<FocusSession?> finishFocusSession({
+    required String sessionId,
+    required FocusSessionStatus status,
+    required int actualDurationSeconds,
+    required int scoreDelta,
+  }) async {
+    final session = await _focusRepo.finishSession(
+      sessionId: sessionId,
+      status: status,
+      actualDurationSeconds: actualDurationSeconds,
+      scoreDelta: scoreDelta,
+    );
+    if (session != null) _upsertFocusSession(session);
+    await _loadPlans();
+    notifyListeners();
+    return session;
+  }
+
+  FocusSession? getFocusSessionById(String sessionId) {
+    for (final session in _focusSessions) {
+      if (session.id == sessionId) return session;
+    }
+    return null;
+  }
+
+  void _upsertFocusSession(FocusSession session) {
+    final index = _focusSessions.indexWhere((item) => item.id == session.id);
+    if (index == -1) {
+      _focusSessions.insert(0, session);
+    } else {
+      _focusSessions[index] = session;
+    }
+  }
+
   // ========================= Reminder =========================
 
   @override
@@ -442,6 +617,25 @@ class SupabaseStore extends Store {
 
   static int _comparePlanPriority(Plan a, Plan b) {
     return planPriority(a).compareTo(planPriority(b));
+  }
+
+  Plan _withLocalFocusMetrics(Plan plan) {
+    final planSessions = _focusSessions.where(
+      (session) =>
+          session.planId == plan.id &&
+          session.scoreDelta > 0 &&
+          !session.isActive,
+    );
+    if (planSessions.isEmpty) return plan;
+
+    final focusScore = planSessions.fold<int>(
+      0,
+      (total, session) => total + session.scoreDelta,
+    );
+    final lastFocusedAt = planSessions
+        .map((session) => session.endedAt ?? session.createdAt)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    return plan.copyWith(focusScore: focusScore, lastFocusedAt: lastFocusedAt);
   }
 
   String _fromReminderType(ReminderType type) => switch (type) {

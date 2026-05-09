@@ -26,6 +26,11 @@ class AppBottomNavBar extends StatelessWidget {
       selectedIcon: Icons.event_note_rounded,
     ),
     _BottomNavItem(
+      label: '专注',
+      icon: Icons.timer_outlined,
+      selectedIcon: Icons.timer_rounded,
+    ),
+    _BottomNavItem(
       label: '提醒',
       icon: Icons.notifications_none_rounded,
       selectedIcon: Icons.notifications_rounded,
@@ -97,7 +102,7 @@ class AppBottomNavBar extends StatelessWidget {
                               selected: selectedIndex == index,
                               onTap: () => onSelected(index),
                             ),
-                            if (index == 2 && reminderBadgeCount > 0)
+                            if (index == 3 && reminderBadgeCount > 0)
                               Positioned(
                                 top: 4,
                                 right: itemWidth * 0.22,

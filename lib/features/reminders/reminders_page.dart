@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/models/focus_session.dart';
+import '../../data/models/reminder.dart';
 import '../../data/store/store.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -12,7 +14,9 @@ import '../plans/plan_detail_page.dart';
 import '../../shared/widgets/reminder_card.dart';
 
 class RemindersPage extends StatefulWidget {
-  const RemindersPage({super.key});
+  const RemindersPage({super.key, this.onOpenFocus});
+
+  final VoidCallback? onOpenFocus;
 
   @override
   State<RemindersPage> createState() => _RemindersPageState();
@@ -28,8 +32,13 @@ class _RemindersPageState extends State<RemindersPage> {
     final reminders = store
         .getReminders()
         .where((reminder) => reminder.sentByMe != _showReceived)
+        .where((reminder) => !_isLegacyFocusInviteReminder(reminder))
         .where((reminder) => _isSameDate(reminder.createdAt, _selectedDate))
         .toList();
+    final focusInvites =
+        _showReceived && _isSameDate(_selectedDate, _dateOnly(DateTime.now()))
+        ? store.getIncomingFocusInvites()
+        : <FocusSession>[];
 
     return AppScaffold(
       child: Column(
@@ -60,9 +69,10 @@ class _RemindersPageState extends State<RemindersPage> {
                 await Future.wait([
                   store.refreshPlans(),
                   store.refreshReminders(),
+                  store.refreshFocusSessions(),
                 ]);
               },
-              child: reminders.isEmpty
+              child: reminders.isEmpty && focusInvites.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(
@@ -78,7 +88,7 @@ class _RemindersPageState extends State<RemindersPage> {
                         ),
                       ],
                     )
-                  : ListView.builder(
+                  : ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.md,
@@ -86,22 +96,38 @@ class _RemindersPageState extends State<RemindersPage> {
                         AppSpacing.md,
                         32,
                       ),
-                      itemCount: reminders.length,
-                      itemBuilder: (context, index) => Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                        child: ReminderCard(
-                          reminder: reminders[index],
-                          onTap: reminders[index].planId != null
-                              ? () => Navigator.of(context).push(
-                                  MaterialPageRoute<void>(
-                                    builder: (_) => PlanDetailPage(
-                                      planId: reminders[index].planId!,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                        ),
-                      ),
+                      children: [
+                        for (final invite in focusInvites)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.md,
+                            ),
+                            child: _FocusInviteReminderCard(
+                              invite: invite,
+                              onJoin: () => _joinFocusInvite(context, invite),
+                              onDecline: () =>
+                                  _declineFocusInvite(context, invite),
+                            ),
+                          ),
+                        for (final reminder in reminders)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.md,
+                            ),
+                            child: ReminderCard(
+                              reminder: reminder,
+                              onTap: reminder.planId != null
+                                  ? () => Navigator.of(context).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => PlanDetailPage(
+                                          planId: reminder.planId!,
+                                        ),
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                      ],
                     ),
             ),
           ),
@@ -116,8 +142,196 @@ class _RemindersPageState extends State<RemindersPage> {
   static bool _isSameDate(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  static bool _isLegacyFocusInviteReminder(Reminder reminder) {
+    return reminder.content.startsWith('想邀请你一起专注');
+  }
+
   static String _formatDateLabel(DateTime date) =>
       '${date.month}.${date.day.toString().padLeft(2, '0')}';
+
+  Future<void> _joinFocusInvite(
+    BuildContext context,
+    FocusSession invite,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<Store>().joinFocusSession(invite.id);
+      if (!mounted) return;
+      widget.onOpenFocus?.call();
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('这次专注邀请暂时无法加入，请刷新后再试。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _declineFocusInvite(
+    BuildContext context,
+    FocusSession invite,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await context.read<Store>().finishFocusSession(
+        sessionId: invite.id,
+        status: FocusSessionStatus.cancelled,
+        actualDurationSeconds: 0,
+        scoreDelta: 0,
+      );
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('已婉拒这次专注邀请。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('暂时无法处理这次邀请，请稍后再试。'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+}
+
+class _FocusInviteReminderCard extends StatelessWidget {
+  const _FocusInviteReminderCard({
+    required this.invite,
+    required this.onJoin,
+    required this.onDecline,
+  });
+
+  final FocusSession invite;
+  final VoidCallback onJoin;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      showDashedBorder: false,
+      padding: const EdgeInsets.all(14),
+      backgroundColor: AppColors.lightPink.withValues(alpha: 0.54),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.78),
+                  borderRadius: BorderRadius.circular(19),
+                ),
+                child: const Icon(
+                  Icons.timer_rounded,
+                  color: AppColors.deepPink,
+                  size: 27,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '一起专注邀请',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.section,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${invite.planTitle} · ${invite.plannedDurationMinutes} 分钟',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              Text(
+                _formatTime(invite.createdAt),
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.secondaryText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: onJoin,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.deepPink,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(44),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.play_arrow_rounded, size: 20),
+                      SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '加入专注',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: onDecline,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.secondaryText,
+                    side: BorderSide(
+                      color: AppColors.secondaryText.withValues(alpha: 0.28),
+                    ),
+                    minimumSize: const Size.fromHeight(44),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  child: const Text(
+                    '婉拒',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _formatTime(DateTime dt) {
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
 }
 
 class _ReminderDateFilter extends StatelessWidget {

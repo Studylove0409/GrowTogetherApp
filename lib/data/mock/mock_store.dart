@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/notification/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../shared/utils/plan_icon_mapper.dart';
+import '../models/focus_session.dart';
 import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
@@ -24,6 +25,7 @@ class MockStore extends Store {
 
   final List<Plan> _plans;
   final List<Reminder> _reminders;
+  final List<FocusSession> _focusSessions = [];
 
   // ========================= Profile =========================
 
@@ -38,6 +40,9 @@ class MockStore extends Store {
 
   @override
   Future<void> refreshReminders() async {}
+
+  @override
+  Future<void> refreshFocusSessions() async {}
 
   @override
   Future<void> refreshAll() async {}
@@ -256,6 +261,179 @@ class MockStore extends Store {
     _plans[index] = plan.copyWith(doneToday: doneToday);
     _finishOncePlanIfComplete(index);
     notifyListeners();
+  }
+
+  // ========================= Focus =========================
+
+  @override
+  List<FocusSession> getFocusSessions() {
+    return List.unmodifiable(_focusSessions);
+  }
+
+  @override
+  List<FocusSession> getTodayFocusSessions() {
+    final today = DateTime.now();
+    return List.unmodifiable(
+      _focusSessions.where(
+        (session) => session.isSameDay(today) && !session.isActive,
+      ),
+    );
+  }
+
+  @override
+  List<FocusSession> getActiveFocusSessions() {
+    return List.unmodifiable(
+      _focusSessions.where((session) => session.isActive),
+    );
+  }
+
+  @override
+  List<FocusSession> getIncomingFocusInvites() {
+    return List.unmodifiable(
+      _focusSessions.where((session) => session.canJoin),
+    );
+  }
+
+  @override
+  Future<void> saveFocusSession(FocusSession session) async {
+    _focusSessions.insert(0, session);
+    _applyFocusScore(session);
+    notifyListeners();
+  }
+
+  @override
+  Future<FocusSession> createCoupleFocusInvite({
+    required Plan plan,
+    required int plannedDurationMinutes,
+  }) async {
+    final now = DateTime.now();
+    final session = FocusSession(
+      id: 'focus_${now.microsecondsSinceEpoch}',
+      planId: plan.id,
+      planTitle: plan.title,
+      mode: FocusMode.couple,
+      plannedDurationMinutes: plannedDurationMinutes,
+      actualDurationSeconds: 0,
+      status: FocusSessionStatus.waiting,
+      scoreDelta: 0,
+      startedAt: null,
+      endedAt: null,
+      creatorUserId: 'current-user',
+      sentByMe: true,
+      partnerJoinedAt: null,
+      createdAt: now,
+    );
+    _focusSessions.insert(0, session);
+    notifyListeners();
+    return session;
+  }
+
+  @override
+  Future<FocusSession?> joinFocusSession(String sessionId) async {
+    final index = _focusSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (index == -1) return null;
+    final session = _focusSessions[index];
+    final now = DateTime.now();
+    final updated = session.copyWith(
+      status: session.startedAt == null
+          ? FocusSessionStatus.running
+          : session.status,
+      startedAt: session.startedAt ?? now,
+      partnerJoinedAt: now,
+    );
+    _focusSessions[index] = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  @override
+  Future<FocusSession?> startFocusSessionNow(String sessionId) async {
+    final index = _focusSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (index == -1) return null;
+    final now = DateTime.now();
+    final updated = _focusSessions[index].copyWith(
+      status: FocusSessionStatus.running,
+      startedAt: now,
+      clearPausedAt: true,
+    );
+    _focusSessions[index] = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  @override
+  Future<FocusSession?> pauseFocusSession(String sessionId) async {
+    final index = _focusSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (index == -1) return null;
+    final updated = _focusSessions[index].copyWith(
+      status: FocusSessionStatus.paused,
+      pausedAt: DateTime.now(),
+    );
+    _focusSessions[index] = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  @override
+  Future<FocusSession?> resumeFocusSession(String sessionId) async {
+    final index = _focusSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (index == -1) return null;
+    final session = _focusSessions[index];
+    final pausedAt = session.pausedAt;
+    final pausedSeconds = pausedAt == null
+        ? 0
+        : DateTime.now().difference(pausedAt).inSeconds;
+    final updated = session.copyWith(
+      status: FocusSessionStatus.running,
+      totalPausedSeconds: session.totalPausedSeconds + pausedSeconds,
+      clearPausedAt: true,
+    );
+    _focusSessions[index] = updated;
+    notifyListeners();
+    return updated;
+  }
+
+  @override
+  Future<FocusSession?> finishFocusSession({
+    required String sessionId,
+    required FocusSessionStatus status,
+    required int actualDurationSeconds,
+    required int scoreDelta,
+  }) async {
+    final index = _focusSessions.indexWhere(
+      (session) => session.id == sessionId,
+    );
+    if (index == -1) return null;
+    final updated = _focusSessions[index].copyWith(
+      status: status,
+      actualDurationSeconds: actualDurationSeconds,
+      scoreDelta: scoreDelta,
+      endedAt: DateTime.now(),
+      clearPausedAt: true,
+    );
+    _focusSessions[index] = updated;
+    _applyFocusScore(updated);
+    notifyListeners();
+    return updated;
+  }
+
+  void _applyFocusScore(FocusSession session) {
+    final index = _plans.indexWhere((plan) => plan.id == session.planId);
+    if (index != -1 && session.scoreDelta > 0) {
+      final plan = _plans[index];
+      _plans[index] = plan.copyWith(
+        focusScore: plan.focusScore + session.scoreDelta,
+        lastFocusedAt: session.endedAt ?? DateTime.now(),
+      );
+    }
   }
 
   // ========================= Reminder =========================

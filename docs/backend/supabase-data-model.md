@@ -50,6 +50,17 @@ In-app reminders between active partners.
 - Reminders are not capped per day.
 - `gentle` and `strict` reminders are prompt-style and cannot be sent after the receiver completed today's plan.
 
+### `focus_sessions`
+
+Plan-linked focus sessions for solo and couple focus.
+
+- `mode = 'solo'`: regular personal focus record.
+- `mode = 'couple'`: creates a joinable focus invitation for the active couple.
+- Active lifecycle is `waiting` → `running` / `paused` → `completed`, `cancelled`, or `interrupted`.
+- Couple focus uses one `started_at` plus `total_paused_seconds` so both clients can render the same countdown.
+- `partner_joined_at` records whether TA has joined. It is used as the MVP online/join state.
+- `score_delta` is kept independent from checkin completion rules; Flutter currently applies it as plan focus score.
+
 ## Public RPCs
 
 - `create_profile_for_current_user(p_nickname, p_avatar_url)`
@@ -57,6 +68,13 @@ In-app reminders between active partners.
 - `upsert_today_checkin(p_plan_id, p_status, p_mood, p_note)`
 - `send_reminder(p_plan_id, p_type, p_content)`
 - `mark_reminder_read(p_reminder_id)`
+- `create_focus_invite(p_plan_id, p_planned_duration_minutes)`
+- `join_focus_session(p_session_id)`
+- `start_focus_session(p_session_id)`
+- `pause_focus_session(p_session_id)`
+- `resume_focus_session(p_session_id)`
+- `finish_focus_session(p_session_id, p_status)`
+- `create_completed_focus_session(p_plan_id, p_mode, p_planned_duration_minutes, p_actual_duration_seconds, p_started_at, p_ended_at, p_status)`
 
 ## Flutter Mapping
 
@@ -93,6 +111,7 @@ Frontend owner mapping:
 - Use the publishable key in Flutter; never ship the service role key.
 - Newly SQL-created tables in exposed schemas may need Data API grants in addition to RLS. The migration grants authenticated table access and relies on RLS for row access.
 - Growth records are derived from `plans` and `checkins`; there is no `growth_records` source-of-truth table in MVP.
+- Focus records are stored in `focus_sessions`; plan completion and checkin progress remain separate from focus score.
 
 Run the app against Supabase with:
 

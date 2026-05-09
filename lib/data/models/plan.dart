@@ -52,6 +52,8 @@ class Plan {
     this.status = PlanStatus.active,
     this.endedAt,
     this.checkins = const [],
+    this.focusScore = 0,
+    this.lastFocusedAt,
   });
 
   final String id;
@@ -74,6 +76,8 @@ class Plan {
   final PlanStatus status;
   final DateTime? endedAt;
   final List<CheckinRecord> checkins;
+  final int focusScore;
+  final DateTime? lastFocusedAt;
 
   IconData get icon => PlanIconMapper.iconData(iconKey);
 
@@ -148,6 +152,8 @@ class Plan {
     PlanStatus? status,
     DateTime? endedAt,
     List<CheckinRecord>? checkins,
+    int? focusScore,
+    DateTime? lastFocusedAt,
   }) {
     return Plan(
       id: id ?? this.id,
@@ -172,6 +178,8 @@ class Plan {
       status: status ?? this.status,
       endedAt: endedAt ?? this.endedAt,
       checkins: checkins ?? this.checkins,
+      focusScore: focusScore ?? this.focusScore,
+      lastFocusedAt: lastFocusedAt ?? this.lastFocusedAt,
     );
   }
 }

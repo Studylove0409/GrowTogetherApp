@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 
 import 'package:grow_together/app.dart';
 import 'package:grow_together/data/mock/mock_store.dart';
+import 'package:grow_together/data/models/focus_session.dart';
 import 'package:grow_together/data/models/plan.dart';
 import 'package:grow_together/data/models/profile.dart';
 import 'package:grow_together/data/store/store.dart';
+import 'package:grow_together/features/focus/focus_page.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
 import 'package:grow_together/features/home/home_page.dart';
 import 'package:grow_together/features/plans/plan_detail_page.dart';
@@ -23,6 +25,7 @@ void main() {
     expect(find.text('我的今日计划'), findsOneWidget);
     expect(find.text('首页'), findsOneWidget);
     expect(find.text('计划'), findsOneWidget);
+    expect(find.text('专注'), findsOneWidget);
     expect(find.text('提醒'), findsOneWidget);
     expect(find.text('我的'), findsOneWidget);
   });
@@ -66,7 +69,50 @@ void main() {
     expect(find.text('成长记录'), findsOneWidget);
   });
 
-  testWidgets('GrowTogether shell switches between the four tabs', (
+  testWidgets('FocusPage pull-to-refresh refreshes focus data', (tester) async {
+    final store = _FocusRefreshStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const FocusPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+
+    await tester.drag(find.byType(ListView).first, const Offset(0, 300));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(store.refreshFocusSessionsCount, greaterThanOrEqualTo(1));
+  });
+
+  testWidgets('FocusPage does not interrupt with incoming invite prompt', (
+    tester,
+  ) async {
+    final store = _FocusInviteStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const FocusPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('TA 邀请你一起专注'), findsNothing);
+    expect(find.text('加入专注'), findsNothing);
+    expect(find.text('今日专注概览'), findsOneWidget);
+  });
+
+  testWidgets('GrowTogether shell switches between the five tabs', (
     tester,
   ) async {
     await tester.pumpWidget(const GrowTogetherApp());
@@ -74,6 +120,65 @@ void main() {
     await tester.tap(find.text('计划'));
     await tester.pumpAndSettle();
     expect(find.text('共同计划'), findsOneWidget);
+
+    await tester.tap(find.text('专注'));
+    await tester.pump();
+    expect(find.text('今日专注概览'), findsOneWidget);
+    expect(find.text('本次专注为了哪个计划？'), findsOneWidget);
+    expect(find.text('25 分钟'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('自定义'),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(find.text('自定义'));
+    await tester.pumpAndSettle();
+    expect(find.text('自定义专注时长'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '37');
+    await tester.tap(find.text('应用'));
+    await tester.pumpAndSettle();
+    expect(find.text('37 分钟'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('学习英语 30 分钟'),
+      -220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(find.text('学习英语 30 分钟'));
+    await tester.pump();
+    await tester.scrollUntilVisible(
+      find.text('开始专注'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pump();
+    await tester.tap(find.text('开始专注'));
+    await tester.pump();
+    expect(find.text('37:00'), findsOneWidget);
+    expect(find.text('正在专注：学习英语 30 分钟'), findsOneWidget);
+    expect(find.text('模式：自己专注'), findsOneWidget);
+
+    await tester.tap(find.text('暂停'));
+    await tester.pump();
+    expect(find.text('继续'), findsOneWidget);
+
+    await tester.tap(find.text('提前结束'));
+    await tester.pumpAndSettle();
+    expect(find.text('提前结束专注？'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, '提前结束'));
+    await tester.pumpAndSettle();
+    expect(find.text('这次没有完成，也没关系'), findsOneWidget);
+    await tester.tap(find.text('回到专注'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('今日专注记录'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('今日专注记录'), findsOneWidget);
 
     await tester.tap(find.text('提醒'));
     await tester.pumpAndSettle();
@@ -114,6 +219,25 @@ void main() {
     },
   );
 
+  testWidgets('GrowTogether shell counts focus invites in reminder badge', (
+    tester,
+  ) async {
+    final store = _FocusInviteStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const GrowTogetherShell(),
+        ),
+      ),
+    );
+
+    expect(store.unreadReminderCount, 0);
+    expect(store.getIncomingFocusInvites().length, 1);
+    expect(find.text('1'), findsOneWidget);
+  });
+
   test('MockStore creates plan and saves checkin', () async {
     final store = MockStore.instance;
     final initialCount = store.getPlans().length;
@@ -145,6 +269,86 @@ void main() {
     expect(updated.completedDays, 1);
     expect(updated.checkins.first.note, '完成打卡');
     expect(updated.partnerDoneToday, isFalse);
+  });
+
+  test('MockStore records focus session and adds focus score', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '专注计分计划',
+      isShared: false,
+      dailyTask: '完成一段安静专注',
+      startDate: DateTime(2026, 5, 9),
+      endDate: DateTime(2026, 5, 9),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: false,
+    );
+    final beforeScore = store.getPlanById(plan.id)!.focusScore;
+    final endedAt = DateTime.now();
+
+    await store.saveFocusSession(
+      FocusSession(
+        id: 'focus_test',
+        planId: plan.id,
+        planTitle: plan.title,
+        mode: FocusMode.solo,
+        plannedDurationMinutes: 25,
+        actualDurationSeconds: 25 * 60,
+        status: FocusSessionStatus.completed,
+        scoreDelta: 5,
+        startedAt: endedAt.subtract(const Duration(minutes: 25)),
+        endedAt: endedAt,
+        createdAt: endedAt,
+      ),
+    );
+
+    final updated = store.getPlanById(plan.id)!;
+    expect(store.getTodayFocusSessions().first.id, 'focus_test');
+    expect(updated.focusScore, beforeScore + 5);
+    expect(updated.lastFocusedAt, endedAt);
+  });
+
+  test('MockStore creates and controls couple focus session', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '一起专注计划',
+      isShared: true,
+      dailyTask: '一起完成一段专注',
+      startDate: DateTime(2026, 5, 9),
+      endDate: DateTime(2026, 5, 16),
+      reminderTime: null,
+      repeatType: PlanRepeatType.daily,
+      hasDateRange: true,
+    );
+
+    final invite = await store.createCoupleFocusInvite(
+      plan: plan,
+      plannedDurationMinutes: 25,
+    );
+    expect(invite.status, FocusSessionStatus.waiting);
+    expect(store.getActiveFocusSessions().first.id, invite.id);
+
+    final started = await store.startFocusSessionNow(invite.id);
+    expect(started?.status, FocusSessionStatus.running);
+    expect(started?.startedAt, isNotNull);
+
+    final paused = await store.pauseFocusSession(invite.id);
+    expect(paused?.status, FocusSessionStatus.paused);
+    expect(paused?.pausedAt, isNotNull);
+
+    final resumed = await store.resumeFocusSession(invite.id);
+    expect(resumed?.status, FocusSessionStatus.running);
+    expect(resumed?.pausedAt, isNull);
+
+    final finished = await store.finishFocusSession(
+      sessionId: invite.id,
+      status: FocusSessionStatus.completed,
+      actualDurationSeconds: 25 * 60,
+      scoreDelta: 5,
+    );
+    expect(finished?.status, FocusSessionStatus.completed);
+    expect(store.getTodayFocusSessions().first.id, invite.id);
+    expect(store.getPlanById(plan.id)?.focusScore, 5);
   });
 
   test('MockStore exposes refresh entry points', () async {
@@ -580,7 +784,7 @@ void main() {
       MaterialApp(
         home: ChangeNotifierProvider<Store>.value(
           value: store,
-          child: const RemindersPage(),
+          child: const Scaffold(body: RemindersPage()),
         ),
       ),
     );
@@ -593,6 +797,74 @@ void main() {
 
     expect(find.text('今天的提醒'), findsNothing);
     expect(find.text('昨天的提醒'), findsOneWidget);
+  });
+
+  testWidgets('RemindersPage separates focus invites from normal reminders', (
+    tester,
+  ) async {
+    final store = _FocusInviteStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const Scaffold(body: RemindersPage()),
+        ),
+      ),
+    );
+
+    expect(find.text('一起专注邀请'), findsOneWidget);
+    expect(find.text('加入专注'), findsOneWidget);
+    expect(find.text('婉拒'), findsOneWidget);
+
+    await tester.tap(find.text('婉拒'));
+    await tester.pumpAndSettle();
+
+    expect(store.getIncomingFocusInvites(), isEmpty);
+    expect(find.text('一起专注邀请'), findsNothing);
+  });
+
+  testWidgets('RemindersPage focus invite card fits a small viewport', (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = _FocusInviteStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const Scaffold(body: RemindersPage()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('一起专注邀请'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('FocusPage adopts a joined couple focus session', (tester) async {
+    final store = _FocusInviteStore();
+    await store.joinFocusSession('incoming-focus');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const FocusPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('正在专注：专注测试计划'), findsOneWidget);
+    expect(find.text('模式：一起专注'), findsOneWidget);
   });
 }
 
@@ -814,6 +1086,120 @@ class _RefreshSmokeStore extends Store {
 
   @override
   Future<void> markReceivedRemindersRead() async {}
+}
+
+class _FocusRefreshStore extends _RefreshSmokeStore {
+  int refreshFocusSessionsCount = 0;
+
+  final Plan _plan = Plan(
+    id: 'focus-plan',
+    title: '专注测试计划',
+    subtitle: '完成一段专注',
+    owner: PlanOwner.me,
+    iconKey: 'book',
+    minutes: 25,
+    completedDays: 0,
+    totalDays: 7,
+    doneToday: false,
+    color: Colors.pink,
+    dailyTask: '完成一段专注',
+    startDate: DateTime(2026, 5, 9),
+    endDate: DateTime(2026, 5, 16),
+    reminderTime: null,
+  );
+
+  @override
+  List<Plan> getPlans() => [_plan];
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      owner == _plan.owner ? [_plan] : [];
+
+  @override
+  List<Plan> getTodayFocusPlans() => [_plan];
+
+  @override
+  List<Plan> getAllPlans() => [_plan];
+
+  @override
+  Plan? getPlanById(String id) => id == _plan.id ? _plan : null;
+
+  @override
+  Future<void> refreshFocusSessions() async {
+    refreshFocusSessionsCount += 1;
+    notifyListeners();
+  }
+}
+
+class _FocusInviteStore extends _FocusRefreshStore {
+  late FocusSession _session = FocusSession(
+    id: 'incoming-focus',
+    planId: 'focus-plan',
+    planTitle: '专注测试计划',
+    mode: FocusMode.couple,
+    plannedDurationMinutes: 25,
+    actualDurationSeconds: 0,
+    status: FocusSessionStatus.waiting,
+    scoreDelta: 0,
+    creatorUserId: 'partner',
+    sentByMe: false,
+    createdAt: DateTime.now(),
+  );
+
+  @override
+  List<FocusSession> getFocusSessions() => [_session];
+
+  @override
+  List<FocusSession> getActiveFocusSessions() =>
+      _session.isActive ? [_session] : [];
+
+  @override
+  List<FocusSession> getIncomingFocusInvites() =>
+      _session.canJoin ? [_session] : [];
+
+  @override
+  Future<FocusSession?> joinFocusSession(String sessionId) async {
+    if (_session.id != sessionId || !_session.canJoin) return null;
+    final now = DateTime.now();
+    _session = _session.copyWith(
+      status: FocusSessionStatus.running,
+      startedAt: now,
+      partnerJoinedAt: now,
+    );
+    notifyListeners();
+    return _session;
+  }
+
+  @override
+  Future<FocusSession?> finishFocusSession({
+    required String sessionId,
+    required FocusSessionStatus status,
+    required int actualDurationSeconds,
+    required int scoreDelta,
+  }) async {
+    if (_session.id != sessionId) return null;
+    _session = _session.copyWith(
+      status: status,
+      actualDurationSeconds: actualDurationSeconds,
+      scoreDelta: scoreDelta,
+      endedAt: DateTime.now(),
+    );
+    notifyListeners();
+    return _session;
+  }
+
+  void completeInvite() {
+    final endedAt = DateTime.now();
+    _session = _session.copyWith(
+      status: FocusSessionStatus.completed,
+      actualDurationSeconds: 25 * 60,
+      scoreDelta: 5,
+      startedAt: endedAt.subtract(const Duration(minutes: 25)),
+      endedAt: endedAt,
+      partnerJoinedAt: endedAt,
+    );
+    notifyListeners();
+  }
 }
 
 class _BlockedPromptReminderStore extends Store {
