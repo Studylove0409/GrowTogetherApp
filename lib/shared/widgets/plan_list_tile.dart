@@ -34,6 +34,11 @@ class PlanListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final progressText = plan.hasDateRange
+        ? '已坚持 ${plan.completedDays} 天'
+              '${plan.remainingDays > 0 ? ' · 剩余 ${plan.remainingDays} 天' : ''}'
+        : '已完成 ${plan.completedDays} 次';
+
     return AppCard(
       borderRadius: 26,
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -89,7 +94,7 @@ class PlanListTile extends StatelessWidget {
             Row(
               children: [
                 Text(
-                  '已坚持 ${plan.completedDays} 天${plan.remainingDays > 0 ? ' · 剩余 ${plan.remainingDays} 天' : ''}',
+                  progressText,
                   style: AppTextStyles.caption.copyWith(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -112,10 +117,10 @@ class PlanListTile extends StatelessWidget {
               ],
             ),
           ],
-          if (showReminderTime) ...[
+          if (showReminderTime && plan.hasReminder) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(
-              '提醒 ${plan.reminderTime.format(context)}',
+              '提醒 ${plan.reminderTime!.format(context)}',
               style: AppTextStyles.caption.copyWith(fontSize: 12),
             ),
           ],

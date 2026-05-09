@@ -28,7 +28,7 @@ class AppCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final radius = BorderRadius.circular(borderRadius);
-    final content = Padding(
+    return Padding(
       padding: margin ?? EdgeInsets.zero,
       child: CustomPaint(
         foregroundPainter: showDashedBorder
@@ -37,9 +37,7 @@ class AppCard extends StatelessWidget {
                 color: borderColor ?? AppColors.dashedLine,
               )
             : null,
-        child: Container(
-          width: double.infinity,
-          padding: padding,
+        child: DecoratedBox(
           decoration: BoxDecoration(
             color: backgroundColor,
             borderRadius: radius,
@@ -60,21 +58,22 @@ class AppCard extends StatelessWidget {
               ),
             ],
           ),
-          child: child,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: radius,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              borderRadius: radius,
+              onTap: onTap,
+              splashColor: AppColors.primary.withValues(alpha: 0.14),
+              highlightColor: AppColors.primary.withValues(alpha: 0.08),
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(padding: padding, child: child),
+              ),
+            ),
+          ),
         ),
-      ),
-    );
-
-    if (onTap == null) {
-      return content;
-    }
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(borderRadius),
-        onTap: onTap,
-        child: content,
       ),
     );
   }

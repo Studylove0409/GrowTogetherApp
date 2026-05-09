@@ -83,11 +83,14 @@ class MockStore extends Store {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
     final owner = isShared ? PlanOwner.together : PlanOwner.me;
-    final totalDays = endDate.difference(startDate).inDays + 1;
+    final totalDays = hasDateRange
+        ? endDate.difference(startDate).inDays + 1
+        : 1;
     final plan = Plan(
       id: 'plan_${DateTime.now().microsecondsSinceEpoch}',
       title: title,
@@ -103,11 +106,14 @@ class MockStore extends Store {
       startDate: startDate,
       endDate: endDate,
       reminderTime: reminderTime,
+      hasDateRange: hasDateRange,
     );
 
     _plans.insert(0, plan);
     notifyListeners();
-    _scheduleReminder(plan);
+    if (plan.hasReminder) {
+      _scheduleReminder(plan, syncSystemAlarm: true);
+    }
     return plan;
   }
 
@@ -118,8 +124,10 @@ class MockStore extends Store {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {
     final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index == -1) return;
@@ -127,11 +135,13 @@ class MockStore extends Store {
     final plan = _plans[index];
     if (!plan.canCurrentUserEdit) return;
 
-    final totalDays =
-        (endDate ?? plan.endDate)
-            .difference(startDate ?? plan.startDate)
-            .inDays +
-        1;
+    final updatedHasDateRange = hasDateRange ?? plan.hasDateRange;
+    final totalDays = updatedHasDateRange
+        ? (endDate ?? plan.endDate)
+                  .difference(startDate ?? plan.startDate)
+                  .inDays +
+              1
+        : 1;
 
     _plans[index] = plan.copyWith(
       title: title,
@@ -139,13 +149,17 @@ class MockStore extends Store {
       dailyTask: dailyTask,
       iconKey: iconKey,
       reminderTime: reminderTime,
+      clearReminderTime: clearReminderTime,
       startDate: startDate,
       endDate: endDate,
+      hasDateRange: updatedHasDateRange,
       totalDays: totalDays < 1 ? 1 : totalDays,
     );
     notifyListeners();
-    if (reminderTime != null) {
-      _scheduleReminder(_plans[index]);
+    if (clearReminderTime) {
+      await NotificationService.cancelPlanReminder(planId);
+    } else if (reminderTime != null) {
+      _scheduleReminder(_plans[index], syncSystemAlarm: true);
     }
   }
 
@@ -307,12 +321,16 @@ class MockStore extends Store {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
-  void _scheduleReminder(Plan plan) {
+  void _scheduleReminder(Plan plan, {bool syncSystemAlarm = false}) {
+    final reminderTime = plan.reminderTime;
+    if (reminderTime == null) return;
+
     NotificationService.schedulePlanReminder(
       planId: plan.id,
       planTitle: plan.title,
-      hour: plan.reminderTime.hour,
-      minute: plan.reminderTime.minute,
+      hour: reminderTime.hour,
+      minute: reminderTime.minute,
+      syncSystemAlarm: syncSystemAlarm,
     );
   }
 }

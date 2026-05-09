@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -7,6 +8,9 @@ import 'package:timezone/timezone.dart' as tz;
 class NotificationService {
   NotificationService._();
 
+  static const _systemReminderChannel = MethodChannel(
+    'grow_together/system_reminders',
+  );
   static final _plugin = FlutterLocalNotificationsPlugin();
   static Future<void>? _initFuture;
 
@@ -41,6 +45,7 @@ class NotificationService {
     required String planTitle,
     required int hour,
     required int minute,
+    bool syncSystemAlarm = false,
   }) async {
     try {
       await init();
@@ -69,6 +74,14 @@ class NotificationService {
       );
     } catch (_) {
       // 测试环境或平台通道不可用时静默跳过
+    }
+
+    if (syncSystemAlarm) {
+      await _scheduleAndroidSystemAlarm(
+        planTitle: planTitle,
+        hour: hour,
+        minute: minute,
+      );
     }
   }
 
@@ -150,5 +163,26 @@ class NotificationService {
         importance: Importance.high,
       ),
     );
+  }
+
+  static Future<void> _scheduleAndroidSystemAlarm({
+    required String planTitle,
+    required int hour,
+    required int minute,
+  }) async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+
+    try {
+      await _systemReminderChannel.invokeMethod<void>('setDailyAlarm', {
+        'title': '一起进步呀：$planTitle',
+        'hour': hour,
+        'minute': minute,
+      });
+    } on MissingPluginException {
+      // Flutter widget tests and non-Android embedders do not register this
+      // channel; the in-app notification path above is still valid there.
+    } catch (error) {
+      debugPrint('Android system alarm setup skipped: $error');
+    }
   }
 }

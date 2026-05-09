@@ -40,6 +40,7 @@ create table public.plans (
   icon_key text not null default 'heart',
   start_date date not null,
   end_date date not null,
+  has_date_range boolean not null default true,
   remind_time time,
   need_supervise boolean not null default true,
   status text not null default 'active' check (status in ('active', 'ended')),

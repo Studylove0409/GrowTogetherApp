@@ -27,6 +27,8 @@ Growth plans owned by one couple relationship.
 - `plan_type = 'personal'`: only `creator_id` can check in.
 - `plan_type = 'shared'`: both partners can check in.
 - `me` and `partner` are frontend perspectives, not stored backend types.
+- `remind_time` is optional; plans without it should not schedule local reminders.
+- `has_date_range = false` marks short-lived plans that should not display a start/end range, even though `start_date` and `end_date` still store the creation day for compatibility.
 - Once checkins exist, dates can only be extended.
 - Ended plans remain readable but cannot be edited, checked in, or reminded.
 

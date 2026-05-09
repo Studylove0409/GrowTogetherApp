@@ -40,7 +40,8 @@ abstract class Store extends ChangeNotifier {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey,
   });
 
@@ -50,8 +51,10 @@ abstract class Store extends ChangeNotifier {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   });
 
   Future<void> endPlan(String planId);

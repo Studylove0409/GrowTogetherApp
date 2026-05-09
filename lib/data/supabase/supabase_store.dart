@@ -255,7 +255,8 @@ class SupabaseStore extends Store {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
     final plan = await _planRepo.createPlan(
@@ -265,11 +266,14 @@ class SupabaseStore extends Store {
       startDate: startDate,
       endDate: endDate,
       reminderTime: reminderTime,
+      hasDateRange: hasDateRange,
       iconKey: iconKey,
     );
     _plans.insert(0, plan);
     notifyListeners();
-    _scheduleReminder(plan);
+    if (plan.hasReminder) {
+      _scheduleReminder(plan, syncSystemAlarm: true);
+    }
     return plan;
   }
 
@@ -280,8 +284,10 @@ class SupabaseStore extends Store {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {
     await _planRepo.updatePlan(
       planId: planId,
@@ -289,15 +295,19 @@ class SupabaseStore extends Store {
       dailyTask: dailyTask,
       iconKey: iconKey,
       reminderTime: reminderTime,
+      clearReminderTime: clearReminderTime,
       startDate: startDate,
       endDate: endDate,
+      hasDateRange: hasDateRange,
     );
     await _loadPlans();
     await _syncPlanReminders();
     notifyListeners();
-    if (reminderTime != null) {
+    if (clearReminderTime) {
+      await NotificationService.cancelPlanReminder(planId);
+    } else if (reminderTime != null) {
       final updated = getPlanById(planId);
-      if (updated != null) _scheduleReminder(updated);
+      if (updated != null) _scheduleReminder(updated, syncSystemAlarm: true);
     }
   }
 
@@ -433,26 +443,36 @@ class SupabaseStore extends Store {
     ReminderType.praise => 'praise',
   };
 
-  void _scheduleReminder(Plan plan) {
+  void _scheduleReminder(Plan plan, {bool syncSystemAlarm = false}) {
+    final reminderTime = plan.reminderTime;
+    if (reminderTime == null) return;
+
     NotificationService.schedulePlanReminder(
       planId: plan.id,
       planTitle: plan.title,
-      hour: plan.reminderTime.hour,
-      minute: plan.reminderTime.minute,
+      hour: reminderTime.hour,
+      minute: reminderTime.minute,
+      syncSystemAlarm: syncSystemAlarm,
     );
   }
 
   Future<void> _syncPlanReminders() async {
-    final activeReminderPlans = _plans.where(
+    final activeOwnedPlans = _plans.where(
       (plan) => !plan.isEnded && plan.owner != PlanOwner.partner,
     );
     await Future.wait(
-      activeReminderPlans.map((plan) async {
+      activeOwnedPlans.map((plan) async {
+        final reminderTime = plan.reminderTime;
+        if (reminderTime == null) {
+          await NotificationService.cancelPlanReminder(plan.id);
+          return;
+        }
+
         await NotificationService.schedulePlanReminder(
           planId: plan.id,
           planTitle: plan.title,
-          hour: plan.reminderTime.hour,
-          minute: plan.reminderTime.minute,
+          hour: reminderTime.hour,
+          minute: reminderTime.minute,
         );
       }),
     );

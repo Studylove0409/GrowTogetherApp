@@ -79,7 +79,8 @@ class PlanRepository {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
     final coupleId = await _activeCoupleId();
@@ -87,7 +88,7 @@ class PlanRepository {
       throw const PostgrestException(message: 'no active couple relationship');
     }
 
-    final result = await _supabase.from('plans').insert({
+    final payload = {
       'couple_id': coupleId,
       'creator_id': _currentUserId,
       'plan_type': isShared ? 'shared' : 'personal',
@@ -97,15 +98,24 @@ class PlanRepository {
       'icon_key': iconKey,
       'start_date': _formatDate(startDate),
       'end_date': _formatDate(endDate),
-      'remind_time': _fromTimeOfDay(reminderTime),
-    }).select().single();
+      'remind_time': reminderTime == null ? null : _fromTimeOfDay(reminderTime),
+      'has_date_range': hasDateRange,
+    };
 
-    return _rowToPlan(
+    final result = await _insertPlanWithScheduleFallback(payload);
+
+    final plan = _rowToPlan(
       result,
       todayCheckinMap: {},
       completedCountMap: {},
       currentUserId: _currentUserId!,
       partnerId: await _partnerId(coupleId) ?? '',
+    );
+    if (result.containsKey('has_date_range')) return plan;
+
+    return plan.copyWith(
+      hasDateRange: hasDateRange,
+      totalDays: hasDateRange ? endDate.difference(startDate).inDays + 1 : 1,
     );
   }
 
@@ -115,8 +125,10 @@ class PlanRepository {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {
     final updates = <String, dynamic>{};
     if (title != null) updates['title'] = title;
@@ -125,25 +137,49 @@ class PlanRepository {
       updates['description'] = dailyTask;
     }
     if (iconKey != null) updates['icon_key'] = iconKey;
-    if (reminderTime != null) updates['remind_time'] = _fromTimeOfDay(reminderTime);
+    if (clearReminderTime) {
+      updates['remind_time'] = null;
+    } else if (reminderTime != null) {
+      updates['remind_time'] = _fromTimeOfDay(reminderTime);
+    }
     if (startDate != null) updates['start_date'] = _formatDate(startDate);
     if (endDate != null) updates['end_date'] = _formatDate(endDate);
+    if (hasDateRange != null) updates['has_date_range'] = hasDateRange;
 
     if (updates.isEmpty) return;
 
-    await _supabase.from('plans').update(updates).eq('id', planId);
+    try {
+      await _supabase.from('plans').update(updates).eq('id', planId);
+    } on PostgrestException catch (error) {
+      if (!_isMissingHasDateRangeColumn(error) ||
+          !updates.containsKey('has_date_range')) {
+        rethrow;
+      }
+
+      final fallbackUpdates = Map<String, dynamic>.of(updates)
+        ..remove('has_date_range');
+      if (fallbackUpdates.isEmpty) return;
+      await _supabase.from('plans').update(fallbackUpdates).eq('id', planId);
+    }
   }
 
   Future<void> endPlan(String planId) async {
-    await _supabase.from('plans').update({
-      'status': 'ended',
-      'ended_at': DateTime.now().toUtc().toIso8601String(),
-    }).eq('id', planId);
+    await _supabase
+        .from('plans')
+        .update({
+          'status': 'ended',
+          'ended_at': DateTime.now().toUtc().toIso8601String(),
+        })
+        .eq('id', planId);
   }
 
   // ========================= 内部查询 =========================
 
-  Future<List<Plan>> _fetchPlans(String coupleId, String currentUserId, {String? status}) async {
+  Future<List<Plan>> _fetchPlans(
+    String coupleId,
+    String currentUserId, {
+    String? status,
+  }) async {
     var query = _supabase.from('plans').select('*').eq('couple_id', coupleId);
     if (status != null) query = query.eq('status', status);
 
@@ -182,6 +218,7 @@ class PlanRepository {
     final iconKey = row['icon_key'] as String? ?? PlanIconMapper.defaultKey;
     final startDate = DateTime.parse(row['start_date'] as String);
     final endDate = DateTime.parse(row['end_date'] as String);
+    final hasDateRange = row['has_date_range'] as bool? ?? true;
     final description = row['description'] as String?;
     final dailyTask = row['daily_task'] as String;
 
@@ -198,7 +235,9 @@ class PlanRepository {
     return Plan(
       id: planId,
       title: row['title'] as String,
-      subtitle: (description != null && description.isNotEmpty) ? description : dailyTask,
+      subtitle: (description != null && description.isNotEmpty)
+          ? description
+          : dailyTask,
       owner: owner,
       iconKey: iconKey,
       minutes: 20,
@@ -209,28 +248,41 @@ class PlanRepository {
       dailyTask: dailyTask,
       startDate: startDate,
       endDate: endDate,
-      reminderTime: _toTimeOfDay(row['remind_time'] as String?) ?? const TimeOfDay(hour: 20, minute: 0),
+      reminderTime: _toTimeOfDay(row['remind_time'] as String?),
+      hasDateRange: hasDateRange,
       partnerDoneToday: todayStatus.partnerCompleted,
       status: _toStatus(row['status'] as String?),
-      endedAt: row['ended_at'] != null ? DateTime.tryParse(row['ended_at'] as String)?.toLocal() : null,
+      endedAt: row['ended_at'] != null
+          ? DateTime.tryParse(row['ended_at'] as String)?.toLocal()
+          : null,
     );
   }
 
   // ========================= CheckinRecord 构建 =========================
 
-  CheckinRecord _rowToCheckinRecord(Map<String, dynamic> row, String currentUserId) {
+  CheckinRecord _rowToCheckinRecord(
+    Map<String, dynamic> row,
+    String currentUserId,
+  ) {
     return CheckinRecord(
       date: DateTime.parse(row['checkin_date'] as String),
       completed: row['status'] == 'completed',
       mood: _toMood(row['mood'] as String?) ?? CheckinMood.happy,
       note: row['note'] as String? ?? '',
-      actor: row['user_id'] == currentUserId ? CheckinActor.me : CheckinActor.partner,
+      actor: row['user_id'] == currentUserId
+          ? CheckinActor.me
+          : CheckinActor.partner,
     );
   }
 
   // ========================= 枚举推导 =========================
 
-  PlanOwner _deriveOwner(String planType, String creatorId, String currentUserId, String partnerId) {
+  PlanOwner _deriveOwner(
+    String planType,
+    String creatorId,
+    String currentUserId,
+    String partnerId,
+  ) {
     if (planType == 'shared') return PlanOwner.together;
     return creatorId == currentUserId ? PlanOwner.me : PlanOwner.partner;
   }
@@ -331,6 +383,32 @@ class PlanRepository {
   }
 
   // ========================= 格式化 =========================
+
+  Future<Map<String, dynamic>> _insertPlanWithScheduleFallback(
+    Map<String, dynamic> payload,
+  ) async {
+    try {
+      return await _supabase.from('plans').insert(payload).select().single();
+    } on PostgrestException catch (error) {
+      if (!_isMissingHasDateRangeColumn(error)) rethrow;
+
+      final fallbackPayload = Map<String, dynamic>.of(payload)
+        ..remove('has_date_range');
+      return await _supabase
+          .from('plans')
+          .insert(fallbackPayload)
+          .select()
+          .single();
+    }
+  }
+
+  bool _isMissingHasDateRangeColumn(PostgrestException error) {
+    final message = error.message.toLowerCase();
+    return message.contains('has_date_range') &&
+        (error.code == 'PGRST204' ||
+            error.code == '42703' ||
+            message.contains('column'));
+  }
 
   String _formatDate(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';

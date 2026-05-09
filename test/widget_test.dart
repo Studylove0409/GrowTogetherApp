@@ -109,6 +109,7 @@ void main() {
       startDate: DateTime(2026, 5, 7),
       endDate: DateTime(2026, 5, 14),
       reminderTime: const TimeOfDay(hour: 20, minute: 0),
+      hasDateRange: true,
       iconKey: 'music',
     );
 
@@ -190,6 +191,46 @@ void main() {
     expect(store.getPlans().length, initialCount + 1);
     expect(store.getPlans().first.title, '图标测试计划');
     expect(store.getPlans().first.iconKey, 'edit');
+  });
+
+  testWidgets('CreatePlanPage keeps optional schedule fields off by default', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final initialCount = store.getPlans().length;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const CreatePlanPage(),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '今天买晚饭');
+    await tester.scrollUntilVisible(
+      find.text('提醒时间'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('提醒时间'), findsOneWidget);
+    expect(find.text('计划周期'), findsOneWidget);
+    expect(find.text('关闭'), findsNWidgets(2));
+    expect(find.text('开始日期'), findsNothing);
+    expect(find.text('结束日期'), findsNothing);
+
+    await tester.tap(find.text('保存计划'));
+    await tester.pumpAndSettle();
+
+    final plan = store.getPlans().first;
+    expect(store.getPlans().length, initialCount + 1);
+    expect(plan.title, '今天买晚饭');
+    expect(plan.reminderTime, isNull);
+    expect(plan.hasDateRange, isFalse);
+    expect(plan.totalDays, 1);
   });
 
   testWidgets('CreatePlanPage "+ 自定义" opens BottomSheet', (tester) async {
@@ -312,6 +353,7 @@ void main() {
         startDate: DateTime(2026, 5, 7),
         endDate: DateTime(2026, 5, 14),
         reminderTime: const TimeOfDay(hour: 21, minute: 0),
+        hasDateRange: true,
       );
 
       store.saveCheckin(
@@ -465,7 +507,8 @@ class _ReminderBadgeStore extends Store {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
     throw UnimplementedError();
@@ -478,8 +521,10 @@ class _ReminderBadgeStore extends Store {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {}
 
   @override
@@ -567,7 +612,8 @@ class _RefreshSmokeStore extends Store {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
     throw UnimplementedError();
@@ -580,8 +626,10 @@ class _RefreshSmokeStore extends Store {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {}
 
   @override
@@ -675,7 +723,8 @@ class _BlockedPromptReminderStore extends Store {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
     throw UnimplementedError();
@@ -688,8 +737,10 @@ class _BlockedPromptReminderStore extends Store {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {}
 
   @override
@@ -798,7 +849,8 @@ class _ReminderDateFilterStore extends Store {
     required String dailyTask,
     required DateTime startDate,
     required DateTime endDate,
-    required TimeOfDay reminderTime,
+    required TimeOfDay? reminderTime,
+    bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
     throw UnimplementedError();
@@ -811,8 +863,10 @@ class _ReminderDateFilterStore extends Store {
     String? dailyTask,
     String? iconKey,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
     DateTime? startDate,
     DateTime? endDate,
+    bool? hasDateRange,
   }) async {}
 
   @override

@@ -165,6 +165,7 @@ class PlanDetailPage extends StatelessWidget {
   void _showRemindSheet(BuildContext context, Plan plan) {
     final store = context.read<Store>();
     final messenger = ScaffoldMessenger.of(context);
+    String? sendingLabel;
 
     showModalBottomSheet<void>(
       context: context,
@@ -175,62 +176,71 @@ class PlanDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.lg,
-            AppSpacing.xl,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('提醒 TA', style: AppTextStyles.section),
-              const SizedBox(height: AppSpacing.xs),
-              Text('关联计划：${plan.title}', style: AppTextStyles.caption),
-              const SizedBox(height: AppSpacing.lg),
-              for (final (label, icon, message) in _remindTypes) ...[
-                _RemindTypeTile(
-                  label: label,
-                  icon: icon,
-                  message: message,
-                  onTap: () async {
-                    final type = _remindTypeFromLabel(label);
-                    final navigator = Navigator.of(context);
-                    try {
-                      await store.sendReminder(
-                        planId: plan.id,
-                        type: type,
-                        content: '$message（计划：${plan.title}）',
-                      );
-                      if (!context.mounted) return;
-                      navigator.pop();
-                      messenger.showSnackBar(
-                        const SnackBar(
-                          content: Text('提醒已经飞过去啦～'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    } catch (error) {
-                      if (kDebugMode) {
-                        debugPrint('sendReminder failed: $error');
-                      }
-                      if (!context.mounted) return;
-                      navigator.pop();
-                      messenger.showSnackBar(
-                        SnackBar(
-                          content: Text(_reminderFailureMessage(error)),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: AppSpacing.sm),
-              ],
-            ],
-          ),
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                AppSpacing.xl,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('提醒 TA', style: AppTextStyles.section),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text('关联计划：${plan.title}', style: AppTextStyles.caption),
+                  const SizedBox(height: AppSpacing.lg),
+                  for (final (label, icon, message) in _remindTypes) ...[
+                    _RemindTypeTile(
+                      label: label,
+                      icon: icon,
+                      message: message,
+                      isLoading: sendingLabel == label,
+                      enabled: sendingLabel == null,
+                      onTap: () async {
+                        if (sendingLabel != null) return;
+
+                        final type = _remindTypeFromLabel(label);
+                        final navigator = Navigator.of(context);
+                        setModalState(() => sendingLabel = label);
+                        try {
+                          await store.sendReminder(
+                            planId: plan.id,
+                            type: type,
+                            content: '$message（计划：${plan.title}）',
+                          );
+                          if (!context.mounted) return;
+                          navigator.pop();
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('提醒已经飞过去啦～'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        } catch (error) {
+                          if (kDebugMode) {
+                            debugPrint('sendReminder failed: $error');
+                          }
+                          if (!context.mounted) return;
+                          navigator.pop();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(_reminderFailureMessage(error)),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                  ],
+                ],
+              ),
+            );
+          },
         );
       },
     );
@@ -305,49 +315,70 @@ class PlanDetailPage extends StatelessWidget {
   }
 
   void _confirmEndPlan(BuildContext context, Plan plan) {
+    var ending = false;
+
     showDialog<void>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(28),
-          ),
-          title: const Text('确认结束计划'),
-          content: Text(
-            '确定要结束「${plan.title}」吗？\n结束后的计划将不再出现在日常列表中，但打卡记录依然可以查看。',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('再想想'),
-            ),
-            TextButton(
-              onPressed: () async {
-                try {
-                  await context.read<Store>().endPlan(plan.id);
-                  if (!context.mounted) return;
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('计划已结束，辛苦啦～'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                } catch (error) {
-                  if (!context.mounted) return;
-                  Navigator.of(context).pop();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('结束计划失败，请稍后再试'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
-              },
-              style: TextButton.styleFrom(foregroundColor: AppColors.reminder),
-              child: const Text('确定结束'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+              title: const Text('确认结束计划'),
+              content: Text(
+                '确定要结束「${plan.title}」吗？\n结束后的计划将不再出现在日常列表中，但打卡记录依然可以查看。',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: ending ? null : () => Navigator.of(context).pop(),
+                  child: const Text('再想想'),
+                ),
+                TextButton(
+                  onPressed: ending
+                      ? null
+                      : () async {
+                          setDialogState(() => ending = true);
+                          try {
+                            await context.read<Store>().endPlan(plan.id);
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('计划已结束，辛苦啦～'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          } catch (error) {
+                            if (!context.mounted) return;
+                            Navigator.of(context).pop();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('结束计划失败，请稍后再试'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
+                        },
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.reminder,
+                  ),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 120),
+                    child: ending
+                        ? const SizedBox(
+                            key: ValueKey('ending'),
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('确定结束', key: ValueKey('end-label')),
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -360,53 +391,69 @@ class _RemindTypeTile extends StatelessWidget {
     required this.icon,
     required this.message,
     required this.onTap,
+    this.enabled = true,
+    this.isLoading = false,
   });
 
   final String label;
   final IconData icon;
   final String message;
   final VoidCallback onTap;
+  final bool enabled;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
       borderRadius: 24,
       padding: const EdgeInsets.all(AppSpacing.md),
-      onTap: onTap,
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.lightPink.withValues(alpha: 0.46),
-              borderRadius: BorderRadius.circular(16),
+      onTap: enabled ? onTap : null,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 120),
+        opacity: enabled || isLoading ? 1 : 0.62,
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.lightPink.withValues(alpha: 0.46),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Icon(icon, color: AppColors.deepPink, size: 24),
             ),
-            child: Icon(icon, color: AppColors.deepPink, size: 24),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.text,
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.text,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  message,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.caption.copyWith(fontSize: 12),
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Text(
+                    message,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(fontSize: 12),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            if (isLoading) ...[
+              const SizedBox(width: AppSpacing.sm),
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.2),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -565,7 +612,10 @@ class _PlanProgressCard extends StatelessWidget {
                 value: '${(plan.progress * 100).round()}%',
               ),
               const SizedBox(width: AppSpacing.sm),
-              _StatBlock(label: '总天数', value: '${plan.totalDays} 天'),
+              _StatBlock(
+                label: '总天数',
+                value: plan.hasDateRange ? '${plan.totalDays} 天' : '单次',
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
@@ -579,13 +629,25 @@ class _PlanProgressCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          Text(
-            '提醒 ${plan.reminderTime.format(context)}  ·  ${_formatDate(plan.startDate)} - ${_formatDate(plan.endDate)}',
-            style: AppTextStyles.caption,
-          ),
+          Text(_scheduleText(context), style: AppTextStyles.caption),
         ],
       ),
     );
+  }
+
+  String _scheduleText(BuildContext context) {
+    final parts = <String>[];
+    final reminderTime = plan.reminderTime;
+    if (reminderTime != null) {
+      parts.add('提醒 ${reminderTime.format(context)}');
+    }
+    if (plan.hasDateRange) {
+      parts.add(
+        '${_formatDate(plan.startDate)} - ${_formatDate(plan.endDate)}',
+      );
+    }
+    if (parts.isEmpty) return '未开启提醒和日期范围';
+    return parts.join('  ·  ');
   }
 
   String _formatDate(DateTime date) {

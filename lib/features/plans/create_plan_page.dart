@@ -32,7 +32,10 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   TimeOfDay _reminderTime = const TimeOfDay(hour: 8, minute: 0);
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now().add(const Duration(days: 30));
+  bool _reminderEnabled = false;
+  bool _dateRangeEnabled = false;
   bool _dailyRepeat = true;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -43,7 +46,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
       _nameController.text = plan.title;
       _descriptionController.text = plan.dailyTask;
       _selectedIconKey = plan.iconKey;
-      _reminderTime = plan.reminderTime;
+      _reminderEnabled = plan.hasReminder;
+      _reminderTime = plan.reminderTime ?? _reminderTime;
+      _dateRangeEnabled = plan.hasDateRange;
       _startDate = plan.startDate;
       _endDate = plan.endDate;
     } else {
@@ -109,55 +114,36 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               maxLines: 2,
             ),
             const SizedBox(height: AppSpacing.md),
-            _DateTimeField(
+            _OptionalSettingField(
               label: '提醒时间',
-              value: _reminderTime.format(context),
-              onTap: () async {
-                final picked = await showTimePicker(
-                  context: context,
-                  initialTime: _reminderTime,
-                );
-                if (picked != null) {
-                  setState(() => _reminderTime = picked);
-                }
-              },
+              value: _reminderEnabled ? _reminderTime.format(context) : '关闭',
+              enabled: _reminderEnabled,
+              onChanged: (value) => setState(() => _reminderEnabled = value),
+              onTap: _reminderEnabled ? _pickReminderTime : null,
             ),
             const SizedBox(height: AppSpacing.md),
-            _DateTimeField(
-              label: '开始日期',
-              value:
-                  '${_startDate.year}年${_startDate.month}月${_startDate.day}日',
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _startDate,
-                  firstDate: DateTime(2024),
-                  lastDate: DateTime(2030),
-                );
-                if (picked != null) {
-                  setState(() => _startDate = picked);
-                  if (_endDate.isBefore(_startDate)) {
-                    _endDate = _startDate.add(const Duration(days: 30));
-                  }
-                }
-              },
+            _OptionalSettingField(
+              label: '计划周期',
+              value: _dateRangeEnabled
+                  ? '${_formatDate(_startDate)} - ${_formatDate(_endDate)}'
+                  : '关闭',
+              enabled: _dateRangeEnabled,
+              onChanged: (value) => setState(() => _dateRangeEnabled = value),
             ),
-            const SizedBox(height: AppSpacing.md),
-            _DateTimeField(
-              label: '结束日期',
-              value: '${_endDate.year}年${_endDate.month}月${_endDate.day}日',
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _endDate,
-                  firstDate: _startDate,
-                  lastDate: DateTime(2030),
-                );
-                if (picked != null) {
-                  setState(() => _endDate = picked);
-                }
-              },
-            ),
+            if (_dateRangeEnabled) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _DateTimeField(
+                label: '开始日期',
+                value: _formatDate(_startDate),
+                onTap: _pickStartDate,
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _DateTimeField(
+                label: '结束日期',
+                value: _formatDate(_endDate),
+                onTap: _pickEndDate,
+              ),
+            ],
             const SizedBox(height: AppSpacing.md),
             AppCard(
               borderRadius: 28,
@@ -195,14 +181,56 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           child: PrimaryButton(
             label: widget.existingPlan != null ? '保存修改' : '保存计划',
             icon: Icons.save_rounded,
-            onPressed: () => _savePlan(),
+            isLoading: _saving,
+            onPressed: _saving ? null : () => _savePlan(),
           ),
         ),
       ),
     );
   }
 
+  Future<void> _pickReminderTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _reminderTime,
+    );
+    if (picked != null) {
+      setState(() => _reminderTime = picked);
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2030),
+    );
+    if (picked == null) return;
+
+    setState(() {
+      _startDate = picked;
+      if (_endDate.isBefore(_startDate)) {
+        _endDate = _startDate.add(const Duration(days: 30));
+      }
+    });
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: _startDate,
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      setState(() => _endDate = picked);
+    }
+  }
+
   Future<void> _savePlan() async {
+    if (_saving) return;
+
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
 
@@ -213,7 +241,12 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
 
     final existing = widget.existingPlan;
     final store = context.read<Store>();
+    final today = _todayOnly();
+    final startDate = _dateRangeEnabled ? _dateOnly(_startDate) : today;
+    final endDate = _dateRangeEnabled ? _dateOnly(_endDate) : today;
+    final reminderTime = _reminderEnabled ? _reminderTime : null;
 
+    setState(() => _saving = true);
     try {
       if (existing != null) {
         await store.updatePlan(
@@ -221,18 +254,21 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           title: name,
           dailyTask: description.isEmpty ? name : description,
           iconKey: _selectedIconKey,
-          reminderTime: _reminderTime,
-          startDate: _startDate,
-          endDate: _endDate,
+          reminderTime: reminderTime,
+          clearReminderTime: !_reminderEnabled,
+          startDate: startDate,
+          endDate: endDate,
+          hasDateRange: _dateRangeEnabled,
         );
       } else {
         await store.createPlan(
           title: name,
           isShared: _owner == PlanOwner.together,
           dailyTask: description.isEmpty ? name : description,
-          startDate: _startDate,
-          endDate: _endDate,
-          reminderTime: _reminderTime,
+          startDate: startDate,
+          endDate: endDate,
+          reminderTime: reminderTime,
+          hasDateRange: _dateRangeEnabled,
           iconKey: _selectedIconKey,
         );
       }
@@ -247,8 +283,23 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
       Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
+      debugPrint('Save plan failed: $error');
+      setState(() => _saving = false);
       _showError('保存失败，请稍后再试');
     }
+  }
+
+  DateTime _todayOnly() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.year}年${date.month}月${date.day}日';
   }
 
   void _showError(String message) {
@@ -355,9 +406,7 @@ class _PlanIconPicker extends StatelessWidget {
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppColors.background,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text(
           '删除自定义图标',
           style: AppTextStyles.title.copyWith(fontSize: 18),
@@ -1019,6 +1068,75 @@ class _FormFieldState extends State<_FormField> {
               ),
               style: AppTextStyles.body,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OptionalSettingField extends StatelessWidget {
+  const _OptionalSettingField({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.onChanged,
+    this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: enabled ? onTap : null,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: AppTextStyles.body.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.secondaryText,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(
+                      color: enabled ? AppColors.deepPink : AppColors.mutedText,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (enabled && onTap != null) ...[
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.deepPink,
+              size: 22,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+          ],
+          Switch.adaptive(
+            value: enabled,
+            activeColor: AppColors.deepPink,
+            onChanged: onChanged,
           ),
         ],
       ),

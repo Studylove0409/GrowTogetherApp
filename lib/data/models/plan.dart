@@ -44,6 +44,7 @@ class Plan {
     required this.startDate,
     required this.endDate,
     required this.reminderTime,
+    this.hasDateRange = true,
     this.partnerDoneToday = false,
     this.status = PlanStatus.active,
     this.endedAt,
@@ -63,7 +64,8 @@ class Plan {
   final String dailyTask;
   final DateTime startDate;
   final DateTime endDate;
-  final TimeOfDay reminderTime;
+  final TimeOfDay? reminderTime;
+  final bool hasDateRange;
   final bool partnerDoneToday;
   final PlanStatus status;
   final DateTime? endedAt;
@@ -79,13 +81,13 @@ class Plan {
 
   int get remainingDays => (totalDays - completedDays).clamp(0, totalDays);
 
+  bool get hasReminder => reminderTime != null;
+
   bool get isEnded => status == PlanStatus.ended;
 
-  bool get canCurrentUserCheckin =>
-      owner != PlanOwner.partner && !isEnded;
+  bool get canCurrentUserCheckin => owner != PlanOwner.partner && !isEnded;
 
-  bool get canCurrentUserEdit =>
-      owner != PlanOwner.partner && !isEnded;
+  bool get canCurrentUserEdit => owner != PlanOwner.partner && !isEnded;
 
   bool get isTogetherDoneToday => doneToday && partnerDoneToday;
 
@@ -117,6 +119,8 @@ class Plan {
     DateTime? startDate,
     DateTime? endDate,
     TimeOfDay? reminderTime,
+    bool clearReminderTime = false,
+    bool? hasDateRange,
     bool? partnerDoneToday,
     PlanStatus? status,
     DateTime? endedAt,
@@ -136,7 +140,10 @@ class Plan {
       dailyTask: dailyTask ?? this.dailyTask,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
-      reminderTime: reminderTime ?? this.reminderTime,
+      reminderTime: clearReminderTime
+          ? null
+          : (reminderTime ?? this.reminderTime),
+      hasDateRange: hasDateRange ?? this.hasDateRange,
       partnerDoneToday: partnerDoneToday ?? this.partnerDoneToday,
       status: status ?? this.status,
       endedAt: endedAt ?? this.endedAt,
