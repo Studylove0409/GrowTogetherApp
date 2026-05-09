@@ -34,10 +34,14 @@ class PlanListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progressText = plan.hasDateRange
-        ? '已坚持 ${plan.completedDays} 天'
-              '${plan.remainingDays > 0 ? ' · 剩余 ${plan.remainingDays} 天' : ''}'
-        : '已完成 ${plan.completedDays} 次';
+    final progressText = switch (plan.repeatType) {
+      PlanRepeatType.once => plan.isDoneForCurrentUser ? '已完成' : '待完成',
+      PlanRepeatType.daily =>
+        plan.hasDateRange
+            ? '已坚持 ${plan.completedDays} 天'
+                  '${plan.remainingDays > 0 ? ' · 剩余 ${plan.remainingDays} 天' : ''}'
+            : '已完成 ${plan.completedDays} 次',
+    };
 
     return AppCard(
       borderRadius: 26,
@@ -66,6 +70,18 @@ class PlanListTile extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.caption.copyWith(fontSize: 13),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      plan.repeatLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.tiny.copyWith(
+                        color: plan.isOverdue
+                            ? AppColors.reminder
+                            : AppColors.secondaryText,
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ],
                 ),

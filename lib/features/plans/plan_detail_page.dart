@@ -10,6 +10,7 @@ import '../../data/models/plan.dart';
 import '../../data/models/reminder.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/primary_pill_button.dart';
 import '../checkin/checkin_page.dart';
 import 'checkin_record_page.dart';
 import 'create_plan_page.dart';
@@ -53,15 +54,9 @@ class PlanDetailPage extends StatelessWidget {
               32,
             ),
             children: [
-              _PlanHeroCard(plan: plan),
+              _PlanOverviewCard(plan: plan),
               const SizedBox(height: AppSpacing.md),
-              _PlanStatusCard(plan: plan),
-              const SizedBox(height: AppSpacing.md),
-              _PlanProgressCard(plan: plan),
-              if (plan.owner == PlanOwner.together) ...[
-                const SizedBox(height: AppSpacing.md),
-                _TogetherCheckinCard(plan: plan),
-              ],
+              _TodayActionCard(plan: plan),
               const SizedBox(height: AppSpacing.md),
               _RecentCheckinsCard(
                 plan: plan,
@@ -110,17 +105,103 @@ class PlanDetailPage extends StatelessWidget {
       );
     }
 
+    if (plan.owner == PlanOwner.together) {
+      if (plan.isTogetherDoneToday) {
+        return Row(
+          children: [
+            Expanded(
+              child: _PlanActionButton(
+                label: '编辑',
+                icon: Icons.edit_rounded,
+                onPressed: () => _openEditPage(context, plan),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            const Expanded(
+              child: _CompletedActionPill(
+                label: '双方已完成',
+                icon: Icons.verified_rounded,
+              ),
+            ),
+          ],
+        );
+      }
+
+      if (plan.doneToday) {
+        return Row(
+          children: [
+            Expanded(
+              child: _PlanActionButton(
+                label: '编辑',
+                icon: Icons.edit_rounded,
+                onPressed: () => _openEditPage(context, plan),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: PrimaryPillButton(
+                label: '提醒 TA',
+                icon: Icons.notifications_rounded,
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                onPressed: () => _showRemindSheet(context, plan),
+              ),
+            ),
+          ],
+        );
+      }
+
+      return Row(
+        children: [
+          Expanded(
+            child: _PlanActionButton(
+              label: '提醒 TA',
+              icon: Icons.notifications_rounded,
+              onPressed: () => _showRemindSheet(context, plan),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: PrimaryPillButton(
+              label: '打卡',
+              icon: Icons.check_circle_rounded,
+              height: 52,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              onPressed: plan.canCurrentUserCheckin
+                  ? () => _openCheckinPage(context, plan)
+                  : () => _showCannotCheckinMessage(context),
+            ),
+          ),
+        ],
+      );
+    }
+
+    if (plan.isDoneForCurrentUser) {
+      return Row(
+        children: [
+          Expanded(
+            child: _PlanActionButton(
+              label: '编辑',
+              icon: Icons.edit_rounded,
+              onPressed: () => _openEditPage(context, plan),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          const Expanded(
+            child: _CompletedActionPill(
+              label: '今日已完成',
+              icon: Icons.check_circle_rounded,
+            ),
+          ),
+        ],
+      );
+    }
+
     return Row(
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => CreatePlanPage(existingPlan: plan),
-                ),
-              );
-            },
+            onPressed: () => _openEditPage(context, plan),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.deepPink,
               side: const BorderSide(color: AppColors.deepPink),
@@ -141,24 +222,34 @@ class PlanDetailPage extends StatelessWidget {
             label: '去打卡',
             icon: Icons.check_circle_rounded,
             onPressed: plan.canCurrentUserCheckin
-                ? () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) => CheckinPage(planId: plan.id),
-                      ),
-                    );
-                  }
-                : () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('不能代替 TA 打卡'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
+                ? () => _openCheckinPage(context, plan)
+                : () => _showCannotCheckinMessage(context),
           ),
         ),
       ],
+    );
+  }
+
+  void _openEditPage(BuildContext context, Plan plan) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => CreatePlanPage(existingPlan: plan),
+      ),
+    );
+  }
+
+  void _openCheckinPage(BuildContext context, Plan plan) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => CheckinPage(planId: plan.id)),
+    );
+  }
+
+  void _showCannotCheckinMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('不能代替 TA 打卡'),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
@@ -385,6 +476,35 @@ class PlanDetailPage extends StatelessWidget {
   }
 }
 
+class _PlanActionButton extends StatelessWidget {
+  const _PlanActionButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.deepPink,
+        side: BorderSide(color: AppColors.deepPink.withValues(alpha: 0.56)),
+        backgroundColor: Colors.white.withValues(alpha: 0.66),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+        textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+      ),
+    );
+  }
+}
+
 class _RemindTypeTile extends StatelessWidget {
   const _RemindTypeTile({
     required this.label,
@@ -459,195 +579,234 @@ class _RemindTypeTile extends StatelessWidget {
   }
 }
 
-class _PlanHeroCard extends StatelessWidget {
-  const _PlanHeroCard({required this.plan});
+class _CompletedActionPill extends StatelessWidget {
+  const _CompletedActionPill({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppColors.success.withValues(alpha: 0.34),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 22, color: AppColors.successText),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.successText,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanOverviewCard extends StatelessWidget {
+  const _PlanOverviewCard({required this.plan});
 
   final Plan plan;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      borderRadius: 28,
+    final status = _planStatusUi(plan);
+
+    return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.lg),
-      backgroundColor: AppColors.lightPink.withValues(alpha: 0.46),
-      child: Row(
-        children: [
-          Container(
-            width: 58,
-            height: 58,
-            decoration: BoxDecoration(
-              color: plan.iconBackgroundColor.withValues(alpha: 0.72),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Icon(plan.icon, color: plan.iconColor),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(plan.title, style: AppTextStyles.title),
-                const SizedBox(height: AppSpacing.xs),
-                Text(plan.subtitle, style: AppTextStyles.caption),
-              ],
-            ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(32),
+        gradient: LinearGradient(
+          colors: [
+            AppColors.lightPink.withValues(alpha: 0.72),
+            AppColors.paperWarm.withValues(alpha: 0.56),
+            AppColors.surface,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.9),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.deepPink.withValues(alpha: 0.1),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
-    );
-  }
-}
-
-class _PlanStatusCard extends StatelessWidget {
-  const _PlanStatusCard({required this.plan});
-
-  final Plan plan;
-
-  @override
-  Widget build(BuildContext context) {
-    final (statusLabel, statusColor) = switch (plan.owner) {
-      PlanOwner.me =>
-        plan.doneToday
-            ? ('已打卡', AppColors.successText)
-            : ('待打卡', AppColors.deepPink),
-      PlanOwner.partner =>
-        plan.partnerDoneToday
-            ? ('TA 已打卡', AppColors.successText)
-            : ('TA 待打卡', AppColors.deepPink),
-      PlanOwner.together => switch (plan.togetherStatus) {
-        TogetherStatus.bothDone => ('双方已完成', AppColors.successText),
-        TogetherStatus.onlyMeDone => ('我已打卡', AppColors.reminder),
-        TogetherStatus.meNotDone => ('我待打卡', AppColors.deepPink),
-      },
-    };
-
-    return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: statusColor.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              statusColor == AppColors.successText
-                  ? Icons.check_circle_rounded
-                  : Icons.radio_button_unchecked_rounded,
-              color: statusColor,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '今日状态',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.secondaryText,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  statusLabel,
-                  style: AppTextStyles.title.copyWith(color: statusColor),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          if (plan.owner == PlanOwner.together)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color:
-                    (plan.partnerDoneToday
-                            ? AppColors.success
-                            : AppColors.reminder)
-                        .withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                plan.partnerDoneToday ? 'TA 已打卡' : 'TA 待打卡',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: plan.partnerDoneToday
-                      ? AppColors.successText
-                      : AppColors.reminder,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PlanProgressCard extends StatelessWidget {
-  const _PlanProgressCard({required this.plan});
-
-  final Plan plan;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _StatBlock(label: '已坚持', value: '${plan.completedDays} 天'),
-              const SizedBox(width: AppSpacing.sm),
-              _StatBlock(
-                label: '完成率',
-                value: '${(plan.progress * 100).round()}%',
+              Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  color: plan.iconBackgroundColor.withValues(alpha: 0.78),
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [
+                    BoxShadow(
+                      color: plan.iconColor.withValues(alpha: 0.14),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Icon(plan.icon, color: plan.iconColor, size: 30),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              _StatBlock(
-                label: '总天数',
-                value: plan.hasDateRange ? '${plan.totalDays} 天' : '单次',
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: AppSpacing.xs,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        _InfoBadge(
+                          label: status.label,
+                          icon: status.icon,
+                          color: status.color,
+                          filled: true,
+                        ),
+                        _InfoBadge(
+                          label: plan.repeatLabel,
+                          icon: plan.isDaily
+                              ? Icons.event_repeat_rounded
+                              : Icons.task_alt_rounded,
+                          color: AppColors.deepPink,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      plan.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.title.copyWith(fontSize: 28),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      plan.subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(fontSize: 14),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: plan.progress.clamp(0, 1),
-              minHeight: 12,
-              backgroundColor: AppColors.lightPink.withValues(alpha: 0.66),
-              color: AppColors.deepPink,
+          _ScheduleStrip(plan: plan),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoBadge extends StatelessWidget {
+  const _InfoBadge({
+    required this.label,
+    required this.icon,
+    required this.color,
+    this.filled = false,
+  });
+
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: filled ? 0.18 : 0.1),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.16)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text(_scheduleText(context), style: AppTextStyles.caption),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScheduleStrip extends StatelessWidget {
+  const _ScheduleStrip({required this.plan});
+
+  final Plan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Wrap(
+        spacing: AppSpacing.md,
+        runSpacing: AppSpacing.xs,
+        children: [
+          _InlineMeta(
+            icon: Icons.notifications_none_rounded,
+            text: plan.reminderTime == null
+                ? '未开启提醒'
+                : '提醒 ${plan.reminderTime!.format(context)}',
+          ),
+          _InlineMeta(icon: Icons.date_range_rounded, text: _dateText(plan)),
         ],
       ),
     );
   }
 
-  String _scheduleText(BuildContext context) {
-    final parts = <String>[];
-    final reminderTime = plan.reminderTime;
-    if (reminderTime != null) {
-      parts.add('提醒 ${reminderTime.format(context)}');
-    }
+  String _dateText(Plan plan) {
     if (plan.hasDateRange) {
-      parts.add(
-        '${_formatDate(plan.startDate)} - ${_formatDate(plan.endDate)}',
-      );
+      return '${_formatDate(plan.startDate)} - ${_formatDate(plan.endDate)}';
     }
-    if (parts.isEmpty) return '未开启提醒和日期范围';
-    return parts.join('  ·  ');
+    if (plan.isDaily) return '长期每日';
+    return '单次 ${_formatDate(plan.startDate)}';
   }
 
   String _formatDate(DateTime date) {
@@ -655,8 +814,204 @@ class _PlanProgressCard extends StatelessWidget {
   }
 }
 
-class _StatBlock extends StatelessWidget {
-  const _StatBlock({required this.label, required this.value});
+class _InlineMeta extends StatelessWidget {
+  const _InlineMeta({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: AppColors.secondaryText),
+        const SizedBox(width: 5),
+        Text(
+          text,
+          style: AppTextStyles.caption.copyWith(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TodayActionCard extends StatelessWidget {
+  const _TodayActionCard({required this.plan});
+
+  final Plan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = _planStatusUi(plan);
+
+    return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      backgroundColor: AppColors.surface,
+      showDashedBorder: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '今日行动',
+                  style: AppTextStyles.section.copyWith(fontSize: 22),
+                ),
+              ),
+              _InfoBadge(
+                label: status.label,
+                icon: status.icon,
+                color: status.color,
+                filled: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (plan.owner == PlanOwner.together) ...[
+            _CoupleStatusPanel(plan: plan),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          Row(
+            children: [
+              _MetricTile(
+                label: plan.isDaily ? '已坚持' : '完成情况',
+                value: plan.isDaily
+                    ? '${plan.completedDays}天'
+                    : plan.isDoneForCurrentUser
+                    ? '已完成'
+                    : '待完成',
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _MetricTile(label: '完成率', value: _progressLabel(plan)),
+              const SizedBox(width: AppSpacing.sm),
+              _MetricTile(label: '周期', value: _periodLabel(plan)),
+            ],
+          ),
+          if (plan.isDaily && plan.hasDateRange) ...[
+            const SizedBox(height: AppSpacing.md),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: plan.progress.clamp(0, 1),
+                minHeight: 10,
+                backgroundColor: AppColors.lightPink.withValues(alpha: 0.58),
+                color: AppColors.deepPink,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _progressLabel(Plan plan) {
+    if (plan.isOnce) return plan.isDoneForCurrentUser ? '100%' : '0%';
+    if (!plan.hasDateRange) return '长期';
+    return '${(plan.progress.clamp(0, 1) * 100).round()}%';
+  }
+
+  String _periodLabel(Plan plan) {
+    if (plan.isOnce) return '单次';
+    if (!plan.hasDateRange) return '每日';
+    return '${plan.totalDays}天';
+  }
+}
+
+class _CoupleStatusPanel extends StatelessWidget {
+  const _CoupleStatusPanel({required this.plan});
+
+  final Plan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.blush.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _PersonStatusTile(
+              label: '我',
+              done: plan.doneToday,
+              color: AppColors.deepPink,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _PersonStatusTile(
+              label: 'TA',
+              done: plan.partnerDoneToday,
+              color: AppColors.successText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonStatusTile extends StatelessWidget {
+  const _PersonStatusTile({
+    required this.label,
+    required this.done,
+    required this.color,
+  });
+
+  final String label;
+  final bool done;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final effectiveColor = done ? color : AppColors.secondaryText;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.md,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            done
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: effectiveColor,
+            size: 22,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '$label${done ? '已打卡' : '待打卡'}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.body.copyWith(
+                color: effectiveColor,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  const _MetricTile({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -665,22 +1020,39 @@ class _StatBlock extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        height: 86,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.sm,
+        ),
         decoration: BoxDecoration(
-          color: AppColors.lightPink.withValues(alpha: 0.46),
-          borderRadius: BorderRadius.circular(18),
+          color: AppColors.lightPink.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(
-              value,
-              style: AppTextStyles.title.copyWith(
-                color: AppColors.deepPink,
-                fontSize: 24,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: AppTextStyles.title.copyWith(
+                  color: AppColors.deepPink,
+                  fontSize: 24,
+                ),
               ),
             ),
-            const SizedBox(height: 2),
-            Text(label, style: AppTextStyles.caption),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ],
         ),
       ),
@@ -688,70 +1060,58 @@ class _StatBlock extends StatelessWidget {
   }
 }
 
-class _TogetherCheckinCard extends StatelessWidget {
-  const _TogetherCheckinCard({required this.plan});
+({String label, Color color, IconData icon}) _planStatusUi(Plan plan) {
+  if (plan.isOverdue) {
+    return (
+      label: '已逾期',
+      color: AppColors.reminder,
+      icon: Icons.warning_rounded,
+    );
+  }
 
-  final Plan plan;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('今日共同打卡', style: AppTextStyles.section),
-          const SizedBox(height: AppSpacing.md),
-          _CheckinStatusRow(
-            label: '我',
-            done: plan.doneToday,
-            activeColor: AppColors.success,
-          ),
-          const Divider(height: 20, color: AppColors.line),
-          _CheckinStatusRow(
-            label: 'TA',
-            done: plan.partnerDoneToday,
-            activeColor: AppColors.primary,
-          ),
-        ],
+  return switch (plan.owner) {
+    PlanOwner.me =>
+      plan.doneToday
+          ? (
+              label: '已打卡',
+              color: AppColors.successText,
+              icon: Icons.check_circle_rounded,
+            )
+          : (
+              label: '待打卡',
+              color: AppColors.deepPink,
+              icon: Icons.radio_button_unchecked_rounded,
+            ),
+    PlanOwner.partner =>
+      plan.partnerDoneToday
+          ? (
+              label: 'TA 已打卡',
+              color: AppColors.successText,
+              icon: Icons.check_circle_rounded,
+            )
+          : (
+              label: 'TA 待打卡',
+              color: AppColors.deepPink,
+              icon: Icons.radio_button_unchecked_rounded,
+            ),
+    PlanOwner.together => switch (plan.togetherStatus) {
+      TogetherStatus.bothDone => (
+        label: '双方已完成',
+        color: AppColors.successText,
+        icon: Icons.verified_rounded,
       ),
-    );
-  }
-}
-
-class _CheckinStatusRow extends StatelessWidget {
-  const _CheckinStatusRow({
-    required this.label,
-    required this.done,
-    required this.activeColor,
-  });
-
-  final String label;
-  final bool done;
-  final Color activeColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(
-          done
-              ? Icons.check_circle_rounded
-              : Icons.radio_button_unchecked_rounded,
-          color: done ? activeColor : AppColors.secondaryText,
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Text(
-          '$label${done ? '已打卡' : '待打卡'}',
-          style: AppTextStyles.body.copyWith(
-            fontWeight: FontWeight.w700,
-            color: done ? activeColor : AppColors.secondaryText,
-          ),
-        ),
-      ],
-    );
-  }
+      TogetherStatus.onlyMeDone => (
+        label: '等 TA',
+        color: AppColors.reminder,
+        icon: Icons.hourglass_top_rounded,
+      ),
+      TogetherStatus.meNotDone => (
+        label: '我待打卡',
+        color: AppColors.deepPink,
+        icon: Icons.radio_button_unchecked_rounded,
+      ),
+    },
+  };
 }
 
 class _RecentCheckinsCard extends StatelessWidget {
@@ -766,15 +1126,15 @@ class _RecentCheckinsCard extends StatelessWidget {
 
     return AppCard(
       borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      backgroundColor: AppColors.surface,
+      showDashedBorder: false,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(
-                child: Text('最近打卡记录', style: AppTextStyles.section),
-              ),
+              const Expanded(child: Text('最近记录', style: AppTextStyles.section)),
               TextButton(
                 onPressed: onViewAll,
                 style: TextButton.styleFrom(
@@ -783,7 +1143,7 @@ class _RecentCheckinsCard extends StatelessWidget {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: const Text(
-                  '打卡记录',
+                  '全部',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
@@ -795,50 +1155,102 @@ class _RecentCheckinsCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           if (records.isEmpty)
-            Text('还没有打卡记录', style: AppTextStyles.caption)
-          else
-            ...records.map(
-              (record) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: Row(
-                  children: [
-                    Icon(
-                      record.completed
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      size: 18,
-                      color: record.completed
-                          ? AppColors.successText
-                          : AppColors.reminder,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${_formatDate(record.date)} · ${_moodLabel(record.mood)}',
-                            style: AppTextStyles.caption.copyWith(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (record.note.isNotEmpty)
-                            Text(
-                              record.note,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.caption,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.lg,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.blush.withValues(alpha: 0.48),
+                borderRadius: BorderRadius.circular(22),
+              ),
+              child: Text(
+                '还没有记录，完成一次就会出现在这里',
+                style: AppTextStyles.caption.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
+              ),
+            )
+          else
+            ...records.indexed.map(
+              (entry) => _CheckinTimelineRow(
+                record: entry.$2,
+                isLast: entry.$1 == records.length - 1,
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _CheckinTimelineRow extends StatelessWidget {
+  const _CheckinTimelineRow({required this.record, required this.isLast});
+
+  final CheckinRecord record;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = record.completed ? AppColors.successText : AppColors.reminder;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Icon(
+                record.completed
+                    ? Icons.check_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                color: color,
+                size: 17,
+              ),
+            ),
+            if (!isLast)
+              Container(
+                width: 2,
+                height: 34,
+                color: AppColors.line.withValues(alpha: 0.7),
+              ),
+          ],
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${_formatDate(record.date)} · ${_moodLabel(record.mood)}',
+                  style: AppTextStyles.body.copyWith(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                if (record.note.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    record.note,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(fontSize: 12),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

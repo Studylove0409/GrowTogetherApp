@@ -34,7 +34,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   DateTime _endDate = DateTime.now().add(const Duration(days: 30));
   bool _reminderEnabled = false;
   bool _dateRangeEnabled = false;
-  bool _dailyRepeat = true;
+  PlanRepeatType _repeatType = PlanRepeatType.once;
   bool _saving = false;
 
   @override
@@ -48,6 +48,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
       _selectedIconKey = plan.iconKey;
       _reminderEnabled = plan.hasReminder;
       _reminderTime = plan.reminderTime ?? _reminderTime;
+      _repeatType = plan.repeatType;
       _dateRangeEnabled = plan.hasDateRange;
       _startDate = plan.startDate;
       _endDate = plan.endDate;
@@ -114,6 +115,18 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               maxLines: 2,
             ),
             const SizedBox(height: AppSpacing.md),
+            _PlanTypeSelector(
+              selected: _repeatType,
+              onChanged: (repeatType) {
+                setState(() {
+                  _repeatType = repeatType;
+                  if (repeatType == PlanRepeatType.once) {
+                    _dateRangeEnabled = false;
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: AppSpacing.md),
             _OptionalSettingField(
               label: '提醒时间',
               value: _reminderEnabled ? _reminderTime.format(context) : '关闭',
@@ -121,51 +134,31 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               onChanged: (value) => setState(() => _reminderEnabled = value),
               onTap: _reminderEnabled ? _pickReminderTime : null,
             ),
-            const SizedBox(height: AppSpacing.md),
-            _OptionalSettingField(
-              label: '计划周期',
-              value: _dateRangeEnabled
-                  ? '${_formatDate(_startDate)} - ${_formatDate(_endDate)}'
-                  : '关闭',
-              enabled: _dateRangeEnabled,
-              onChanged: (value) => setState(() => _dateRangeEnabled = value),
-            ),
-            if (_dateRangeEnabled) ...[
-              const SizedBox(height: AppSpacing.sm),
-              _DateTimeField(
-                label: '开始日期',
-                value: _formatDate(_startDate),
-                onTap: _pickStartDate,
+            if (_repeatType == PlanRepeatType.daily) ...[
+              const SizedBox(height: AppSpacing.md),
+              _OptionalSettingField(
+                label: '计划周期',
+                value: _dateRangeEnabled
+                    ? '${_formatDate(_startDate)} - ${_formatDate(_endDate)}'
+                    : '长期每日',
+                enabled: _dateRangeEnabled,
+                onChanged: (value) => setState(() => _dateRangeEnabled = value),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              _DateTimeField(
-                label: '结束日期',
-                value: _formatDate(_endDate),
-                onTap: _pickEndDate,
-              ),
+              if (_dateRangeEnabled) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _DateTimeField(
+                  label: '开始日期',
+                  value: _formatDate(_startDate),
+                  onTap: _pickStartDate,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                _DateTimeField(
+                  label: '结束日期',
+                  value: _formatDate(_endDate),
+                  onTap: _pickEndDate,
+                ),
+              ],
             ],
-            const SizedBox(height: AppSpacing.md),
-            AppCard(
-              borderRadius: 28,
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '每日重复',
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  Switch.adaptive(
-                    value: _dailyRepeat,
-                    activeColor: AppColors.deepPink,
-                    onChanged: (value) => setState(() => _dailyRepeat = value),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
@@ -242,8 +235,22 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     final existing = widget.existingPlan;
     final store = context.read<Store>();
     final today = _todayOnly();
-    final startDate = _dateRangeEnabled ? _dateOnly(_startDate) : today;
-    final endDate = _dateRangeEnabled ? _dateOnly(_endDate) : today;
+    final effectiveHasDateRange =
+        _repeatType == PlanRepeatType.daily && _dateRangeEnabled;
+    final preserveExistingDates =
+        existing != null &&
+        !effectiveHasDateRange &&
+        existing.repeatType == _repeatType;
+    final startDate = effectiveHasDateRange
+        ? _dateOnly(_startDate)
+        : preserveExistingDates
+        ? _dateOnly(existing.startDate)
+        : today;
+    final endDate = effectiveHasDateRange
+        ? _dateOnly(_endDate)
+        : preserveExistingDates
+        ? _dateOnly(existing.endDate)
+        : today;
     final reminderTime = _reminderEnabled ? _reminderTime : null;
 
     setState(() => _saving = true);
@@ -256,9 +263,10 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           iconKey: _selectedIconKey,
           reminderTime: reminderTime,
           clearReminderTime: !_reminderEnabled,
+          repeatType: _repeatType,
           startDate: startDate,
           endDate: endDate,
-          hasDateRange: _dateRangeEnabled,
+          hasDateRange: effectiveHasDateRange,
         );
       } else {
         await store.createPlan(
@@ -268,7 +276,8 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           startDate: startDate,
           endDate: endDate,
           reminderTime: reminderTime,
-          hasDateRange: _dateRangeEnabled,
+          repeatType: _repeatType,
+          hasDateRange: effectiveHasDateRange,
           iconKey: _selectedIconKey,
         );
       }
@@ -305,6 +314,118 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+}
+
+class _PlanTypeSelector extends StatelessWidget {
+  const _PlanTypeSelector({required this.selected, required this.onChanged});
+
+  final PlanRepeatType selected;
+  final ValueChanged<PlanRepeatType> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '计划类型',
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Expanded(
+                child: _PlanTypeOption(
+                  label: '单次计划',
+                  icon: Icons.task_alt_rounded,
+                  selected: selected == PlanRepeatType.once,
+                  onTap: () => onChanged(PlanRepeatType.once),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: _PlanTypeOption(
+                  label: '每日打卡',
+                  icon: Icons.event_repeat_rounded,
+                  selected: selected == PlanRepeatType.daily,
+                  onTap: () => onChanged(PlanRepeatType.daily),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanTypeOption extends StatelessWidget {
+  const _PlanTypeOption({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.lightPink.withValues(alpha: 0.76)
+              : Colors.white.withValues(alpha: 0.68),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected
+                ? AppColors.deepPink
+                : Colors.white.withValues(alpha: 0.74),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              icon,
+              color: selected ? AppColors.deepPink : AppColors.secondaryText,
+              size: 20,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.body.copyWith(
+                  color: selected
+                      ? AppColors.deepPink
+                      : AppColors.secondaryText,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

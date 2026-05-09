@@ -497,6 +497,7 @@ class _HeartBubble extends StatelessWidget {
 // ========================= 辅助函数 =========================
 
 String _statusLabel(Plan plan) {
+  if (plan.isOverdue) return '已逾期';
   return switch (plan.owner) {
     PlanOwner.partner => plan.partnerDoneToday ? 'TA已完成' : 'TA待打卡',
     PlanOwner.together => plan.doneToday ? '我已打卡' : '待打卡',
@@ -505,6 +506,7 @@ String _statusLabel(Plan plan) {
 }
 
 Color _statusColor(Plan plan) {
+  if (plan.isOverdue) return AppColors.reminder;
   return plan.isDoneForCurrentUser ? AppColors.successText : AppColors.deepPink;
 }
 

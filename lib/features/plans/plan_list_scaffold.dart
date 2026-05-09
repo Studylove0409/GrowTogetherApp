@@ -141,7 +141,9 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
 
   Widget _buildPlanTile(Plan plan) {
     if (plan.owner == PlanOwner.together) {
-      final (label, color, icon) = _togetherStatusUI(plan.togetherStatus);
+      final (label, color, icon) = plan.isOverdue
+          ? ('已逾期', AppColors.reminder, Icons.warning_rounded)
+          : _togetherStatusUI(plan.togetherStatus);
       return PlanListTile(
         plan: plan,
         statusLabel: label,
@@ -154,8 +156,16 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     final done = plan.isDoneForCurrentUser;
     return PlanListTile(
       plan: plan,
-      statusLabel: done ? '已打卡' : '待打卡',
-      statusColor: done ? AppColors.successText : AppColors.deepPink,
+      statusLabel: plan.isOverdue
+          ? '已逾期'
+          : done
+          ? '已打卡'
+          : '待打卡',
+      statusColor: plan.isOverdue
+          ? AppColors.reminder
+          : done
+          ? AppColors.successText
+          : AppColors.deepPink,
       statusIcon: done
           ? Icons.check_circle_rounded
           : Icons.radio_button_unchecked_rounded,

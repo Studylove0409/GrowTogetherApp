@@ -20,7 +20,8 @@ class PlanRepository {
     final coupleId = await _activeCoupleId();
     if (coupleId == null) return [];
 
-    return _fetchPlans(coupleId, currentUserId, status: 'active');
+    final plans = await _fetchPlans(coupleId, currentUserId);
+    return plans.where(_isVisibleInActiveLists).toList();
   }
 
   Future<List<Plan>> fetchAllPlans() async {
@@ -80,6 +81,7 @@ class PlanRepository {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
@@ -88,10 +90,13 @@ class PlanRepository {
       throw const PostgrestException(message: 'no active couple relationship');
     }
 
+    final effectiveHasDateRange =
+        repeatType == PlanRepeatType.daily && hasDateRange;
     final payload = {
       'couple_id': coupleId,
       'creator_id': _currentUserId,
       'plan_type': isShared ? 'shared' : 'personal',
+      'repeat_type': _fromRepeatType(repeatType),
       'title': title,
       'description': dailyTask,
       'daily_task': dailyTask,
@@ -99,7 +104,7 @@ class PlanRepository {
       'start_date': _formatDate(startDate),
       'end_date': _formatDate(endDate),
       'remind_time': reminderTime == null ? null : _fromTimeOfDay(reminderTime),
-      'has_date_range': hasDateRange,
+      'has_date_range': effectiveHasDateRange,
     };
 
     final result = await _insertPlanWithScheduleFallback(payload);
@@ -111,11 +116,17 @@ class PlanRepository {
       currentUserId: _currentUserId!,
       partnerId: await _partnerId(coupleId) ?? '',
     );
-    if (result.containsKey('has_date_range')) return plan;
+    if (result.containsKey('has_date_range') &&
+        result.containsKey('repeat_type')) {
+      return plan;
+    }
 
     return plan.copyWith(
-      hasDateRange: hasDateRange,
-      totalDays: hasDateRange ? endDate.difference(startDate).inDays + 1 : 1,
+      repeatType: repeatType,
+      hasDateRange: effectiveHasDateRange,
+      totalDays: effectiveHasDateRange
+          ? endDate.difference(startDate).inDays + 1
+          : 1,
     );
   }
 
@@ -126,6 +137,7 @@ class PlanRepository {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,
@@ -137,6 +149,9 @@ class PlanRepository {
       updates['description'] = dailyTask;
     }
     if (iconKey != null) updates['icon_key'] = iconKey;
+    if (repeatType != null) {
+      updates['repeat_type'] = _fromRepeatType(repeatType);
+    }
     if (clearReminderTime) {
       updates['remind_time'] = null;
     } else if (reminderTime != null) {
@@ -151,13 +166,11 @@ class PlanRepository {
     try {
       await _supabase.from('plans').update(updates).eq('id', planId);
     } on PostgrestException catch (error) {
-      if (!_isMissingHasDateRangeColumn(error) ||
-          !updates.containsKey('has_date_range')) {
+      if (!_isMissingOptionalPlanColumn(error)) {
         rethrow;
       }
 
-      final fallbackUpdates = Map<String, dynamic>.of(updates)
-        ..remove('has_date_range');
+      final fallbackUpdates = _withoutOptionalPlanColumns(updates);
       if (fallbackUpdates.isEmpty) return;
       await _supabase.from('plans').update(fallbackUpdates).eq('id', planId);
     }
@@ -219,6 +232,7 @@ class PlanRepository {
     final startDate = DateTime.parse(row['start_date'] as String);
     final endDate = DateTime.parse(row['end_date'] as String);
     final hasDateRange = row['has_date_range'] as bool? ?? true;
+    final repeatType = _toRepeatType(row['repeat_type'] as String?);
     final description = row['description'] as String?;
     final dailyTask = row['daily_task'] as String;
 
@@ -249,6 +263,7 @@ class PlanRepository {
       startDate: startDate,
       endDate: endDate,
       reminderTime: _toTimeOfDay(row['remind_time'] as String?),
+      repeatType: repeatType,
       hasDateRange: hasDateRange,
       partnerDoneToday: todayStatus.partnerCompleted,
       status: _toStatus(row['status'] as String?),
@@ -290,6 +305,15 @@ class PlanRepository {
   PlanStatus _toStatus(String? dbStatus) {
     return dbStatus == 'ended' ? PlanStatus.ended : PlanStatus.active;
   }
+
+  PlanRepeatType _toRepeatType(String? dbRepeatType) {
+    return dbRepeatType == 'once' ? PlanRepeatType.once : PlanRepeatType.daily;
+  }
+
+  String _fromRepeatType(PlanRepeatType repeatType) => switch (repeatType) {
+    PlanRepeatType.once => 'once',
+    PlanRepeatType.daily => 'daily',
+  };
 
   CheckinMood? _toMood(String? dbMood) => switch (dbMood) {
     'happy' => CheckinMood.happy,
@@ -390,10 +414,9 @@ class PlanRepository {
     try {
       return await _supabase.from('plans').insert(payload).select().single();
     } on PostgrestException catch (error) {
-      if (!_isMissingHasDateRangeColumn(error)) rethrow;
+      if (!_isMissingOptionalPlanColumn(error)) rethrow;
 
-      final fallbackPayload = Map<String, dynamic>.of(payload)
-        ..remove('has_date_range');
+      final fallbackPayload = _withoutOptionalPlanColumns(payload);
       return await _supabase
           .from('plans')
           .insert(fallbackPayload)
@@ -402,12 +425,29 @@ class PlanRepository {
     }
   }
 
-  bool _isMissingHasDateRangeColumn(PostgrestException error) {
+  bool _isMissingOptionalPlanColumn(PostgrestException error) {
     final message = error.message.toLowerCase();
-    return message.contains('has_date_range') &&
+    return (message.contains('has_date_range') ||
+            message.contains('repeat_type')) &&
         (error.code == 'PGRST204' ||
             error.code == '42703' ||
             message.contains('column'));
+  }
+
+  Map<String, dynamic> _withoutOptionalPlanColumns(Map<String, dynamic> input) {
+    return Map<String, dynamic>.of(input)
+      ..remove('has_date_range')
+      ..remove('repeat_type');
+  }
+
+  bool _isVisibleInActiveLists(Plan plan) {
+    if (!plan.isEnded) return true;
+    final endedAt = plan.endedAt;
+    if (endedAt == null || !plan.isOnce) return false;
+    final now = DateTime.now();
+    return endedAt.year == now.year &&
+        endedAt.month == now.month &&
+        endedAt.day == now.day;
   }
 
   String _formatDate(DateTime date) {

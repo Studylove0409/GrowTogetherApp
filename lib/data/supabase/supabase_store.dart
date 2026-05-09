@@ -256,6 +256,7 @@ class SupabaseStore extends Store {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
@@ -266,6 +267,7 @@ class SupabaseStore extends Store {
       startDate: startDate,
       endDate: endDate,
       reminderTime: reminderTime,
+      repeatType: repeatType,
       hasDateRange: hasDateRange,
       iconKey: iconKey,
     );
@@ -285,6 +287,7 @@ class SupabaseStore extends Store {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,
@@ -296,6 +299,7 @@ class SupabaseStore extends Store {
       iconKey: iconKey,
       reminderTime: reminderTime,
       clearReminderTime: clearReminderTime,
+      repeatType: repeatType,
       startDate: startDate,
       endDate: endDate,
       hasDateRange: hasDateRange,
@@ -341,6 +345,7 @@ class SupabaseStore extends Store {
       mood: mood,
       note: note,
     );
+    await _finishOncePlanIfComplete(planId);
     await _loadPlans();
     notifyListeners();
   }
@@ -356,6 +361,7 @@ class SupabaseStore extends Store {
       mood: CheckinMood.happy,
       note: '',
     );
+    await _finishOncePlanIfComplete(planId);
     await _loadPlans();
     notifyListeners();
   }
@@ -415,21 +421,23 @@ class SupabaseStore extends Store {
   // ========================= 辅助 =========================
 
   static int planPriority(Plan plan) {
+    if (plan.isOverdue) return 0;
+
     final myUndone = switch (plan.owner) {
       PlanOwner.me => !plan.doneToday,
       PlanOwner.together => !plan.doneToday,
       PlanOwner.partner => false,
     };
-    if (myUndone) return 0;
+    if (myUndone) return plan.isOnce ? 2 : 1;
 
     final partnerUndone = switch (plan.owner) {
       PlanOwner.partner => !plan.partnerDoneToday,
       PlanOwner.together => !plan.partnerDoneToday,
       PlanOwner.me => false,
     };
-    if (partnerUndone) return 1;
+    if (partnerUndone) return 3;
 
-    return 2;
+    return 4;
   }
 
   static int _comparePlanPriority(Plan a, Plan b) {
@@ -454,6 +462,15 @@ class SupabaseStore extends Store {
       minute: reminderTime.minute,
       syncSystemAlarm: syncSystemAlarm,
     );
+  }
+
+  Future<void> _finishOncePlanIfComplete(String planId) async {
+    final plan = await _planRepo.fetchPlanById(planId);
+    if (plan == null || !plan.isOnce || !plan.isDoneForCurrentUser) return;
+    if (plan.owner == PlanOwner.together && !plan.isTogetherDoneToday) return;
+
+    await _planRepo.endPlan(planId);
+    await NotificationService.cancelPlanReminder(planId);
   }
 
   Future<void> _syncPlanReminders() async {

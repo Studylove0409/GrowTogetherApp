@@ -233,8 +233,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('提醒时间'), findsOneWidget);
-    expect(find.text('计划周期'), findsOneWidget);
-    expect(find.text('关闭'), findsNWidgets(2));
+    expect(find.text('计划类型'), findsOneWidget);
+    expect(find.text('单次计划'), findsOneWidget);
+    expect(find.text('每日打卡'), findsOneWidget);
+    expect(find.text('计划周期'), findsNothing);
+    expect(find.text('关闭'), findsOneWidget);
     expect(find.text('开始日期'), findsNothing);
     expect(find.text('结束日期'), findsNothing);
 
@@ -244,9 +247,87 @@ void main() {
     final plan = store.getPlans().first;
     expect(store.getPlans().length, initialCount + 1);
     expect(plan.title, '今天买晚饭');
+    expect(plan.repeatType, PlanRepeatType.once);
     expect(plan.reminderTime, isNull);
     expect(plan.hasDateRange, isFalse);
     expect(plan.totalDays, 1);
+  });
+
+  testWidgets('CreatePlanPage creates daily plans with optional period', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final initialCount = store.getPlans().length;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: const CreatePlanPage(),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '每天背单词');
+    await tester.scrollUntilVisible(
+      find.text('每日打卡'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('每日打卡'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('计划周期'), findsOneWidget);
+    expect(find.text('长期每日'), findsOneWidget);
+
+    await tester.tap(find.text('保存计划'));
+    await tester.pumpAndSettle();
+
+    final plan = store.getPlans().first;
+    expect(store.getPlans().length, initialCount + 1);
+    expect(plan.title, '每天背单词');
+    expect(plan.repeatType, PlanRepeatType.daily);
+    expect(plan.hasDateRange, isFalse);
+  });
+
+  testWidgets('CreatePlanPage keeps once plan dates when editing', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '过期单次计划',
+      isShared: false,
+      dailyTask: '补交资料',
+      startDate: DateTime(2026, 5, 7),
+      endDate: DateTime(2026, 5, 7),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: false,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: CreatePlanPage(existingPlan: plan),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField).first, '过期单次计划已编辑');
+    await tester.tap(find.text('保存修改'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final updatedPlan = store.getPlans().firstWhere(
+      (item) => item.id == plan.id,
+    );
+    expect(updatedPlan.title, '过期单次计划已编辑');
+    expect(updatedPlan.repeatType, PlanRepeatType.once);
+    expect(updatedPlan.hasDateRange, isFalse);
+    expect(updatedPlan.startDate, DateTime(2026, 5, 7));
+    expect(updatedPlan.endDate, DateTime(2026, 5, 7));
   });
 
   testWidgets('CreatePlanPage "+ 自定义" opens BottomSheet', (tester) async {
@@ -386,6 +467,52 @@ void main() {
     },
   );
 
+  testWidgets('PlanDetailPage lets together plans remind partner', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '共同提醒测试计划',
+      isShared: true,
+      dailyTask: '互相提醒完成今天的小任务',
+      startDate: DateTime(2026, 5, 7),
+      endDate: DateTime(2026, 5, 14),
+      reminderTime: null,
+      hasDateRange: true,
+    );
+    final initialReminderCount = store.getReminders().length;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: PlanDetailPage(planId: plan.id),
+        ),
+      ),
+    );
+
+    expect(find.text('今日行动'), findsOneWidget);
+    expect(find.text('我待打卡'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('最近记录'),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('最近记录'), findsOneWidget);
+    expect(find.text('还没有记录，完成一次就会出现在这里'), findsOneWidget);
+    expect(find.text('提醒 TA'), findsOneWidget);
+
+    await tester.tap(find.text('提醒 TA'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('鼓励一下'));
+    await tester.pumpAndSettle();
+
+    expect(store.getReminders().length, initialReminderCount + 1);
+    expect(find.text('提醒已经飞过去啦～'), findsOneWidget);
+  });
+
   testWidgets('ReminderCard calls onTap when tapped', (tester) async {
     var tapped = false;
     final reminder = Reminder(
@@ -524,6 +651,7 @@ class _ReminderBadgeStore extends Store {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
@@ -538,6 +666,7 @@ class _ReminderBadgeStore extends Store {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,
@@ -629,6 +758,7 @@ class _RefreshSmokeStore extends Store {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
@@ -643,6 +773,7 @@ class _RefreshSmokeStore extends Store {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,
@@ -740,6 +871,7 @@ class _BlockedPromptReminderStore extends Store {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
@@ -754,6 +886,7 @@ class _BlockedPromptReminderStore extends Store {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,
@@ -866,6 +999,7 @@ class _ReminderDateFilterStore extends Store {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) {
@@ -880,6 +1014,7 @@ class _ReminderDateFilterStore extends Store {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,

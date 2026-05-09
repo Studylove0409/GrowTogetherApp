@@ -46,19 +46,19 @@ class MockStore extends Store {
 
   @override
   List<Plan> getPlans() {
-    return List.unmodifiable(_plans.where((p) => !p.isEnded));
+    return List.unmodifiable(_plans.where(_isVisibleInActiveLists));
   }
 
   @override
   List<Plan> getPlansByOwner(PlanOwner owner) {
     return _plans
-        .where((plan) => plan.owner == owner && !plan.isEnded)
+        .where((plan) => plan.owner == owner && _isVisibleInActiveLists(plan))
         .toList();
   }
 
   @override
   List<Plan> getTodayFocusPlans() {
-    final active = _plans.where((p) => !p.isEnded).toList()
+    final active = _plans.where(_isVisibleInActiveLists).toList()
       ..sort(_comparePlanPriority);
     return List.unmodifiable(active.take(3));
   }
@@ -84,11 +84,14 @@ class MockStore extends Store {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
     final owner = isShared ? PlanOwner.together : PlanOwner.me;
-    final totalDays = hasDateRange
+    final effectiveHasDateRange =
+        repeatType == PlanRepeatType.daily && hasDateRange;
+    final totalDays = effectiveHasDateRange
         ? endDate.difference(startDate).inDays + 1
         : 1;
     final plan = Plan(
@@ -106,7 +109,8 @@ class MockStore extends Store {
       startDate: startDate,
       endDate: endDate,
       reminderTime: reminderTime,
-      hasDateRange: hasDateRange,
+      repeatType: repeatType,
+      hasDateRange: effectiveHasDateRange,
     );
 
     _plans.insert(0, plan);
@@ -125,6 +129,7 @@ class MockStore extends Store {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,
@@ -135,7 +140,10 @@ class MockStore extends Store {
     final plan = _plans[index];
     if (!plan.canCurrentUserEdit) return;
 
-    final updatedHasDateRange = hasDateRange ?? plan.hasDateRange;
+    final updatedRepeatType = repeatType ?? plan.repeatType;
+    final updatedHasDateRange =
+        updatedRepeatType == PlanRepeatType.daily &&
+        (hasDateRange ?? plan.hasDateRange);
     final totalDays = updatedHasDateRange
         ? (endDate ?? plan.endDate)
                   .difference(startDate ?? plan.startDate)
@@ -150,6 +158,7 @@ class MockStore extends Store {
       iconKey: iconKey,
       reminderTime: reminderTime,
       clearReminderTime: clearReminderTime,
+      repeatType: updatedRepeatType,
       startDate: startDate,
       endDate: endDate,
       hasDateRange: updatedHasDateRange,
@@ -230,6 +239,7 @@ class MockStore extends Store {
       completedDays: completedDays,
       checkins: checkins,
     );
+    _finishOncePlanIfComplete(index);
     notifyListeners();
   }
 
@@ -244,6 +254,7 @@ class MockStore extends Store {
     final plan = _plans[index];
     if (!plan.canCurrentUserCheckin) return;
     _plans[index] = plan.copyWith(doneToday: doneToday);
+    _finishOncePlanIfComplete(index);
     notifyListeners();
   }
 
@@ -296,21 +307,23 @@ class MockStore extends Store {
 
   /// 计划优先级用于首页排序：我待打卡 > TA 待打卡 > 已完成
   static int planPriority(Plan plan) {
+    if (plan.isOverdue) return 0;
+
     final myUndone = switch (plan.owner) {
       PlanOwner.me => !plan.doneToday,
       PlanOwner.together => !plan.doneToday,
       PlanOwner.partner => false,
     };
-    if (myUndone) return 0;
+    if (myUndone) return plan.isOnce ? 2 : 1;
 
     final partnerUndone = switch (plan.owner) {
       PlanOwner.partner => !plan.partnerDoneToday,
       PlanOwner.together => !plan.partnerDoneToday,
       PlanOwner.me => false,
     };
-    if (partnerUndone) return 1;
+    if (partnerUndone) return 3;
 
-    return 2;
+    return 4;
   }
 
   static int _comparePlanPriority(Plan a, Plan b) {
@@ -319,6 +332,26 @@ class MockStore extends Store {
 
   bool _isSameDate(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  bool _isVisibleInActiveLists(Plan plan) {
+    if (!plan.isEnded) return true;
+    final endedAt = plan.endedAt;
+    return plan.isOnce &&
+        endedAt != null &&
+        _isSameDate(endedAt, DateTime.now());
+  }
+
+  void _finishOncePlanIfComplete(int index) {
+    final plan = _plans[index];
+    if (!plan.isOnce || !plan.isDoneForCurrentUser) return;
+    if (plan.owner == PlanOwner.together && !plan.isTogetherDoneToday) return;
+
+    _plans[index] = plan.copyWith(
+      status: PlanStatus.ended,
+      endedAt: DateTime.now(),
+    );
+    NotificationService.cancelPlanReminder(plan.id);
   }
 
   void _scheduleReminder(Plan plan, {bool syncSystemAlarm = false}) {

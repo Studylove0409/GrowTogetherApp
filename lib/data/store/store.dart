@@ -41,6 +41,7 @@ abstract class Store extends ChangeNotifier {
     required DateTime startDate,
     required DateTime endDate,
     required TimeOfDay? reminderTime,
+    PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey,
   });
@@ -52,6 +53,7 @@ abstract class Store extends ChangeNotifier {
     String? iconKey,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     DateTime? startDate,
     DateTime? endDate,
     bool? hasDateRange,

@@ -6,6 +6,8 @@ enum PlanOwner { me, partner, together }
 
 enum PlanStatus { active, ended }
 
+enum PlanRepeatType { once, daily }
+
 enum TogetherStatus { bothDone, onlyMeDone, meNotDone }
 
 enum CheckinMood { happy, normal, tired, great }
@@ -44,6 +46,7 @@ class Plan {
     required this.startDate,
     required this.endDate,
     required this.reminderTime,
+    this.repeatType = PlanRepeatType.daily,
     this.hasDateRange = true,
     this.partnerDoneToday = false,
     this.status = PlanStatus.active,
@@ -65,6 +68,7 @@ class Plan {
   final DateTime startDate;
   final DateTime endDate;
   final TimeOfDay? reminderTime;
+  final PlanRepeatType repeatType;
   final bool hasDateRange;
   final bool partnerDoneToday;
   final PlanStatus status;
@@ -84,6 +88,24 @@ class Plan {
   bool get hasReminder => reminderTime != null;
 
   bool get isEnded => status == PlanStatus.ended;
+
+  bool get isOnce => repeatType == PlanRepeatType.once;
+
+  bool get isDaily => repeatType == PlanRepeatType.daily;
+
+  bool get isOverdue {
+    if (!isOnce || isEnded || isDoneForCurrentUser) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dueDate = DateTime(startDate.year, startDate.month, startDate.day);
+    return dueDate.isBefore(today);
+  }
+
+  String get repeatLabel {
+    if (isOnce) return isOverdue ? '已逾期' : '单次';
+    if (hasDateRange) return '每日 · $totalDays天';
+    return '每日';
+  }
 
   bool get canCurrentUserCheckin => owner != PlanOwner.partner && !isEnded;
 
@@ -120,6 +142,7 @@ class Plan {
     DateTime? endDate,
     TimeOfDay? reminderTime,
     bool clearReminderTime = false,
+    PlanRepeatType? repeatType,
     bool? hasDateRange,
     bool? partnerDoneToday,
     PlanStatus? status,
@@ -143,6 +166,7 @@ class Plan {
       reminderTime: clearReminderTime
           ? null
           : (reminderTime ?? this.reminderTime),
+      repeatType: repeatType ?? this.repeatType,
       hasDateRange: hasDateRange ?? this.hasDateRange,
       partnerDoneToday: partnerDoneToday ?? this.partnerDoneToday,
       status: status ?? this.status,
