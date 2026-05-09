@@ -93,7 +93,7 @@ class _CheckinPageState extends State<CheckinPage> {
                       if (!canCheckin) ...[
                         const SizedBox(height: AppSpacing.xs),
                         Text(
-                          'TA 的计划只能查看，不能代替 TA 打卡。',
+                          _cannotCheckinText(plan),
                           style: AppTextStyles.caption,
                         ),
                       ],
@@ -227,11 +227,19 @@ class _CheckinPageState extends State<CheckinPage> {
 
   void _showCannotCheckin() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('不能代替 TA 打卡'),
+      SnackBar(
+        content: Text(_cannotCheckinText(null)),
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  String _cannotCheckinText(Plan? plan) {
+    if (plan == null) return '这个计划今天不在可打卡时间内啦';
+    if (plan.owner == PlanOwner.partner) return 'TA 的计划只能查看，不能代替 TA 打卡。';
+    if (plan.isEnded) return '这个计划已经结束啦，不需要再打卡。';
+    if (plan.isNotStartedYet) return '这个计划还没开始，到了开始日期再打卡。';
+    return '这个计划今天不在可打卡时间内啦';
   }
 
   String _moodLabel(CheckinMood mood) {

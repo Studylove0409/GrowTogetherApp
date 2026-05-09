@@ -745,12 +745,14 @@ class _AccountActionButtons extends StatelessWidget {
           icon: Icon(primaryIcon),
           label: Text(primaryLabel),
         ),
-        const SizedBox(height: AppSpacing.xs),
-        TextButton.icon(
-          onPressed: isSubmitting ? null : onSignIn,
-          icon: const Icon(Icons.login_rounded),
-          label: const Text('登录已有账号'),
-        ),
+        if (account.isAnonymous || !account.isEmailConfirmed) ...[
+          const SizedBox(height: AppSpacing.xs),
+          TextButton.icon(
+            onPressed: isSubmitting ? null : onSignIn,
+            icon: const Icon(Icons.login_rounded),
+            label: const Text('登录已有账号'),
+          ),
+        ],
         if (!account.isAnonymous) ...[
           const SizedBox(height: AppSpacing.xs),
           TextButton.icon(

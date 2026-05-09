@@ -12,10 +12,46 @@ import 'package:grow_together/features/focus/focus_page.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
 import 'package:grow_together/features/home/home_page.dart';
 import 'package:grow_together/features/plans/plan_detail_page.dart';
+import 'package:grow_together/features/plans/plan_list_scaffold.dart';
 import 'package:grow_together/features/reminders/reminders_page.dart';
 import 'package:grow_together/data/models/reminder.dart';
 import 'package:grow_together/shared/utils/plan_icon_mapper.dart';
 import 'package:grow_together/shared/widgets/reminder_card.dart';
+
+Plan _testPlan({
+  required DateTime startDate,
+  required DateTime endDate,
+  required PlanRepeatType repeatType,
+  bool hasDateRange = true,
+}) {
+  return Plan(
+    id: 'test-plan',
+    title: '测试计划',
+    subtitle: '测试',
+    owner: PlanOwner.me,
+    iconKey: PlanIconMapper.defaultKey,
+    minutes: 20,
+    completedDays: 0,
+    totalDays: 1,
+    doneToday: false,
+    color: Colors.pink,
+    dailyTask: '测试',
+    startDate: startDate,
+    endDate: endDate,
+    reminderTime: null,
+    repeatType: repeatType,
+    hasDateRange: hasDateRange,
+  );
+}
+
+DateTime _todayOnly() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+}
+
+DateTime _daysFromToday(int days) {
+  return _todayOnly().add(Duration(days: days));
+}
 
 void main() {
   testWidgets('GrowTogether shell shows the home page', (tester) async {
@@ -51,6 +87,20 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
 
     expect(store.refreshAllCount, 1);
+  });
+
+  testWidgets('HomePage hides plans that start tomorrow', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: _HomeDateFilterStore(),
+          child: const HomePage(),
+        ),
+      ),
+    );
+
+    expect(find.text('今天计划'), findsOneWidget);
+    expect(find.text('明天考试'), findsNothing);
   });
 
   testWidgets('HomePage calendar art opens growth records', (tester) async {
@@ -110,6 +160,195 @@ void main() {
     expect(find.text('TA 邀请你一起专注'), findsNothing);
     expect(find.text('加入专注'), findsNothing);
     expect(find.text('今天已经专注'), findsOneWidget);
+  });
+
+  test('Plan date range controls today availability', () {
+    final todayOnly = _todayOnly();
+    final yesterday = todayOnly.subtract(const Duration(days: 1));
+    final tomorrow = todayOnly.add(const Duration(days: 1));
+
+    final expiredDailyPlan = _testPlan(
+      startDate: yesterday,
+      endDate: yesterday,
+      repeatType: PlanRepeatType.daily,
+    );
+    expect(expiredDailyPlan.isEnded, isTrue);
+    expect(expiredDailyPlan.canCurrentUserCheckin, isFalse);
+    expect(expiredDailyPlan.repeatLabel, '已结束');
+
+    final futureDailyPlan = _testPlan(
+      startDate: tomorrow,
+      endDate: tomorrow.add(const Duration(days: 2)),
+      repeatType: PlanRepeatType.daily,
+    );
+    expect(futureDailyPlan.isNotStartedYet, isTrue);
+    expect(futureDailyPlan.canCurrentUserCheckin, isFalse);
+    expect(futureDailyPlan.repeatLabel, '未开始');
+  });
+
+  test('completed once plans stay visible on completion day', () {
+    final completedOncePlan =
+        _testPlan(
+          startDate: _todayOnly(),
+          endDate: _todayOnly(),
+          repeatType: PlanRepeatType.once,
+        ).copyWith(
+          doneToday: true,
+          status: PlanStatus.ended,
+          endedAt: DateTime.now(),
+        );
+
+    expect(completedOncePlan.isEnded, isTrue);
+    expect(completedOncePlan.isCompletedOnceToday, isTrue);
+    expect(completedOncePlan.shouldShowInActiveLists, isTrue);
+  });
+
+  test('MockStore keeps completed once plan visible today', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '今天完成后仍显示',
+      isShared: false,
+      dailyTask: '完成后列表里还能看到',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: false,
+    );
+
+    await store.saveCheckin(
+      planId: plan.id,
+      completed: true,
+      mood: CheckinMood.happy,
+      note: '完成',
+    );
+
+    final updated = store.getPlanById(plan.id)!;
+    expect(updated.status, PlanStatus.ended);
+    expect(updated.doneToday, isTrue);
+    expect(store.getPlans().map((item) => item.id), contains(plan.id));
+  });
+
+  test('MockStore keeps manually ended plan visible in owner list', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '手动结束后仍显示',
+      isShared: false,
+      dailyTask: '列表里应该能看到已结束',
+      startDate: _todayOnly(),
+      endDate: _daysFromToday(7),
+      reminderTime: null,
+      repeatType: PlanRepeatType.daily,
+      hasDateRange: true,
+    );
+
+    await store.endPlan(plan.id);
+
+    final ended = store.getPlanById(plan.id)!;
+    expect(ended.status, PlanStatus.ended);
+    expect(store.getPlans(), isNot(contains(ended)));
+    expect(
+      store.getPlansByOwner(PlanOwner.me).map((item) => item.id),
+      contains(plan.id),
+    );
+  });
+
+  test('MockStore deletes editable plan', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '准备删除的计划',
+      isShared: false,
+      dailyTask: '删除后不再展示',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: true,
+    );
+
+    await store.deletePlan(plan.id);
+
+    expect(store.getPlanById(plan.id), isNull);
+    expect(
+      store.getPlansByOwner(PlanOwner.me).map((item) => item.id),
+      isNot(contains(plan.id)),
+    );
+  });
+
+  testWidgets('PlanListScaffold filters plans by selected date', (
+    tester,
+  ) async {
+    final todayPlan = _testPlan(
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      repeatType: PlanRepeatType.once,
+    ).copyWith(id: 'today-plan', title: '今天考试');
+    final tomorrowPlan = _testPlan(
+      startDate: _daysFromToday(1),
+      endDate: _daysFromToday(1),
+      repeatType: PlanRepeatType.once,
+    ).copyWith(id: 'tomorrow-plan', title: '明天考试');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: [todayPlan, tomorrowPlan],
+          planCountLabel: '共 2 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('今天考试'), findsOneWidget);
+    expect(find.text('明天考试'), findsNothing);
+    expect(find.textContaining('共 1 个计划'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.calendar_month_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择查看日期'), findsOneWidget);
+  });
+
+  testWidgets('PlanListScaffold asks before deleting a swiped plan', (
+    tester,
+  ) async {
+    String? deletedPlanId;
+    final plan = _testPlan(
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      repeatType: PlanRepeatType.once,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: [plan],
+          planCountLabel: '共 1 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_) {},
+          onDeletePlan: (item) async => deletedPlanId = item.id,
+        ),
+      ),
+    );
+
+    await tester.drag(find.text('测试计划'), const Offset(120, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('删除计划？'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(deletedPlanId, plan.id);
   });
 
   testWidgets('GrowTogether shell switches between the five tabs', (
@@ -243,9 +482,10 @@ void main() {
       title: '测试计划',
       isShared: true,
       dailyTask: '每天一起复盘 10 分钟',
-      startDate: DateTime(2026, 5, 7),
-      endDate: DateTime(2026, 5, 14),
+      startDate: _daysFromToday(-1),
+      endDate: _daysFromToday(6),
       reminderTime: const TimeOfDay(hour: 20, minute: 0),
+      repeatType: PlanRepeatType.daily,
       hasDateRange: true,
       iconKey: 'music',
     );
@@ -274,8 +514,8 @@ void main() {
       title: '专注计分计划',
       isShared: false,
       dailyTask: '完成一段安静专注',
-      startDate: DateTime(2026, 5, 9),
-      endDate: DateTime(2026, 5, 9),
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
       reminderTime: null,
       repeatType: PlanRepeatType.once,
       hasDateRange: false,
@@ -311,8 +551,8 @@ void main() {
       title: '一起专注计划',
       isShared: true,
       dailyTask: '一起完成一段专注',
-      startDate: DateTime(2026, 5, 9),
-      endDate: DateTime(2026, 5, 16),
+      startDate: _todayOnly(),
+      endDate: _daysFromToday(7),
       reminderTime: null,
       repeatType: PlanRepeatType.daily,
       hasDateRange: true,
@@ -427,28 +667,52 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '今天买晚饭');
     await tester.scrollUntilVisible(
-      find.text('提醒时间'),
+      find.text('计划类型'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('提醒时间'), findsOneWidget);
     expect(find.text('计划类型'), findsOneWidget);
     expect(find.text('单次计划'), findsOneWidget);
     expect(find.text('每日打卡'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('提醒时间'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('提醒时间'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('计划日期'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('计划日期'), findsOneWidget);
     expect(find.text('计划周期'), findsNothing);
     expect(find.text('关闭'), findsOneWidget);
     expect(find.text('开始日期'), findsNothing);
     expect(find.text('结束日期'), findsNothing);
 
+    await tester.scrollUntilVisible(
+      find.text('明天'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('明天'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('保存计划'));
     await tester.pumpAndSettle();
 
     final plan = store.getPlans().first;
+    final tomorrow = _daysFromToday(1);
     expect(store.getPlans().length, initialCount + 1);
     expect(plan.title, '今天买晚饭');
     expect(plan.repeatType, PlanRepeatType.once);
+    expect(plan.startDate, tomorrow);
+    expect(plan.endDate, tomorrow);
     expect(plan.reminderTime, isNull);
     expect(plan.hasDateRange, isFalse);
     expect(plan.totalDays, 1);
@@ -648,9 +912,10 @@ void main() {
         title: '共同测试计划',
         isShared: true,
         dailyTask: '各自完成自己的打卡',
-        startDate: DateTime(2026, 5, 7),
-        endDate: DateTime(2026, 5, 14),
+        startDate: _daysFromToday(-1),
+        endDate: _daysFromToday(6),
         reminderTime: const TimeOfDay(hour: 21, minute: 0),
+        repeatType: PlanRepeatType.daily,
         hasDateRange: true,
       );
 
@@ -676,9 +941,10 @@ void main() {
       title: '共同提醒测试计划',
       isShared: true,
       dailyTask: '互相提醒完成今天的小任务',
-      startDate: DateTime(2026, 5, 7),
-      endDate: DateTime(2026, 5, 14),
+      startDate: _daysFromToday(-1),
+      endDate: _daysFromToday(6),
       reminderTime: null,
+      repeatType: PlanRepeatType.daily,
       hasDateRange: true,
     );
     final initialReminderCount = store.getReminders().length;
@@ -712,6 +978,34 @@ void main() {
 
     expect(store.getReminders().length, initialReminderCount + 1);
     expect(find.text('提醒已经飞过去啦～'), findsOneWidget);
+  });
+
+  testWidgets('PlanDetailPage does not remind for a not-started plan', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '明天共同计划',
+      isShared: true,
+      dailyTask: '明天再开始',
+      startDate: _daysFromToday(1),
+      endDate: _daysFromToday(1),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: PlanDetailPage(planId: plan.id),
+        ),
+      ),
+    );
+
+    expect(find.text('未开始'), findsWidgets);
+    expect(find.text('提醒 TA'), findsNothing);
   });
 
   testWidgets('ReminderCard calls onTap when tapped', (tester) async {
@@ -1085,6 +1379,67 @@ class _RefreshSmokeStore extends Store {
   Future<void> markReceivedRemindersRead() async {}
 }
 
+class _HomeDateFilterStore extends _RefreshSmokeStore {
+  final List<Plan> _plans = [
+    _homePlan(
+      id: 'today-home-plan',
+      title: '今天计划',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+    ),
+    _homePlan(
+      id: 'tomorrow-home-plan',
+      title: '明天考试',
+      startDate: _daysFromToday(1),
+      endDate: _daysFromToday(1),
+    ),
+  ];
+
+  @override
+  List<Plan> getPlans() => List.unmodifiable(_plans);
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      _plans.where((plan) => plan.owner == owner).toList();
+
+  @override
+  List<Plan> getAllPlans() => List.unmodifiable(_plans);
+
+  @override
+  Plan? getPlanById(String id) {
+    for (final plan in _plans) {
+      if (plan.id == id) return plan;
+    }
+    return null;
+  }
+}
+
+Plan _homePlan({
+  required String id,
+  required String title,
+  required DateTime startDate,
+  required DateTime endDate,
+}) {
+  return Plan(
+    id: id,
+    title: title,
+    subtitle: '$title说明',
+    owner: PlanOwner.me,
+    iconKey: 'book',
+    minutes: 20,
+    completedDays: 0,
+    totalDays: 1,
+    doneToday: false,
+    color: Colors.pink,
+    dailyTask: title,
+    startDate: startDate,
+    endDate: endDate,
+    reminderTime: null,
+    repeatType: PlanRepeatType.once,
+    hasDateRange: true,
+  );
+}
+
 class _FocusRefreshStore extends _RefreshSmokeStore {
   int refreshFocusSessionsCount = 0;
 
@@ -1100,8 +1455,8 @@ class _FocusRefreshStore extends _RefreshSmokeStore {
     doneToday: false,
     color: Colors.pink,
     dailyTask: '完成一段专注',
-    startDate: DateTime(2026, 5, 9),
-    endDate: DateTime(2026, 5, 16),
+    startDate: _todayOnly(),
+    endDate: _daysFromToday(7),
     reminderTime: null,
   );
 
@@ -1213,8 +1568,8 @@ class _BlockedPromptReminderStore extends Store {
     partnerDoneToday: false,
     color: Colors.pink,
     dailyTask: '读 12 页书',
-    startDate: DateTime(2026, 5, 1),
-    endDate: DateTime(2026, 5, 31),
+    startDate: _daysFromToday(-1),
+    endDate: _daysFromToday(30),
     reminderTime: const TimeOfDay(hour: 20, minute: 0),
   );
 

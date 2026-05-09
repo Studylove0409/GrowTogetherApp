@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/notification/notification_service.dart';
@@ -56,14 +58,12 @@ class MockStore extends Store {
 
   @override
   List<Plan> getPlansByOwner(PlanOwner owner) {
-    return _plans
-        .where((plan) => plan.owner == owner && _isVisibleInActiveLists(plan))
-        .toList();
+    return _plans.where((plan) => plan.owner == owner).toList();
   }
 
   @override
   List<Plan> getTodayFocusPlans() {
-    final active = _plans.where(_isVisibleInActiveLists).toList()
+    final active = _plans.where(_isVisibleToday).toList()
       ..sort(_comparePlanPriority);
     return List.unmodifiable(active.take(3));
   }
@@ -121,7 +121,11 @@ class MockStore extends Store {
     _plans.insert(0, plan);
     notifyListeners();
     if (plan.hasReminder) {
-      _scheduleReminder(plan, syncSystemAlarm: true);
+      if (_shouldScheduleReminder(plan)) {
+        _scheduleReminder(plan, syncSystemAlarm: true);
+      } else {
+        await NotificationService.cancelPlanReminder(plan.id);
+      }
     }
     return plan;
   }
@@ -173,7 +177,11 @@ class MockStore extends Store {
     if (clearReminderTime) {
       await NotificationService.cancelPlanReminder(planId);
     } else if (reminderTime != null) {
-      _scheduleReminder(_plans[index], syncSystemAlarm: true);
+      if (_shouldScheduleReminder(_plans[index])) {
+        _scheduleReminder(_plans[index], syncSystemAlarm: true);
+      } else {
+        await NotificationService.cancelPlanReminder(planId);
+      }
     }
   }
 
@@ -189,6 +197,19 @@ class MockStore extends Store {
       status: PlanStatus.ended,
       endedAt: DateTime.now(),
     );
+    notifyListeners();
+    NotificationService.cancelPlanReminder(planId);
+  }
+
+  @override
+  Future<void> deletePlan(String planId) async {
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+
+    final plan = _plans[index];
+    if (plan.owner == PlanOwner.partner) return;
+
+    _plans.removeAt(index);
     notifyListeners();
     NotificationService.cancelPlanReminder(planId);
   }
@@ -513,11 +534,12 @@ class MockStore extends Store {
   }
 
   bool _isVisibleInActiveLists(Plan plan) {
-    if (!plan.isEnded) return true;
-    final endedAt = plan.endedAt;
-    return plan.isOnce &&
-        endedAt != null &&
-        _isSameDate(endedAt, DateTime.now());
+    return plan.shouldShowInActiveLists;
+  }
+
+  bool _isVisibleToday(Plan plan) {
+    return _isVisibleInActiveLists(plan) &&
+        plan.isScheduledOnDate(DateTime.now());
   }
 
   void _finishOncePlanIfComplete(int index) {
@@ -535,6 +557,10 @@ class MockStore extends Store {
   void _scheduleReminder(Plan plan, {bool syncSystemAlarm = false}) {
     final reminderTime = plan.reminderTime;
     if (reminderTime == null) return;
+    if (!_shouldScheduleReminder(plan)) {
+      unawaited(NotificationService.cancelPlanReminder(plan.id));
+      return;
+    }
 
     NotificationService.schedulePlanReminder(
       planId: plan.id,
@@ -543,5 +569,11 @@ class MockStore extends Store {
       minute: reminderTime.minute,
       syncSystemAlarm: syncSystemAlarm,
     );
+  }
+
+  bool _shouldScheduleReminder(Plan plan) {
+    return plan.owner != PlanOwner.partner &&
+        plan.hasReminder &&
+        plan.canCurrentUserCheckin;
   }
 }

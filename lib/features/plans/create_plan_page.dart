@@ -122,17 +122,12 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                   _repeatType = repeatType;
                   if (repeatType == PlanRepeatType.once) {
                     _dateRangeEnabled = false;
+                    _endDate = _startDate;
+                  } else if (_endDate.isBefore(_startDate)) {
+                    _endDate = _startDate.add(const Duration(days: 30));
                   }
                 });
               },
-            ),
-            const SizedBox(height: AppSpacing.md),
-            _OptionalSettingField(
-              label: '提醒时间',
-              value: _reminderEnabled ? _reminderTime.format(context) : '关闭',
-              enabled: _reminderEnabled,
-              onChanged: (value) => setState(() => _reminderEnabled = value),
-              onTap: _reminderEnabled ? _pickReminderTime : null,
             ),
             if (_repeatType == PlanRepeatType.daily) ...[
               const SizedBox(height: AppSpacing.md),
@@ -158,7 +153,25 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                   onTap: _pickEndDate,
                 ),
               ],
+            ] else ...[
+              const SizedBox(height: AppSpacing.md),
+              _PlanDateSelector(
+                selectedDate: _startDate,
+                formattedDate: _formatDate(_startDate),
+                onToday: () => _setOnceDate(_todayOnly()),
+                onTomorrow: () =>
+                    _setOnceDate(_todayOnly().add(const Duration(days: 1))),
+                onPickDate: _pickOnceDate,
+              ),
             ],
+            const SizedBox(height: AppSpacing.md),
+            _OptionalSettingField(
+              label: '提醒时间',
+              value: _reminderEnabled ? _reminderTime.format(context) : '关闭',
+              enabled: _reminderEnabled,
+              onChanged: (value) => setState(() => _reminderEnabled = value),
+              onTap: _reminderEnabled ? _pickReminderTime : null,
+            ),
           ],
         ),
       ),
@@ -209,6 +222,21 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     });
   }
 
+  Future<void> _pickOnceDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime(2035),
+      helpText: '选择计划日期',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked != null) {
+      _setOnceDate(picked);
+    }
+  }
+
   Future<void> _pickEndDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -219,6 +247,14 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     if (picked != null) {
       setState(() => _endDate = picked);
     }
+  }
+
+  void _setOnceDate(DateTime date) {
+    final day = _dateOnly(date);
+    setState(() {
+      _startDate = day;
+      _endDate = day;
+    });
   }
 
   Future<void> _savePlan() async {
@@ -237,16 +273,22 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     final today = _todayOnly();
     final effectiveHasDateRange =
         _repeatType == PlanRepeatType.daily && _dateRangeEnabled;
+    final isOncePlan = _repeatType == PlanRepeatType.once;
     final preserveExistingDates =
         existing != null &&
         !effectiveHasDateRange &&
+        !isOncePlan &&
         existing.repeatType == _repeatType;
-    final startDate = effectiveHasDateRange
+    final startDate = isOncePlan
+        ? _dateOnly(_startDate)
+        : effectiveHasDateRange
         ? _dateOnly(_startDate)
         : preserveExistingDates
         ? _dateOnly(existing.startDate)
         : today;
-    final endDate = effectiveHasDateRange
+    final endDate = isOncePlan
+        ? startDate
+        : effectiveHasDateRange
         ? _dateOnly(_endDate)
         : preserveExistingDates
         ? _dateOnly(existing.endDate)
@@ -1261,6 +1303,175 @@ class _OptionalSettingField extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _PlanDateSelector extends StatelessWidget {
+  const _PlanDateSelector({
+    required this.selectedDate,
+    required this.formattedDate,
+    required this.onToday,
+    required this.onTomorrow,
+    required this.onPickDate,
+  });
+
+  final DateTime selectedDate;
+  final String formattedDate;
+  final VoidCallback onToday;
+  final VoidCallback onTomorrow;
+  final VoidCallback onPickDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = _dateOnly(DateTime.now());
+    final tomorrow = today.add(const Duration(days: 1));
+
+    return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.lightPink.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(17),
+                ),
+                child: const Icon(
+                  Icons.event_available_rounded,
+                  color: AppColors.deepPink,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '计划日期',
+                      style: AppTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '适合考试、预约、纪念日这类具体日期的计划',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          InkWell(
+            onTap: onPickDate,
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: 13,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.cream.withValues(alpha: 0.72),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppColors.line.withValues(alpha: 0.70),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      formattedDate,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.deepPink,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.deepPink,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              _DateShortcutChip(
+                label: '今天',
+                selected: _isSameDate(selectedDate, today),
+                onTap: onToday,
+              ),
+              _DateShortcutChip(
+                label: '明天',
+                selected: _isSameDate(selectedDate, tomorrow),
+                onTap: onTomorrow,
+              ),
+              _DateShortcutChip(
+                label: '选择日期',
+                selected:
+                    !_isSameDate(selectedDate, today) &&
+                    !_isSameDate(selectedDate, tomorrow),
+                onTap: onPickDate,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  static bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+}
+
+class _DateShortcutChip extends StatelessWidget {
+  const _DateShortcutChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      selectedColor: AppColors.lightPink,
+      backgroundColor: Colors.white.withValues(alpha: 0.78),
+      side: BorderSide(color: selected ? AppColors.deepPink : AppColors.line),
+      labelStyle: AppTextStyles.caption.copyWith(
+        color: selected ? AppColors.deepPink : AppColors.secondaryText,
+        fontWeight: FontWeight.w900,
+      ),
+      onSelected: (_) => onTap(),
     );
   }
 }

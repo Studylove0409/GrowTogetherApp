@@ -186,6 +186,18 @@ class PlanRepository {
         .eq('id', planId);
   }
 
+  Future<void> deletePlan(String planId) async {
+    final deleted = await _supabase
+        .from('plans')
+        .delete()
+        .eq('id', planId)
+        .select('id');
+
+    if (deleted.isEmpty) {
+      throw StateError('没有权限删除这个计划，或计划不存在');
+    }
+  }
+
   // ========================= 内部查询 =========================
 
   Future<List<Plan>> _fetchPlans(
@@ -244,7 +256,10 @@ class PlanRepository {
     );
 
     final todayStatus = todayCheckinMap[planId] ?? _UserCheckinStatus();
-    final completedDays = completedCountMap[planId] ?? 0;
+    final rawTotalDays = endDate.difference(startDate).inDays + 1;
+    final totalDays = rawTotalDays < 1 ? 1 : rawTotalDays;
+    final rawCompletedDays = completedCountMap[planId] ?? 0;
+    final completedDays = rawCompletedDays.clamp(0, totalDays).toInt();
 
     return Plan(
       id: planId,
@@ -256,7 +271,7 @@ class PlanRepository {
       iconKey: iconKey,
       minutes: 20,
       completedDays: completedDays,
-      totalDays: endDate.difference(startDate).inDays + 1,
+      totalDays: totalDays,
       doneToday: todayStatus.currentUserCompleted,
       color: PlanIconMapper.color(iconKey),
       dailyTask: dailyTask,
@@ -441,13 +456,7 @@ class PlanRepository {
   }
 
   bool _isVisibleInActiveLists(Plan plan) {
-    if (!plan.isEnded) return true;
-    final endedAt = plan.endedAt;
-    if (endedAt == null || !plan.isOnce) return false;
-    final now = DateTime.now();
-    return endedAt.year == now.year &&
-        endedAt.month == now.month &&
-        endedAt.day == now.day;
+    return plan.shouldShowInActiveLists;
   }
 
   String _formatDate(DateTime date) {

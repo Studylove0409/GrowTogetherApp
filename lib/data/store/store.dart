@@ -69,6 +69,8 @@ abstract class Store extends ChangeNotifier {
 
   Future<void> endPlan(String planId);
 
+  Future<void> deletePlan(String planId) async {}
+
   // ========================= Checkin =========================
 
   List<CheckinRecord> getCheckinRecords(String planId);

@@ -85,13 +85,70 @@ class Plan {
 
   Color get iconBackgroundColor => PlanIconMapper.backgroundColor(iconKey);
 
-  double get progress => totalDays == 0 ? 0 : completedDays / totalDays;
+  double get progress => totalDays == 0
+      ? 0
+      : completedDays.clamp(0, totalDays).toDouble() / totalDays;
 
-  int get remainingDays => (totalDays - completedDays).clamp(0, totalDays);
+  int get remainingDays {
+    final effectiveCompletedDays = completedDays.clamp(0, totalDays).toInt();
+    return (totalDays - effectiveCompletedDays).clamp(0, totalDays).toInt();
+  }
 
   bool get hasReminder => reminderTime != null;
 
-  bool get isEnded => status == PlanStatus.ended;
+  bool get isEnded => status == PlanStatus.ended || isExpiredByDateRange;
+
+  bool get shouldShowInActiveLists {
+    if (!isEnded) return true;
+    return isCompletedOnceToday;
+  }
+
+  bool get isCompletedOnceToday {
+    final endedDate = endedAt;
+    return isOnce &&
+        status == PlanStatus.ended &&
+        isDoneForCurrentUser &&
+        endedDate != null &&
+        _isSameDate(endedDate, DateTime.now());
+  }
+
+  bool get isExpiredByDateRange {
+    if (status == PlanStatus.ended) return false;
+    if (!isDaily || !hasDateRange) return false;
+    final today = _dateOnly(DateTime.now());
+    return _dateOnly(endDate).isBefore(today);
+  }
+
+  bool get isNotStartedYet {
+    if (status == PlanStatus.ended) return false;
+    final today = _dateOnly(DateTime.now());
+    return _dateOnly(startDate).isAfter(today);
+  }
+
+  bool get isAvailableToday {
+    if (status == PlanStatus.ended) return false;
+
+    return isScheduledOnDate(DateTime.now());
+  }
+
+  bool isScheduledOnDate(DateTime date) {
+    final day = _dateOnly(date);
+    final start = _dateOnly(startDate);
+    final end = _dateOnly(endDate);
+
+    if (isOnce) return day == start;
+    if (day.isBefore(start)) return false;
+    if (hasDateRange && day.isAfter(end)) return false;
+    return true;
+  }
+
+  bool isVisibleOnDate(DateTime date) {
+    if (!isScheduledOnDate(date)) return false;
+
+    final endedDate = endedAt;
+    if (status != PlanStatus.ended || endedDate == null) return true;
+    return !_dateOnly(date).isAfter(_dateOnly(endedDate));
+  }
 
   bool get isOnce => repeatType == PlanRepeatType.once;
 
@@ -106,12 +163,15 @@ class Plan {
   }
 
   String get repeatLabel {
+    if (isExpiredByDateRange) return '已结束';
+    if (isNotStartedYet) return '未开始';
     if (isOnce) return isOverdue ? '已逾期' : '单次';
     if (hasDateRange) return '每日 · $totalDays天';
     return '每日';
   }
 
-  bool get canCurrentUserCheckin => owner != PlanOwner.partner && !isEnded;
+  bool get canCurrentUserCheckin =>
+      owner != PlanOwner.partner && isAvailableToday;
 
   bool get canCurrentUserEdit => owner != PlanOwner.partner && !isEnded;
 
@@ -124,10 +184,46 @@ class Plan {
     PlanOwner.together => doneToday,
   };
 
+  bool isCurrentUserDoneOn(DateTime date) {
+    if (_isSameDate(date, DateTime.now())) return isDoneForCurrentUser;
+    return checkins.any(
+      (record) =>
+          record.actor == CheckinActor.me &&
+          record.completed &&
+          _isSameDate(record.date, date),
+    );
+  }
+
+  bool isPartnerDoneOn(DateTime date) {
+    if (_isSameDate(date, DateTime.now())) return partnerDoneToday;
+    return checkins.any(
+      (record) =>
+          record.actor == CheckinActor.partner &&
+          record.completed &&
+          _isSameDate(record.date, date),
+    );
+  }
+
+  TogetherStatus togetherStatusOn(DateTime date) {
+    final currentDone = isCurrentUserDoneOn(date);
+    final partnerDone = isPartnerDoneOn(date);
+    if (currentDone && partnerDone) return TogetherStatus.bothDone;
+    if (currentDone && !partnerDone) return TogetherStatus.onlyMeDone;
+    return TogetherStatus.meNotDone;
+  }
+
   TogetherStatus get togetherStatus {
     if (doneToday && partnerDoneToday) return TogetherStatus.bothDone;
     if (doneToday && !partnerDoneToday) return TogetherStatus.onlyMeDone;
     return TogetherStatus.meNotDone;
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  static bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Plan copyWith({

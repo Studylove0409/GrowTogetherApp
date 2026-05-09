@@ -26,12 +26,12 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = isSelected ? context.watch<Store>() : context.read<Store>();
-    final allPlans = store.getPlans();
-    final myPlans = allPlans.where((p) => p.owner == PlanOwner.me).toList();
-    final partnerPlans = allPlans
+    final todayPlans = store.getPlans().where(_isTodayPlan).toList();
+    final myPlans = todayPlans.where((p) => p.owner == PlanOwner.me).toList();
+    final partnerPlans = todayPlans
         .where((p) => p.owner == PlanOwner.partner)
         .toList();
-    final togetherPlans = allPlans
+    final togetherPlans = todayPlans
         .where((p) => p.owner == PlanOwner.together)
         .toList();
 
@@ -101,6 +101,10 @@ class HomePage extends StatelessWidget {
       ),
     );
   }
+}
+
+bool _isTodayPlan(Plan plan) {
+  return plan.isScheduledOnDate(DateTime.now());
 }
 
 // ========================= 首页计划区块 =========================

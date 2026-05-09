@@ -26,6 +26,7 @@ class TogetherPlansPage extends StatelessWidget {
       planCountLabel: '共 ${allPlans.length} 个计划',
       owner: PlanOwner.together,
       onRefresh: context.read<Store>().refreshPlans,
+      onDeletePlan: (plan) => context.read<Store>().deletePlan(plan.id),
       onAdd: () {
         Navigator.of(context).push(
           MaterialPageRoute<void>(

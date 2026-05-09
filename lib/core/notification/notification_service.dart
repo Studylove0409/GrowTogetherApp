@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
@@ -8,9 +7,6 @@ import 'package:timezone/timezone.dart' as tz;
 class NotificationService {
   NotificationService._();
 
-  static const _systemReminderChannel = MethodChannel(
-    'grow_together/system_reminders',
-  );
   static final _plugin = FlutterLocalNotificationsPlugin();
   static Future<void>? _initFuture;
 
@@ -76,13 +72,9 @@ class NotificationService {
       // 测试环境或平台通道不可用时静默跳过
     }
 
-    if (syncSystemAlarm) {
-      await _scheduleAndroidSystemAlarm(
-        planTitle: planTitle,
-        hour: hour,
-        minute: minute,
-      );
-    }
+    // Do not create Android Clock alarms here. They cannot be reliably
+    // cancelled by plan id, so date-bounded plans would keep ringing after
+    // their end date. Cancellable local notifications are used instead.
   }
 
   static Future<void> cancelPlanReminder(String planId) async {
@@ -163,26 +155,5 @@ class NotificationService {
         importance: Importance.high,
       ),
     );
-  }
-
-  static Future<void> _scheduleAndroidSystemAlarm({
-    required String planTitle,
-    required int hour,
-    required int minute,
-  }) async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-
-    try {
-      await _systemReminderChannel.invokeMethod<void>('setDailyAlarm', {
-        'title': '一起进步呀：$planTitle',
-        'hour': hour,
-        'minute': minute,
-      });
-    } on MissingPluginException {
-      // Flutter widget tests and non-Android embedders do not register this
-      // channel; the in-app notification path above is still valid there.
-    } catch (error) {
-      debugPrint('Android system alarm setup skipped: $error');
-    }
   }
 }

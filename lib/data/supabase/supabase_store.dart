@@ -62,7 +62,7 @@ class SupabaseStore extends Store {
 
   Future<void> _loadPlans() async {
     try {
-      _plans = await _planRepo.fetchActivePlans();
+      _plans = await _planRepo.fetchAllPlans();
       if (_plans.isNotEmpty) {
         final planIds = _plans.map((p) => p.id).toList();
         final client = Supabase.instance.client;
@@ -305,19 +305,17 @@ class SupabaseStore extends Store {
 
   @override
   List<Plan> getPlans() {
-    return List.unmodifiable(_plans.where((p) => !p.isEnded));
+    return List.unmodifiable(_plans.where((p) => p.shouldShowInActiveLists));
   }
 
   @override
   List<Plan> getPlansByOwner(PlanOwner owner) {
-    return _plans
-        .where((plan) => plan.owner == owner && !plan.isEnded)
-        .toList();
+    return _plans.where((plan) => plan.owner == owner).toList();
   }
 
   @override
   List<Plan> getTodayFocusPlans() {
-    final active = _plans.where((p) => !p.isEnded).toList()
+    final active = _plans.where(_isVisibleToday).toList()
       ..sort(_comparePlanPriority);
     return List.unmodifiable(active.take(3));
   }
@@ -363,7 +361,11 @@ class SupabaseStore extends Store {
     _plans.insert(0, plan);
     notifyListeners();
     if (plan.hasReminder) {
-      _scheduleReminder(plan, syncSystemAlarm: true);
+      if (_shouldScheduleReminder(plan)) {
+        _scheduleReminder(plan, syncSystemAlarm: true);
+      } else {
+        await NotificationService.cancelPlanReminder(plan.id);
+      }
     }
     return plan;
   }
@@ -400,7 +402,11 @@ class SupabaseStore extends Store {
       await NotificationService.cancelPlanReminder(planId);
     } else if (reminderTime != null) {
       final updated = getPlanById(planId);
-      if (updated != null) _scheduleReminder(updated, syncSystemAlarm: true);
+      if (updated != null && _shouldScheduleReminder(updated)) {
+        _scheduleReminder(updated, syncSystemAlarm: true);
+      } else {
+        await NotificationService.cancelPlanReminder(planId);
+      }
     }
   }
 
@@ -408,6 +414,15 @@ class SupabaseStore extends Store {
   Future<void> endPlan(String planId) async {
     await _planRepo.endPlan(planId);
     await _loadPlans();
+    notifyListeners();
+    NotificationService.cancelPlanReminder(planId);
+  }
+
+  @override
+  Future<void> deletePlan(String planId) async {
+    await _planRepo.deletePlan(planId);
+    await _loadPlans();
+    await _syncPlanReminders();
     notifyListeners();
     NotificationService.cancelPlanReminder(planId);
   }
@@ -685,6 +700,10 @@ class SupabaseStore extends Store {
   void _scheduleReminder(Plan plan, {bool syncSystemAlarm = false}) {
     final reminderTime = plan.reminderTime;
     if (reminderTime == null) return;
+    if (!_shouldScheduleReminder(plan)) {
+      unawaited(NotificationService.cancelPlanReminder(plan.id));
+      return;
+    }
 
     NotificationService.schedulePlanReminder(
       planId: plan.id,
@@ -693,6 +712,17 @@ class SupabaseStore extends Store {
       minute: reminderTime.minute,
       syncSystemAlarm: syncSystemAlarm,
     );
+  }
+
+  bool _shouldScheduleReminder(Plan plan) {
+    return plan.owner != PlanOwner.partner &&
+        plan.hasReminder &&
+        plan.canCurrentUserCheckin;
+  }
+
+  bool _isVisibleToday(Plan plan) {
+    return plan.shouldShowInActiveLists &&
+        plan.isScheduledOnDate(DateTime.now());
   }
 
   Future<void> _finishOncePlanIfComplete(String planId) async {
@@ -705,13 +735,14 @@ class SupabaseStore extends Store {
   }
 
   Future<void> _syncPlanReminders() async {
-    final activeOwnedPlans = _plans.where(
-      (plan) => !plan.isEnded && plan.owner != PlanOwner.partner,
+    final plansForReminderSync = await _planRepo.fetchAllPlans();
+    final ownedPlans = plansForReminderSync.where(
+      (plan) => plan.owner != PlanOwner.partner,
     );
     await Future.wait(
-      activeOwnedPlans.map((plan) async {
+      ownedPlans.map((plan) async {
         final reminderTime = plan.reminderTime;
-        if (reminderTime == null) {
+        if (reminderTime == null || !_shouldScheduleReminder(plan)) {
           await NotificationService.cancelPlanReminder(plan.id);
           return;
         }

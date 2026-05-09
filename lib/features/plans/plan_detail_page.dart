@@ -76,7 +76,7 @@ class PlanDetailPage extends StatelessWidget {
           ),
         ),
       ),
-      bottomNavigationBar: plan.isEnded
+      bottomNavigationBar: plan.isEnded && !plan.isCompletedOnceToday
           ? null
           : SafeArea(
               child: Padding(
@@ -93,8 +93,19 @@ class PlanDetailPage extends StatelessWidget {
   }
 
   Widget _buildBottomButton(BuildContext context, Plan plan) {
-    if (plan.isEnded) {
+    if (plan.isEnded && !plan.isCompletedOnceToday) {
       return const SizedBox.shrink();
+    }
+
+    if (plan.isCompletedOnceToday) {
+      return const _CompletedActionPill(
+        label: '已完成',
+        icon: Icons.check_circle_rounded,
+      );
+    }
+
+    if (plan.isNotStartedYet) {
+      return _buildNotStartedBottomButton(context, plan);
     }
 
     if (!plan.canCurrentUserCheckin && !plan.canCurrentUserEdit) {
@@ -169,7 +180,7 @@ class PlanDetailPage extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10),
               onPressed: plan.canCurrentUserCheckin
                   ? () => _openCheckinPage(context, plan)
-                  : () => _showCannotCheckinMessage(context),
+                  : () => _showCannotCheckinMessage(context, plan),
             ),
           ),
         ],
@@ -223,9 +234,29 @@ class PlanDetailPage extends StatelessWidget {
             icon: Icons.check_circle_rounded,
             onPressed: plan.canCurrentUserCheckin
                 ? () => _openCheckinPage(context, plan)
-                : () => _showCannotCheckinMessage(context),
+                : () => _showCannotCheckinMessage(context, plan),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildNotStartedBottomButton(BuildContext context, Plan plan) {
+    const status = _MutedActionPill(label: '未开始', icon: Icons.event_rounded);
+
+    if (!plan.canCurrentUserEdit) return status;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _PlanActionButton(
+            label: '编辑',
+            icon: Icons.edit_rounded,
+            onPressed: () => _openEditPage(context, plan),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        const Expanded(child: status),
       ],
     );
   }
@@ -244,12 +275,12 @@ class PlanDetailPage extends StatelessWidget {
     );
   }
 
-  void _showCannotCheckinMessage(BuildContext context) {
+  void _showCannotCheckinMessage(BuildContext context, Plan plan) {
+    final message = plan.isNotStartedYet
+        ? '这个计划还没开始，到了计划日期再打卡。'
+        : '这个计划今天不在可打卡时间内啦';
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('不能代替 TA 打卡'),
-        behavior: SnackBarBehavior.floating,
-      ),
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
   }
 
@@ -378,7 +409,7 @@ class PlanDetailPage extends StatelessWidget {
       return '绑定关系已变化，暂时不能发送提醒';
     }
     if (message.contains('reminders can only be linked to an active plan')) {
-      return '这个计划已结束，不能再发送提醒';
+      return '这个计划当前不在可提醒时间内，请确认开始和结束日期';
     }
 
     return '发送提醒失败，请稍后再试';
@@ -609,6 +640,46 @@ class _CompletedActionPill extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: AppColors.successText,
+                fontSize: 15,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MutedActionPill extends StatelessWidget {
+  const _MutedActionPill({required this.label, required this.icon});
+
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      decoration: BoxDecoration(
+        color: AppColors.line.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppColors.secondaryText.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 21, color: AppColors.secondaryText),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.secondaryText,
                 fontSize: 15,
                 fontWeight: FontWeight.w900,
               ),
@@ -917,6 +988,9 @@ class _TodayActionCard extends StatelessWidget {
   }
 
   String _periodLabel(Plan plan) {
+    if (plan.isCompletedOnceToday) return '单次';
+    if (plan.isEnded) return '已结束';
+    if (plan.isNotStartedYet) return '未开始';
     if (plan.isOnce) return '单次';
     if (!plan.hasDateRange) return '每日';
     return '${plan.totalDays}天';
@@ -1061,6 +1135,30 @@ class _MetricTile extends StatelessWidget {
 }
 
 ({String label, Color color, IconData icon}) _planStatusUi(Plan plan) {
+  if (plan.isCompletedOnceToday) {
+    return (
+      label: '已完成',
+      color: AppColors.successText,
+      icon: Icons.check_circle_rounded,
+    );
+  }
+
+  if (plan.isEnded) {
+    return (
+      label: '已结束',
+      color: AppColors.secondaryText,
+      icon: Icons.event_available_rounded,
+    );
+  }
+
+  if (plan.isNotStartedYet) {
+    return (
+      label: '未开始',
+      color: AppColors.secondaryText,
+      icon: Icons.event_rounded,
+    );
+  }
+
   if (plan.isOverdue) {
     return (
       label: '已逾期',

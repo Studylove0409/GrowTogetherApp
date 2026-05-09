@@ -1333,6 +1333,42 @@ class _PlanPickerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final myPlans = plans
+        .where((plan) => plan.owner == PlanOwner.me)
+        .toList(growable: false);
+    final togetherPlans = plans
+        .where((plan) => plan.owner == PlanOwner.together)
+        .toList(growable: false);
+    final otherPlans = plans
+        .where(
+          (plan) =>
+              plan.owner != PlanOwner.me && plan.owner != PlanOwner.together,
+        )
+        .toList(growable: false);
+    final sections = [
+      if (myPlans.isNotEmpty)
+        _PlanPickerSection(
+          title: '我的计划',
+          subtitle: '适合自己安静推进的小目标',
+          icon: Icons.person_rounded,
+          plans: myPlans,
+        ),
+      if (togetherPlans.isNotEmpty)
+        _PlanPickerSection(
+          title: '共同计划',
+          subtitle: '两个人一起往前走的约定',
+          icon: Icons.favorite_rounded,
+          plans: togetherPlans,
+        ),
+      if (otherPlans.isNotEmpty)
+        _PlanPickerSection(
+          title: '其他计划',
+          subtitle: '可用于本次专注的计划',
+          icon: Icons.flag_rounded,
+          plans: otherPlans,
+        ),
+    ];
+
     return SafeArea(
       top: false,
       child: Container(
@@ -1366,28 +1402,137 @@ class _PlanPickerSheet extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             Text('选择计划', style: AppTextStyles.title),
             const SizedBox(height: 4),
-            Text('本次专注为了哪个计划？', style: AppTextStyles.caption),
+            Text('先看分类，再选择本次专注绑定的计划。', style: AppTextStyles.caption),
             const SizedBox(height: AppSpacing.md),
             Flexible(
               child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: plans.length,
+                itemCount: sections.length,
                 separatorBuilder: (_, _) =>
-                    const SizedBox(height: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final plan = plans[index];
-                  return _PlanChoiceTile(
-                    plan: plan,
-                    selected: selectedPlan?.id == plan.id,
-                    onTap: () {
-                      onSelectPlan(plan);
-                      Navigator.of(context).pop();
-                    },
-                  );
-                },
+                    const SizedBox(height: AppSpacing.md),
+                itemBuilder: (context, index) => _PlanPickerSectionView(
+                  section: sections[index],
+                  selectedPlan: selectedPlan,
+                  onSelectPlan: (plan) {
+                    onSelectPlan(plan);
+                    Navigator.of(context).pop();
+                  },
+                ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanPickerSection {
+  const _PlanPickerSection({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.plans,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Plan> plans;
+}
+
+class _PlanPickerSectionView extends StatelessWidget {
+  const _PlanPickerSectionView({
+    required this.section,
+    required this.selectedPlan,
+    required this.onSelectPlan,
+  });
+
+  final _PlanPickerSection section;
+  final Plan? selectedPlan;
+  final ValueChanged<Plan> onSelectPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      borderRadius: 24,
+      padding: const EdgeInsets.all(12),
+      showDashedBorder: false,
+      backgroundColor: Colors.white.withValues(alpha: 0.60),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: AppColors.lightPink.withValues(alpha: 0.82),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(section.icon, color: AppColors.deepPink, size: 19),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      section.title,
+                      style: AppTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      section.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.tiny.copyWith(
+                        color: AppColors.secondaryText,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _PlanCountPill(count: section.plans.length),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          for (var index = 0; index < section.plans.length; index++) ...[
+            _PlanChoiceTile(
+              plan: section.plans[index],
+              selected: selectedPlan?.id == section.plans[index].id,
+              onTap: () => onSelectPlan(section.plans[index]),
+            ),
+            if (index != section.plans.length - 1)
+              const SizedBox(height: AppSpacing.sm),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanCountPill extends StatelessWidget {
+  const _PlanCountPill({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.blush,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.70)),
+      ),
+      child: Text(
+        '$count 个',
+        style: AppTextStyles.tiny.copyWith(
+          color: AppColors.deepPink,
+          fontWeight: FontWeight.w900,
         ),
       ),
     );
@@ -1450,12 +1595,59 @@ class _PlanChoiceTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
+          _PlanOwnerTag(owner: plan.owner),
+          const SizedBox(width: AppSpacing.sm),
           Icon(
             selected
                 ? Icons.check_circle_rounded
                 : Icons.radio_button_unchecked_rounded,
             color: selected ? AppColors.deepPink : AppColors.mutedText,
             size: 24,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PlanOwnerTag extends StatelessWidget {
+  const _PlanOwnerTag({required this.owner});
+
+  final PlanOwner owner;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (owner) {
+      PlanOwner.me => '我的',
+      PlanOwner.together => '共同',
+      PlanOwner.partner => 'TA 的',
+    };
+    final icon = switch (owner) {
+      PlanOwner.me => Icons.person_rounded,
+      PlanOwner.together => Icons.favorite_rounded,
+      PlanOwner.partner => Icons.favorite_border_rounded,
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: owner == PlanOwner.together
+            ? AppColors.lightPink.withValues(alpha: 0.72)
+            : AppColors.cream,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.72)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppColors.deepPink, size: 13),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: AppTextStyles.tiny.copyWith(
+              color: AppColors.secondaryText,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),
