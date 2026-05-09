@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/config/supabase_config.dart';
+import 'core/notification/fcm_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'data/mock/mock_store.dart';
@@ -61,6 +62,7 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed || !mounted) return;
+    unawaited(FcmService.syncTokenToCurrentUser());
     _resumeRefresh ??= context.read<Store>().refreshAll().whenComplete(() {
       _resumeRefresh = null;
     });

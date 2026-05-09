@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
@@ -11,6 +12,11 @@ import 'notification_service.dart';
 class FcmService {
   FcmService._();
   static bool _started = false;
+  static StreamSubscription<AuthState>? _authSubscription;
+  static StreamSubscription<String>? _tokenRefreshSubscription;
+  static StreamSubscription<RemoteMessage>? _messageSubscription;
+  static String? _lastSyncedUserId;
+  static String? _lastSyncedToken;
 
   static Future<void> init() async {
     if (_started) return;
@@ -33,17 +39,19 @@ class FcmService {
       // 请求通知权限
       await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-      // 获取 FCM token
-      final token = await messaging.getToken();
-      debugPrint('FCM Token: $token');
+      await _syncCurrentToken(messaging);
 
-      if (token != null) {
-        await _saveTokenToSupabase(token);
-      }
-
-      // 监听 token 刷新
-      messaging.onTokenRefresh.listen(_saveTokenToSupabase);
-      FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+      _tokenRefreshSubscription ??= messaging.onTokenRefresh.listen(
+        _saveTokenToSupabase,
+      );
+      _authSubscription ??= Supabase.instance.client.auth.onAuthStateChange
+          .listen((state) {
+            if (state.session == null) return;
+            unawaited(syncTokenToCurrentUser());
+          });
+      _messageSubscription ??= FirebaseMessaging.onMessage.listen(
+        _showForegroundNotification,
+      );
       _started = true;
     } catch (error, stackTrace) {
       debugPrint('FCM setup skipped: $error');
@@ -60,24 +68,38 @@ class FcmService {
       if (Firebase.apps.isEmpty) {
         await Firebase.initializeApp();
       }
-      final token = await FirebaseMessaging.instance.getToken();
-      if (token != null) {
-        await _saveTokenToSupabase(token);
-      }
+      await _syncCurrentToken(FirebaseMessaging.instance);
     } catch (error) {
       debugPrint('FCM token sync skipped: $error');
     }
   }
 
+  static Future<void> _syncCurrentToken(FirebaseMessaging messaging) async {
+    final token = await messaging.getToken();
+    debugPrint('FCM Token: $token');
+    if (token == null || token.isEmpty) {
+      debugPrint('FCM token is empty; push notifications cannot be delivered.');
+      return;
+    }
+
+    await _saveTokenToSupabase(token);
+  }
+
   static Future<void> _saveTokenToSupabase(String token) async {
     try {
       final userId = Supabase.instance.client.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        debugPrint('FCM token sync skipped: no authenticated user yet.');
+        return;
+      }
+      if (_lastSyncedUserId == userId && _lastSyncedToken == token) return;
 
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'fcm_token': token})
-          .eq('user_id', userId);
+      await Supabase.instance.client.rpc(
+        'save_fcm_token',
+        params: {'p_token': token},
+      );
+      _lastSyncedUserId = userId;
+      _lastSyncedToken = token;
     } catch (e) {
       debugPrint('Failed to save FCM token: $e');
     }

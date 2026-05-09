@@ -33,6 +33,8 @@ class SupabaseStore extends Store {
   List<Reminder> _reminders = [];
   List<FocusSession> _focusSessions = [];
   final Set<String> _notifiedFocusInviteIds = {};
+  final Set<String> _notifiedReminderIds = {};
+  bool _reminderNotificationsPrimed = false;
   Profile _profile = const Profile(
     name: '一起进步的你',
     partnerName: '加载中...',
@@ -110,7 +112,9 @@ class SupabaseStore extends Store {
 
   Future<void> _loadReminders() async {
     try {
-      _reminders = await _reminderRepo.fetchReminders();
+      final reminders = await _reminderRepo.fetchReminders();
+      _reminders = reminders;
+      _showNewReminderNotifications(reminders);
     } catch (_) {}
   }
 
@@ -135,6 +139,39 @@ class SupabaseStore extends Store {
         ),
       );
     }
+  }
+
+  void _showNewReminderNotifications(List<Reminder> reminders) {
+    final incomingUnread = reminders.where(
+      (reminder) =>
+          !reminder.sentByMe &&
+          !reminder.isRead &&
+          !_isLegacyFocusInviteReminder(reminder),
+    );
+
+    if (!_reminderNotificationsPrimed) {
+      _notifiedReminderIds.addAll(
+        incomingUnread.map((reminder) => reminder.id),
+      );
+      _reminderNotificationsPrimed = true;
+      return;
+    }
+
+    for (final reminder in incomingUnread) {
+      if (!_notifiedReminderIds.add(reminder.id)) continue;
+
+      unawaited(
+        NotificationService.showPushNotification(
+          id: reminder.id.hashCode & 0x7fffffff,
+          title: reminder.type.label,
+          body: reminder.content,
+        ),
+      );
+    }
+  }
+
+  static bool _isLegacyFocusInviteReminder(Reminder reminder) {
+    return reminder.content.startsWith('想邀请你一起专注');
   }
 
   // ========================= Realtime =========================
