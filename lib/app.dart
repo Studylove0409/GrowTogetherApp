@@ -68,18 +68,24 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
 
   @override
   Widget build(BuildContext context) {
+    final store = context.read<Store>();
+    final reminderBadgeCount = context.select<Store, int>(
+      (store) => store.reminderBadgeCount,
+    );
     final pages = [
-      const HomePage(),
-      const PlansPage(),
+      HomePage(isSelected: _selectedIndex == 0),
+      PlansPage(isSelected: _selectedIndex == 1),
       FocusPage(isSelected: _selectedIndex == 2),
-      RemindersPage(onOpenFocus: () => setState(() => _selectedIndex = 2)),
+      RemindersPage(
+        isSelected: _selectedIndex == 3,
+        onOpenFocus: () => setState(() => _selectedIndex = 2),
+      ),
       ProfilePage(
         isSelected: _selectedIndex == 4,
         onOpenPlans: () => setState(() => _selectedIndex = 1),
       ),
     ];
 
-    final store = context.watch<Store>();
     return Scaffold(
       backgroundColor: AppColors.background,
       body: IndexedStack(index: _selectedIndex, children: pages),
@@ -88,6 +94,7 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
         child: AppBottomNavBar(
           selectedIndex: _selectedIndex,
           onSelected: (index) {
+            if (index == _selectedIndex) return;
             setState(() => _selectedIndex = index);
             if (index == 2) {
               unawaited(store.refreshFocusSessions());
@@ -98,7 +105,7 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
               unawaited(store.markReceivedRemindersRead());
             }
           },
-          reminderBadgeCount: store.reminderBadgeCount,
+          reminderBadgeCount: reminderBadgeCount,
         ),
       ),
     );

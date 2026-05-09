@@ -13,9 +13,16 @@ class AppScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const Positioned.fill(child: _CreamBackground()),
-        const Positioned.fill(child: _PaperTexture()),
-        const Positioned(left: 0, right: 0, bottom: 0, child: _GrassSticker()),
+        const Positioned.fill(
+          child: RepaintBoundary(child: _CreamBackground()),
+        ),
+        const Positioned.fill(child: RepaintBoundary(child: _PaperTexture())),
+        const Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: RepaintBoundary(child: _GrassSticker()),
+        ),
         Positioned.fill(child: child),
       ],
     );

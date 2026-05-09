@@ -19,11 +19,13 @@ import '../../shared/widgets/section_header.dart';
 import 'growth_record_page.dart';
 
 class HomePage extends StatelessWidget {
-  const HomePage({super.key});
+  const HomePage({super.key, this.isSelected = true});
+
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<Store>();
+    final store = isSelected ? context.watch<Store>() : context.read<Store>();
     final allPlans = store.getPlans();
     final myPlans = allPlans.where((p) => p.owner == PlanOwner.me).toList();
     final partnerPlans = allPlans
@@ -48,7 +50,7 @@ class HomePage extends StatelessWidget {
           children: [
             const _HomeHeader(),
             const SizedBox(height: AppSpacing.xl),
-            const _GrowthHeroCard(),
+            _GrowthHeroCard(togetherDays: store.getProfile().togetherDays),
             const SizedBox(height: AppSpacing.lg),
             _HomePlanSection(
               title: '我的今日计划',
@@ -200,12 +202,12 @@ class _HomeHeader extends StatelessWidget {
 // ========================= 成长 Hero 卡片 =========================
 
 class _GrowthHeroCard extends StatelessWidget {
-  const _GrowthHeroCard();
+  const _GrowthHeroCard({required this.togetherDays});
+
+  final int togetherDays;
 
   @override
   Widget build(BuildContext context) {
-    final togetherDays = context.watch<Store>().getProfile().togetherDays;
-
     return AppCard(
       borderRadius: 32,
       padding: EdgeInsets.zero,

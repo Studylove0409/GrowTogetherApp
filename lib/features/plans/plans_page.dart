@@ -19,11 +19,13 @@ import 'plan_detail_page.dart';
 import 'together_plans_page.dart';
 
 class PlansPage extends StatelessWidget {
-  const PlansPage({super.key});
+  const PlansPage({super.key, this.isSelected = true});
+
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<Store>();
+    final store = isSelected ? context.watch<Store>() : context.read<Store>();
     final plans = store.getPlans();
     final myPlans = _plansByOwner(plans, PlanOwner.me);
     final partnerPlans = _plansByOwner(plans, PlanOwner.partner);

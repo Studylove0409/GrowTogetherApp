@@ -44,102 +44,104 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        height: 78,
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
-        decoration: BoxDecoration(
-          color: AppColors.paper,
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.92),
-            width: 2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.14),
-              blurRadius: 22,
-              offset: const Offset(0, 10),
+    return RepaintBoundary(
+      child: Material(
+        color: Colors.transparent,
+        clipBehavior: Clip.antiAlias,
+        child: Container(
+          height: 78,
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+          decoration: BoxDecoration(
+            color: AppColors.paper,
+            borderRadius: BorderRadius.circular(32),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.92),
+              width: 2,
             ),
-          ],
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final itemWidth = constraints.maxWidth / _items.length;
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.14),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final itemWidth = constraints.maxWidth / _items.length;
 
-            return Stack(
-              children: [
-                AnimatedPositioned(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  left: itemWidth * selectedIndex,
-                  top: 0,
-                  bottom: 0,
-                  width: itemWidth,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: AppColors.lightPink.withValues(alpha: 0.78),
-                      borderRadius: BorderRadius.circular(26),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.90),
-                        width: 1.5,
+              return Stack(
+                children: [
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOutCubic,
+                    left: itemWidth * selectedIndex,
+                    top: 0,
+                    bottom: 0,
+                    width: itemWidth,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: AppColors.lightPink.withValues(alpha: 0.78),
+                        borderRadius: BorderRadius.circular(26),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.90),
+                          width: 1.5,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Row(
-                  children: [
-                    for (var index = 0; index < _items.length; index++)
-                      Expanded(
-                        child: Stack(
-                          fit: StackFit.expand,
-                          clipBehavior: Clip.none,
-                          children: [
-                            _BottomNavButton(
-                              item: _items[index],
-                              selected: selectedIndex == index,
-                              onTap: () => onSelected(index),
-                            ),
-                            if (index == 3 && reminderBadgeCount > 0)
-                              Positioned(
-                                top: 4,
-                                right: itemWidth * 0.22,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 5,
-                                    vertical: 1,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.deepPink,
-                                    borderRadius: BorderRadius.circular(999),
-                                  ),
-                                  constraints: const BoxConstraints(
-                                    minWidth: 16,
-                                    minHeight: 16,
-                                  ),
-                                  child: Text(
-                                    reminderBadgeCount > 99
-                                        ? '99+'
-                                        : '$reminderBadgeCount',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w900,
+                  Row(
+                    children: [
+                      for (var index = 0; index < _items.length; index++)
+                        Expanded(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            clipBehavior: Clip.none,
+                            children: [
+                              _BottomNavButton(
+                                item: _items[index],
+                                selected: selectedIndex == index,
+                                onTap: () => onSelected(index),
+                              ),
+                              if (index == 3 && reminderBadgeCount > 0)
+                                Positioned(
+                                  top: 4,
+                                  right: itemWidth * 0.22,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 5,
+                                      vertical: 1,
                                     ),
-                                    textAlign: TextAlign.center,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.deepPink,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    child: Text(
+                                      reminderBadgeCount > 99
+                                          ? '99+'
+                                          : '$reminderBadgeCount',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
                                   ),
                                 ),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ],
-            );
-          },
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

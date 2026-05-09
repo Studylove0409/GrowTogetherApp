@@ -98,12 +98,16 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<Store>();
+    final store = widget.isSelected
+        ? context.watch<Store>()
+        : context.read<Store>();
     final plans = store
         .getPlans()
         .where((plan) => plan.canCurrentUserCheckin && !plan.isEnded)
         .toList();
-    _scheduleStoreSync(plans: plans, focusSessions: store.getFocusSessions());
+    if (widget.isSelected) {
+      _scheduleStoreSync(plans: plans, focusSessions: store.getFocusSessions());
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,

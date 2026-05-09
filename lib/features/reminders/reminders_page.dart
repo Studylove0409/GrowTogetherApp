@@ -14,8 +14,9 @@ import '../plans/plan_detail_page.dart';
 import '../../shared/widgets/reminder_card.dart';
 
 class RemindersPage extends StatefulWidget {
-  const RemindersPage({super.key, this.onOpenFocus});
+  const RemindersPage({super.key, this.isSelected = true, this.onOpenFocus});
 
+  final bool isSelected;
   final VoidCallback? onOpenFocus;
 
   @override
@@ -28,7 +29,9 @@ class _RemindersPageState extends State<RemindersPage> {
 
   @override
   Widget build(BuildContext context) {
-    final store = context.watch<Store>();
+    final store = widget.isSelected
+        ? context.watch<Store>()
+        : context.read<Store>();
     final reminders = store
         .getReminders()
         .where((reminder) => reminder.sentByMe != _showReceived)
@@ -88,7 +91,7 @@ class _RemindersPageState extends State<RemindersPage> {
                         ),
                       ],
                     )
-                  : ListView(
+                  : ListView.builder(
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.fromLTRB(
                         AppSpacing.md,
@@ -96,9 +99,11 @@ class _RemindersPageState extends State<RemindersPage> {
                         AppSpacing.md,
                         32,
                       ),
-                      children: [
-                        for (final invite in focusInvites)
-                          Padding(
+                      itemCount: focusInvites.length + reminders.length,
+                      itemBuilder: (context, index) {
+                        if (index < focusInvites.length) {
+                          final invite = focusInvites[index];
+                          return Padding(
                             padding: const EdgeInsets.only(
                               bottom: AppSpacing.md,
                             ),
@@ -108,26 +113,26 @@ class _RemindersPageState extends State<RemindersPage> {
                               onDecline: () =>
                                   _declineFocusInvite(context, invite),
                             ),
-                          ),
-                        for (final reminder in reminders)
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: AppSpacing.md,
-                            ),
-                            child: ReminderCard(
-                              reminder: reminder,
-                              onTap: reminder.planId != null
-                                  ? () => Navigator.of(context).push(
-                                      MaterialPageRoute<void>(
-                                        builder: (_) => PlanDetailPage(
-                                          planId: reminder.planId!,
-                                        ),
+                          );
+                        }
+
+                        final reminder = reminders[index - focusInvites.length];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                          child: ReminderCard(
+                            reminder: reminder,
+                            onTap: reminder.planId != null
+                                ? () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) => PlanDetailPage(
+                                        planId: reminder.planId!,
                                       ),
-                                    )
-                                  : null,
-                            ),
+                                    ),
+                                  )
+                                : null,
                           ),
-                      ],
+                        );
+                      },
                     ),
             ),
           ),
