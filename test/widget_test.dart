@@ -109,7 +109,7 @@ void main() {
 
     expect(find.text('TA 邀请你一起专注'), findsNothing);
     expect(find.text('加入专注'), findsNothing);
-    expect(find.text('今日专注概览'), findsOneWidget);
+    expect(find.text('今天已经专注'), findsOneWidget);
   });
 
   testWidgets('GrowTogether shell switches between the five tabs', (
@@ -123,9 +123,14 @@ void main() {
 
     await tester.tap(find.text('专注'));
     await tester.pump();
-    expect(find.text('今日专注概览'), findsOneWidget);
+    expect(find.text('今天已经专注'), findsOneWidget);
     expect(find.text('本次专注为了哪个计划？'), findsOneWidget);
     expect(find.text('25 分钟'), findsOneWidget);
+
+    await tester.tap(find.text('选择一个计划'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('学习英语 30 分钟'));
+    await tester.pumpAndSettle();
 
     await tester.scrollUntilVisible(
       find.text('自定义'),
@@ -142,20 +147,12 @@ void main() {
     expect(find.text('37 分钟'), findsOneWidget);
 
     await tester.scrollUntilVisible(
-      find.text('学习英语 30 分钟'),
-      -220,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pump();
-    await tester.tap(find.text('学习英语 30 分钟'));
-    await tester.pump();
-    await tester.scrollUntilVisible(
-      find.text('开始专注'),
+      find.widgetWithText(FilledButton, '开始专注'),
       240,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pump();
-    await tester.tap(find.text('开始专注'));
+    await tester.tap(find.widgetWithText(FilledButton, '开始专注'));
     await tester.pump();
     expect(find.text('37:00'), findsOneWidget);
     expect(find.text('正在专注：学习英语 30 分钟'), findsOneWidget);

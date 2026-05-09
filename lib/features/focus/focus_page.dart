@@ -721,7 +721,6 @@ class _FocusSetupView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = selectedPlan;
     return RefreshIndicator(
       color: AppColors.deepPink,
       onRefresh: onRefresh,
@@ -731,70 +730,113 @@ class _FocusSetupView extends StatelessWidget {
           AppSpacing.md,
           AppSpacing.md,
           AppSpacing.md,
-          96,
+          AppSpacing.md,
         ),
         children: [
-          _FocusHeader(
-            sessions: sessions,
-            selectedPlan: selectedPlan,
-            selectedMinutes: selectedMinutes,
-            mode: mode,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _SetupStepTitle(
-            index: 1,
-            title: '选择计划',
-            subtitle: selected == null ? '先确定这次专注要推进什么' : selected.title,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _FocusPlanSelector(
-            plans: plans,
-            selectedPlan: selectedPlan,
-            onSelectPlan: onSelectPlan,
-          ),
+          _FocusPageHeading(mode: mode),
           const SizedBox(height: AppSpacing.md),
-          _SetupStepTitle(
-            index: 2,
-            title: '设置方式',
-            subtitle: mode == FocusMode.couple ? '邀请会发到 TA 的提醒页' : '安静完成自己的这一段',
-          ),
+          _FocusHeader(sessions: sessions),
+          const SizedBox(height: AppSpacing.lg),
+          const _FocusSectionHeader(title: '开始专注'),
           const SizedBox(height: AppSpacing.sm),
           _FocusConfigCard(
+            plans: plans,
+            selectedPlan: selectedPlan,
             selectedMinutes: selectedMinutes,
             options: durationOptions,
             mode: mode,
+            busy: busy,
+            onSelectPlan: onSelectPlan,
             onSelectDuration: onSelectDuration,
             onCustomDuration: onCustomDuration,
             onSelectMode: onSelectMode,
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _FocusStartPanel(
-            selectedPlan: selectedPlan,
-            selectedMinutes: selectedMinutes,
-            mode: mode,
-            busy: busy,
             onStart: onStart,
           ),
-          if (selected == null) const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.lg),
+          _FocusSectionHeader(
+            title: '今日专注记录',
+            actionLabel: sessions.length > 3 ? '查看全部' : null,
+            onAction: sessions.length > 3
+                ? () => _showAllFocusRecords(context)
+                : null,
+          ),
+          const SizedBox(height: AppSpacing.sm),
           _TodayFocusRecords(sessions: sessions),
+          const SizedBox(height: AppSpacing.md),
+          const _FocusGardenFooter(),
         ],
       ),
+    );
+  }
+
+  Future<void> _showAllFocusRecords(BuildContext context) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _FocusRecordsSheet(sessions: sessions),
+    );
+  }
+}
+
+class _FocusPageHeading extends StatelessWidget {
+  const _FocusPageHeading({required this.mode});
+
+  final FocusMode mode;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('专注', style: AppTextStyles.display.copyWith(fontSize: 38)),
+              const SizedBox(height: 6),
+              Text(
+                '选一件事，安静推进今天的小目标',
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.secondaryText,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          width: 58,
+          height: 58,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.78),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.9)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Icon(
+            mode == FocusMode.couple
+                ? Icons.favorite_rounded
+                : Icons.timer_rounded,
+            color: AppColors.deepPink,
+            size: 30,
+          ),
+        ),
+      ],
     );
   }
 }
 
 class _FocusHeader extends StatelessWidget {
-  const _FocusHeader({
-    required this.sessions,
-    required this.selectedPlan,
-    required this.selectedMinutes,
-    required this.mode,
-  });
+  const _FocusHeader({required this.sessions});
 
   final List<FocusSession> sessions;
-  final Plan? selectedPlan;
-  final int selectedMinutes;
-  final FocusMode mode;
 
   @override
   Widget build(BuildContext context) {
@@ -815,126 +857,124 @@ class _FocusHeader extends StatelessWidget {
       0,
       (total, session) => total + session.scoreDelta,
     );
-    final planTitle = selectedPlan?.title ?? '还没有选择计划';
 
     return AppCard(
-      showDashedBorder: false,
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.lg,
-        AppSpacing.md,
-      ),
-      backgroundColor: AppColors.lightPink.withValues(alpha: 0.42),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      showDashedBorder: true,
+      borderColor: Colors.white.withValues(alpha: 0.86),
+      padding: const EdgeInsets.fromLTRB(20, 20, 18, 18),
+      backgroundColor: AppColors.lightPink.withValues(alpha: 0.50),
+      child: Row(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('专注', style: AppTextStyles.display),
-                    const SizedBox(height: 6),
-                    Text(
-                      '选一件事，安静推进 $selectedMinutes 分钟。',
-                      style: AppTextStyles.body.copyWith(
-                        color: AppColors.secondaryText,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.72),
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: Icon(
-                  mode == FocusMode.couple
-                      ? Icons.favorite_rounded
-                      : Icons.timer_rounded,
-                  color: AppColors.deepPink,
-                  size: 30,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.74),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  selectedPlan == null
-                      ? Icons.radio_button_unchecked_rounded
-                      : Icons.check_circle_rounded,
-                  color: AppColors.deepPink,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    planTitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.body.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
                 Text(
-                  '$selectedMinutes 分钟',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.deepPink,
+                  '今天已经专注',
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.secondaryText,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(height: 8),
+                _FocusMinutesDisplay(minutes: _formatMinutes(totalSeconds)),
+                const SizedBox(height: 8),
                 Text(
-                  focusModeLabel(mode),
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.deepPink,
-                    fontWeight: FontWeight.w900,
+                  totalSeconds > 0 ? '慢慢来，也是在一起变好' : '从一小段安静开始',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.secondaryText,
+                    fontWeight: FontWeight.w800,
                   ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _FocusHeroBadge(
+                  coupleMinutes: _formatMinutes(coupleSeconds),
+                  completedCount: completedCount,
+                  score: score,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          Text('今日专注概览', style: AppTextStyles.section),
-          const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _SummaryTile(
-                icon: Icons.timer_rounded,
-                text: '今日已专注 ${_formatMinutes(totalSeconds)} 分钟',
+          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: 132, height: 138, child: _FocusClockGarden()),
+        ],
+      ),
+    );
+  }
+}
+
+class _FocusMinutesDisplay extends StatelessWidget {
+  const _FocusMinutesDisplay({required this.minutes});
+
+  final int minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '$minutes',
+              style: AppTextStyles.display.copyWith(
+                color: AppColors.deepPink,
+                fontSize: 50,
+                height: 1,
               ),
-              _SummaryTile(
-                icon: Icons.check_circle_rounded,
-                text: '已完成 $completedCount 次专注',
+            ),
+            TextSpan(
+              text: ' 分钟',
+              style: AppTextStyles.display.copyWith(fontSize: 38, height: 1),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FocusHeroBadge extends StatelessWidget {
+  const _FocusHeroBadge({
+    required this.coupleMinutes,
+    required this.completedCount,
+    required this.score,
+  });
+
+  final int coupleMinutes;
+  final int completedCount;
+  final int score;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.favorite_rounded,
+            color: AppColors.deepPink,
+            size: 17,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '共同专注 $coupleMinutes 分钟 · 完成 $completedCount 次 · +$score',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.secondaryText,
+                fontWeight: FontWeight.w900,
               ),
-              _SummaryTile(
-                icon: Icons.favorite_rounded,
-                text: '共同专注 ${_formatMinutes(coupleSeconds)} 分钟',
-              ),
-              _SummaryTile(
-                icon: Icons.add_chart_rounded,
-                text: '今日执行分 +$score',
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -942,51 +982,123 @@ class _FocusHeader extends StatelessWidget {
   }
 }
 
-class _SetupStepTitle extends StatelessWidget {
-  const _SetupStepTitle({
-    required this.index,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final int index;
-  final String title;
-  final String subtitle;
+class _FocusClockGarden extends StatelessWidget {
+  const _FocusClockGarden();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    return Stack(
+      alignment: Alignment.center,
       children: [
-        Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: AppColors.deepPink,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            '$index',
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w900,
+        Positioned(
+          bottom: 4,
+          child: Container(
+            width: 126,
+            height: 24,
+            decoration: BoxDecoration(
+              color: AppColors.reminder.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(999),
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppTextStyles.section),
-              Text(
-                subtitle,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption,
-              ),
-            ],
+        Positioned(
+          left: 4,
+          bottom: 22,
+          child: Icon(
+            Icons.eco_rounded,
+            color: AppColors.grassDeep.withValues(alpha: 0.72),
+            size: 42,
+          ),
+        ),
+        Positioned(
+          right: 2,
+          bottom: 18,
+          child: Icon(
+            Icons.local_florist_rounded,
+            color: AppColors.primary.withValues(alpha: 0.72),
+            size: 40,
+          ),
+        ),
+        Positioned(
+          top: 28,
+          child: Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: AppColors.paper,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.primary, width: 5),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Icon(
+                  Icons.favorite_rounded,
+                  color: AppColors.deepPink,
+                  size: 28,
+                ),
+                Positioned(
+                  top: 12,
+                  child: Container(
+                    width: 4,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: AppColors.deepPink,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  right: 14,
+                  child: Transform.rotate(
+                    angle: math.pi / 2.8,
+                    child: Container(
+                      width: 4,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          top: 18,
+          left: 38,
+          child: _ClockBell(color: AppColors.primary),
+        ),
+        Positioned(
+          top: 18,
+          right: 38,
+          child: _ClockBell(color: AppColors.deepPink),
+        ),
+        Positioned(
+          top: 36,
+          left: 0,
+          child: Icon(
+            Icons.favorite_rounded,
+            color: AppColors.primary.withValues(alpha: 0.32),
+            size: 24,
+          ),
+        ),
+        Positioned(
+          top: 20,
+          right: 8,
+          child: Icon(
+            Icons.favorite_rounded,
+            color: AppColors.primary.withValues(alpha: 0.36),
+            size: 22,
           ),
         ),
       ],
@@ -994,34 +1106,80 @@ class _SetupStepTitle extends StatelessWidget {
   }
 }
 
-class _SummaryTile extends StatelessWidget {
-  const _SummaryTile({required this.icon, required this.text});
+class _ClockBell extends StatelessWidget {
+  const _ClockBell({required this.color});
 
-  final IconData icon;
-  final String text;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(16),
+    return Transform.rotate(
+      angle: -0.16,
+      child: Container(
+        width: 26,
+        height: 12,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(999)),
+        ),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: AppColors.deepPink, size: 18),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: AppTextStyles.caption.copyWith(
-              color: AppColors.text,
-              fontWeight: FontWeight.w900,
+    );
+  }
+}
+
+class _FocusSectionHeader extends StatelessWidget {
+  const _FocusSectionHeader({
+    required this.title,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String title;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.deepPink,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(title, style: AppTextStyles.title.copyWith(fontSize: 23)),
+        ),
+        if (actionLabel != null)
+          InkWell(
+            onTap: onAction,
+            borderRadius: BorderRadius.circular(999),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    actionLabel!,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.deepPink,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.deepPink,
+                    size: 20,
+                  ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -1039,45 +1197,201 @@ class _FocusPlanSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      showDashedBorder: false,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('本次专注为了哪个计划？', style: AppTextStyles.section),
-          const SizedBox(height: 10),
-          if (plans.isEmpty)
-            Text(
-              '还没有可专注的计划，先创建一个自己的计划或共同计划，再回来开始专注。',
-              style: AppTextStyles.caption,
-            )
-          else
-            SizedBox(
-              height: 126,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: plans.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(width: AppSpacing.sm),
-                itemBuilder: (context, index) {
-                  final plan = plans[index];
-                  return _PlanChoiceCard(
-                    plan: plan,
-                    selected: selectedPlan?.id == plan.id,
-                    onTap: () => onSelectPlan(plan),
-                  );
-                },
-              ),
-            ),
-        ],
+    final selected = selectedPlan;
+    return _FocusFieldButton(
+      label: '计划',
+      title: selected?.title ?? '选择一个计划',
+      subtitle: selected == null ? '本次专注为了哪个计划？' : selected.dailyTask,
+      icon: selected?.icon ?? Icons.flag_rounded,
+      iconColor: selected?.iconColor ?? AppColors.deepPink,
+      iconBackgroundColor: selected?.iconBackgroundColor ?? AppColors.blush,
+      enabled: plans.isNotEmpty,
+      onTap: () => _showPlanPicker(context),
+    );
+  }
+
+  Future<void> _showPlanPicker(BuildContext context) async {
+    if (plans.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _PlanPickerSheet(
+        plans: plans,
+        selectedPlan: selectedPlan,
+        onSelectPlan: onSelectPlan,
       ),
     );
   }
 }
 
-class _PlanChoiceCard extends StatelessWidget {
-  const _PlanChoiceCard({
+class _FocusFieldButton extends StatelessWidget {
+  const _FocusFieldButton({
+    required this.label,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.iconColor,
+    required this.iconBackgroundColor,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final String label;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackgroundColor;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: title,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(22),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.72),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: AppColors.line.withValues(alpha: enabled ? 0.72 : 0.36),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: iconBackgroundColor,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(icon, color: iconColor, size: 24),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: AppTextStyles.tiny.copyWith(
+                        color: AppColors.secondaryText,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.body.copyWith(
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(
+                Icons.keyboard_arrow_down_rounded,
+                color: enabled ? AppColors.deepPink : AppColors.mutedText,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanPickerSheet extends StatelessWidget {
+  const _PlanPickerSheet({
+    required this.plans,
+    required this.selectedPlan,
+    required this.onSelectPlan,
+  });
+
+  final List<Plan> plans;
+  final Plan? selectedPlan;
+  final ValueChanged<Plan> onSelectPlan;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.sm,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryText.withValues(alpha: 0.38),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text('选择计划', style: AppTextStyles.title),
+            const SizedBox(height: 4),
+            Text('本次专注为了哪个计划？', style: AppTextStyles.caption),
+            const SizedBox(height: AppSpacing.md),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: plans.length,
+                separatorBuilder: (_, _) =>
+                    const SizedBox(height: AppSpacing.sm),
+                itemBuilder: (context, index) {
+                  final plan = plans[index];
+                  return _PlanChoiceTile(
+                    plan: plan,
+                    selected: selectedPlan?.id == plan.id,
+                    onTap: () {
+                      onSelectPlan(plan);
+                      Navigator.of(context).pop();
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanChoiceTile extends StatelessWidget {
+  const _PlanChoiceTile({
     required this.plan,
     required this.selected,
     required this.onTap,
@@ -1089,55 +1403,57 @@ class _PlanChoiceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 186,
-      child: AppCard(
-        borderRadius: 22,
-        padding: const EdgeInsets.all(10),
-        showDashedBorder: false,
-        backgroundColor: selected
-            ? AppColors.lightPink.withValues(alpha: 0.70)
-            : Colors.white.withValues(alpha: 0.72),
-        onTap: onTap,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+    return AppCard(
+      borderRadius: 22,
+      padding: const EdgeInsets.all(12),
+      showDashedBorder: false,
+      backgroundColor: selected
+          ? AppColors.lightPink.withValues(alpha: 0.70)
+          : Colors.white.withValues(alpha: 0.78),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: plan.iconBackgroundColor,
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: Icon(plan.icon, color: plan.iconColor, size: 24),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: plan.iconBackgroundColor,
-                    borderRadius: BorderRadius.circular(15),
+                Text(
+                  plan.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w900,
                   ),
-                  child: Icon(plan.icon, color: plan.iconColor, size: 22),
                 ),
-                const Spacer(),
-                if (selected)
-                  const Icon(
-                    Icons.check_circle_rounded,
-                    color: AppColors.deepPink,
-                    size: 22,
-                  ),
+                const SizedBox(height: 2),
+                Text(
+                  '专注分 ${plan.focusScore}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption,
+                ),
               ],
             ),
-            const Spacer(),
-            Text(
-              plan.title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w900),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '专注分 ${plan.focusScore}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(
+            selected
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: selected ? AppColors.deepPink : AppColors.mutedText,
+            size: 24,
+          ),
+        ],
       ),
     );
   }
@@ -1192,29 +1508,53 @@ class _FocusDurationSelector extends StatelessWidget {
 
 class _FocusConfigCard extends StatelessWidget {
   const _FocusConfigCard({
+    required this.plans,
+    required this.selectedPlan,
     required this.selectedMinutes,
     required this.options,
     required this.mode,
+    required this.busy,
+    required this.onSelectPlan,
     required this.onSelectDuration,
     required this.onCustomDuration,
     required this.onSelectMode,
+    required this.onStart,
   });
 
+  final List<Plan> plans;
+  final Plan? selectedPlan;
   final int selectedMinutes;
   final List<int> options;
   final FocusMode mode;
+  final bool busy;
+  final ValueChanged<Plan> onSelectPlan;
   final ValueChanged<int> onSelectDuration;
   final VoidCallback onCustomDuration;
   final ValueChanged<FocusMode> onSelectMode;
+  final VoidCallback? onStart;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      showDashedBorder: false,
-      padding: const EdgeInsets.all(14),
+      showDashedBorder: true,
+      padding: const EdgeInsets.all(18),
+      borderColor: AppColors.dashedLine,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _FocusPlanSelector(
+            plans: plans,
+            selectedPlan: selectedPlan,
+            onSelectPlan: onSelectPlan,
+          ),
+          if (plans.isEmpty) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              '还没有可专注的计划，先创建一个自己的计划或共同计划，再回来开始专注。',
+              style: AppTextStyles.caption,
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
           _FocusModeSelector(mode: mode, onSelectMode: onSelectMode),
           const SizedBox(height: AppSpacing.md),
           _FocusDurationSelector(
@@ -1222,6 +1562,13 @@ class _FocusConfigCard extends StatelessWidget {
             options: options,
             onSelectDuration: onSelectDuration,
             onCustomDuration: onCustomDuration,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          PrimaryButton(
+            label: selectedPlan == null ? '先选择计划' : '开始专注',
+            icon: Icons.play_arrow_rounded,
+            onPressed: onStart,
+            isLoading: busy,
           ),
         ],
       ),
@@ -1240,11 +1587,6 @@ class _FocusModeSelector extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          '模式',
-          style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
@@ -1267,84 +1609,14 @@ class _FocusModeSelector extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        Text('一起专注会把邀请放到 TA 的提醒页，不会打断当前页面。', style: AppTextStyles.caption),
+        Center(
+          child: Text(
+            '一起专注会把邀请放到 TA 的提醒页，不会打断当前页面哦。',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
       ],
-    );
-  }
-}
-
-class _FocusStartPanel extends StatelessWidget {
-  const _FocusStartPanel({
-    required this.selectedPlan,
-    required this.selectedMinutes,
-    required this.mode,
-    required this.busy,
-    required this.onStart,
-  });
-
-  final Plan? selectedPlan;
-  final int selectedMinutes;
-  final FocusMode mode;
-  final bool busy;
-  final VoidCallback? onStart;
-
-  @override
-  Widget build(BuildContext context) {
-    final plan = selectedPlan;
-    return AppCard(
-      showDashedBorder: false,
-      padding: const EdgeInsets.all(14),
-      backgroundColor: plan == null
-          ? AppColors.paper
-          : AppColors.deepPink.withValues(alpha: 0.08),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.blush,
-                  borderRadius: BorderRadius.circular(17),
-                ),
-                child: Icon(
-                  plan?.icon ?? Icons.flag_rounded,
-                  color: AppColors.deepPink,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      plan?.title ?? '选择计划后就可以开始',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    Text(
-                      '$selectedMinutes 分钟 · ${focusModeLabel(mode)}',
-                      style: AppTextStyles.caption,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          PrimaryButton(
-            label: plan == null ? '先选择计划' : '开始专注',
-            icon: Icons.play_arrow_rounded,
-            onPressed: onStart,
-            isLoading: busy,
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1811,17 +2083,24 @@ class _TodayFocusRecords extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       showDashedBorder: false,
+      padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('今日专注记录', style: AppTextStyles.section),
-          const SizedBox(height: AppSpacing.sm),
           if (sessions.isEmpty)
-            Text('今天还没有专注记录，选一个计划开始吧。', style: AppTextStyles.caption)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Text('今天还没有专注记录，选一个计划开始吧。', style: AppTextStyles.caption),
+            )
           else
-            ...sessions
-                .take(5)
-                .map((session) => _FocusRecordTile(session: session)),
+            for (final entry in sessions.take(3).indexed) ...[
+              _FocusRecordTile(session: entry.$2),
+              if (entry.$1 != math.min(sessions.length, 3) - 1)
+                Divider(
+                  height: 1,
+                  color: AppColors.line.withValues(alpha: 0.60),
+                ),
+            ],
         ],
       ),
     );
@@ -1840,16 +2119,18 @@ class _FocusRecordTile extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
+            width: 48,
+            height: 48,
             decoration: BoxDecoration(
               color: AppColors.blush.withValues(alpha: 0.82),
-              borderRadius: BorderRadius.circular(15),
+              borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
-              session.isCompleted ? Icons.check_rounded : Icons.spa_rounded,
+              session.isCompleted
+                  ? Icons.favorite_rounded
+                  : Icons.local_florist_rounded,
               color: AppColors.deepPink,
-              size: 21,
+              size: 23,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -1889,6 +2170,145 @@ class _FocusRecordTile extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FocusRecordsSheet extends StatelessWidget {
+  const _FocusRecordsSheet({required this.sessions});
+
+  final List<FocusSession> sessions;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.78,
+        ),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md,
+          AppSpacing.sm,
+          AppSpacing.md,
+          AppSpacing.md,
+        ),
+        decoration: const BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 42,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: AppColors.secondaryText.withValues(alpha: 0.38),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text('全部专注记录', style: AppTextStyles.title),
+            const SizedBox(height: 4),
+            Text('今天的每一段安静推进都在这里。', style: AppTextStyles.caption),
+            const SizedBox(height: AppSpacing.md),
+            Flexible(
+              child: AppCard(
+                showDashedBorder: false,
+                padding: const EdgeInsets.fromLTRB(18, 8, 18, 8),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: sessions.length,
+                  separatorBuilder: (_, _) => Divider(
+                    height: 1,
+                    color: AppColors.line.withValues(alpha: 0.60),
+                  ),
+                  itemBuilder: (context, index) {
+                    return _FocusRecordTile(session: sessions[index]);
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FocusGardenFooter extends StatelessWidget {
+  const _FocusGardenFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 54,
+      child: CustomPaint(
+        painter: _FocusGardenPainter(),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _FocusGardenPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final grassPaint = Paint()
+      ..color = AppColors.grass.withValues(alpha: 0.60)
+      ..style = PaintingStyle.fill;
+    final hill = Path()
+      ..moveTo(0, size.height * 0.58)
+      ..quadraticBezierTo(
+        size.width * 0.22,
+        size.height * 0.30,
+        size.width * 0.48,
+        size.height * 0.54,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.72,
+        size.height * 0.76,
+        size.width,
+        size.height * 0.44,
+      )
+      ..lineTo(size.width, size.height)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(hill, grassPaint);
+
+    final stemPaint = Paint()
+      ..color = AppColors.grassDeep.withValues(alpha: 0.70)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final flowerPaint = Paint()
+      ..color = AppColors.primary.withValues(alpha: 0.72);
+    final centerPaint = Paint()..color = AppColors.flowerYellow;
+
+    for (final dx in [
+      28.0,
+      size.width * 0.22,
+      size.width * 0.48,
+      size.width * 0.74,
+    ]) {
+      final base = Offset(dx, size.height * 0.76);
+      final top = Offset(dx, size.height * 0.44);
+      canvas.drawLine(base, top, stemPaint);
+      for (var i = 0; i < 5; i++) {
+        final angle = i * math.pi * 2 / 5;
+        canvas.drawCircle(
+          top + Offset(math.cos(angle) * 6, math.sin(angle) * 6),
+          5,
+          flowerPaint,
+        );
+      }
+      canvas.drawCircle(top, 4, centerPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FocusGardenPainter oldDelegate) => false;
 }
 
 class _CustomDurationDialog extends StatefulWidget {
