@@ -49,4 +49,13 @@ class AccountRepository {
       params: {'p_nickname': '一起进步的你'},
     );
   }
+
+  Future<void> signOutToAnonymous() async {
+    await _supabase.auth.signOut();
+    await _supabase.auth.signInAnonymously();
+    await _supabase.rpc(
+      'create_profile_for_current_user',
+      params: {'p_nickname': '一起进步的你'},
+    );
+  }
 }

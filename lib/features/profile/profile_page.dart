@@ -345,6 +345,43 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
     }
   }
 
+  Future<void> _signOut() async {
+    if (_isSubmitting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('退出当前账号'),
+        content: const Text('退出后会切换为新的临时账号。你可以之后再用邮箱和密码登录回来。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('退出登录'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || _isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.repository.signOutToAnonymous();
+      if (!mounted) return;
+      await widget.onAccountChanged();
+      if (!mounted) return;
+      _showSnack(context, '已退出账号，当前是新的临时账号。');
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      _showSnack(context, _accountErrorMessage(error.message));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
@@ -459,6 +496,7 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
             isSubmitting: _isSubmitting,
             onPrimary: account.isEmailConfirmed ? _setPassword : _linkEmail,
             onSignIn: _signIn,
+            onSignOut: _signOut,
           ),
         ],
       ),
@@ -470,14 +508,14 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   }
 
   String _accountTitle(AccountIdentity account) {
-    if (account.isEmailConfirmed) return '邮箱已认证';
+    if (!account.isAnonymous && account.hasEmail) return '已登录账号';
     if (account.hasEmail) return '邮箱待确认';
     return '保护你的账号';
   }
 
   String _accountDescription(AccountIdentity account) {
-    if (account.isEmailConfirmed) {
-      return '已认证 ${account.email}。继续设置密码后，换手机也能用邮箱密码登录。';
+    if (!account.isAnonymous && account.hasEmail) {
+      return '当前已登录 ${account.email}。设置密码后，换手机也能用邮箱密码登录。';
     }
     if (account.hasEmail) {
       return '已发送验证邮件到 ${account.email}，确认邮箱后再设置密码。';
@@ -486,19 +524,21 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   }
 
   String _accountStatusLabel(AccountIdentity account) {
-    if (account.isEmailConfirmed) return '已认证';
+    if (!account.isAnonymous && account.hasEmail) return '已登录';
     if (account.hasEmail) return '待确认';
     return '临时';
   }
 
   Color _accountStatusColor(AccountIdentity account) {
-    if (account.isEmailConfirmed) return AppColors.success;
+    if (!account.isAnonymous && account.hasEmail) return AppColors.success;
     if (account.hasEmail) return AppColors.reminder;
     return AppColors.deepPink;
   }
 
   IconData _accountIcon(AccountIdentity account) {
-    if (account.isEmailConfirmed) return Icons.lock_rounded;
+    if (!account.isAnonymous && account.hasEmail) {
+      return Icons.verified_user_rounded;
+    }
     if (account.hasEmail) return Icons.mark_email_unread_rounded;
     return Icons.shield_outlined;
   }
@@ -598,6 +638,7 @@ class _AccountSecurityPanel extends StatelessWidget {
     required this.isSubmitting,
     required this.onPrimary,
     required this.onSignIn,
+    required this.onSignOut,
   });
 
   final AccountIdentity account;
@@ -608,6 +649,7 @@ class _AccountSecurityPanel extends StatelessWidget {
   final bool isSubmitting;
   final VoidCallback onPrimary;
   final VoidCallback onSignIn;
+  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -659,6 +701,7 @@ class _AccountSecurityPanel extends StatelessWidget {
                 isSubmitting: isSubmitting,
                 onPrimary: onPrimary,
                 onSignIn: onSignIn,
+                onSignOut: onSignOut,
               ),
             ],
           ],
@@ -674,12 +717,14 @@ class _AccountActionButtons extends StatelessWidget {
     required this.isSubmitting,
     required this.onPrimary,
     required this.onSignIn,
+    required this.onSignOut,
   });
 
   final AccountIdentity account;
   final bool isSubmitting;
   final VoidCallback onPrimary;
   final VoidCallback onSignIn;
+  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -706,6 +751,17 @@ class _AccountActionButtons extends StatelessWidget {
           icon: const Icon(Icons.login_rounded),
           label: const Text('登录已有账号'),
         ),
+        if (!account.isAnonymous) ...[
+          const SizedBox(height: AppSpacing.xs),
+          TextButton.icon(
+            onPressed: isSubmitting ? null : onSignOut,
+            icon: const Icon(Icons.logout_rounded),
+            label: const Text('退出登录'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.secondaryText,
+            ),
+          ),
+        ],
       ],
     );
   }

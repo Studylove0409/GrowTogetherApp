@@ -88,7 +88,13 @@ class _GrassSticker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: SizedBox(height: 92, child: CustomPaint(painter: _GrassPainter())),
+      child: Opacity(
+        opacity: 0.58,
+        child: SizedBox(
+          height: 74,
+          child: CustomPaint(painter: _GrassPainter()),
+        ),
+      ),
     );
   }
 }

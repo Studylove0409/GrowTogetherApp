@@ -50,6 +50,9 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
         title: const Text('成长记录', style: AppTextStyles.section),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
@@ -57,84 +60,101 @@ class _GrowthRecordPageState extends State<GrowthRecordPage> {
         ),
       ),
       body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.deepPink,
-          onRefresh: context.read<Store>().refreshAll,
-          child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              AppSpacing.sm,
-              AppSpacing.md,
-              AppSpacing.xl,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppColors.background,
+                AppColors.paperWarm.withValues(alpha: 0.46),
+                AppColors.cream,
+              ],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
             ),
-            children: [
-              _FilterBar(
-                filter: _filter,
-                onChanged: (filter) => setState(() => _filter = filter),
+          ),
+          child: RefreshIndicator(
+            color: AppColors.deepPink,
+            onRefresh: context.read<Store>().refreshAll,
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.sm,
+                AppSpacing.md,
+                AppSpacing.xxl,
               ),
-              const SizedBox(height: AppSpacing.lg),
-              _StatsOverviewCard(
-                togetherDays: profile.togetherDays,
-                checkins: checkins,
-                today: _today,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _CheckinCalendar(
-                checkins: checkins,
-                currentMonth: _currentMonth,
-                today: _today,
-                onPreviousMonth: () => setState(() {
-                  _currentMonth = DateTime(
-                    _currentMonth.year,
-                    _currentMonth.month - 1,
-                  );
-                }),
-                onNextMonth: () => setState(() {
-                  _currentMonth = DateTime(
-                    _currentMonth.year,
-                    _currentMonth.month + 1,
-                  );
-                }),
-                onDaySelected: (date) => _showDayRecords(context, plans, date),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _WeeklyTrendCard(
-                checkins: checkins,
-                today: _today,
-                animationKey: _filter,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _GrowthTimeline(
-                records: timelineRecords,
-                emptyMessage: _filter == FilterType.all
-                    ? '还没有成长记录哦～开始打卡后这里会慢慢丰富起来～'
-                    : '该筛选下暂无数据',
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.favorite_rounded, size: 18),
-                  label: const Text('继续记录你们的小进步吧'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.deepPink,
-                    side: const BorderSide(color: AppColors.deepPink),
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.md,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
+              children: [
+                _FilterBar(
+                  filter: _filter,
+                  onChanged: (filter) => setState(() => _filter = filter),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _StatsOverviewCard(
+                  togetherDays: profile.togetherDays,
+                  checkins: checkins,
+                  today: _today,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _CheckinCalendar(
+                  checkins: checkins,
+                  currentMonth: _currentMonth,
+                  today: _today,
+                  onPreviousMonth: () => setState(() {
+                    _currentMonth = DateTime(
+                      _currentMonth.year,
+                      _currentMonth.month - 1,
+                    );
+                  }),
+                  onNextMonth: () => setState(() {
+                    _currentMonth = DateTime(
+                      _currentMonth.year,
+                      _currentMonth.month + 1,
+                    );
+                  }),
+                  onDaySelected: (date) =>
+                      _showDayRecords(context, plans, date),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _WeeklyTrendCard(
+                  checkins: checkins,
+                  today: _today,
+                  animationKey: _filter,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _GrowthTimeline(
+                  records: timelineRecords,
+                  emptyMessage: _filter == FilterType.all
+                      ? '还没有成长记录哦～开始打卡后这里会慢慢丰富起来～'
+                      : '该筛选下暂无数据',
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.favorite_rounded, size: 18),
+                    label: const Text('继续记录你们的小进步吧'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.deepPink,
+                      side: BorderSide(
+                        color: AppColors.deepPink.withValues(alpha: 0.42),
+                      ),
+                      backgroundColor: Colors.white.withValues(alpha: 0.62),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.md,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -364,6 +384,53 @@ class _DayRecordTile extends StatelessWidget {
   }
 }
 
+class _CardTitle extends StatelessWidget {
+  const _CardTitle({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: AppColors.deepPink.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: AppColors.deepPink, size: 18),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTextStyles.section),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.tiny.copyWith(
+                  color: AppColors.secondaryText,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _FilterBar extends StatelessWidget {
   const _FilterBar({required this.filter, required this.onChanged});
 
@@ -372,35 +439,111 @@ class _FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<FilterType>(
-      showSelectedIcon: false,
-      selected: {filter},
-      onSelectionChanged: (selection) => onChanged(selection.first),
-      style: ButtonStyle(
-        backgroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return Colors.white;
-          }
-          return AppColors.lightPink.withValues(alpha: 0.56);
-        }),
-        foregroundColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) {
-            return AppColors.deepPink;
-          }
-          return AppColors.secondaryText;
-        }),
-        side: WidgetStateProperty.all(
-          BorderSide(color: AppColors.deepPink.withValues(alpha: 0.22)),
-        ),
-        textStyle: WidgetStateProperty.all(
-          const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+    const items = [
+      (filter: FilterType.all, label: '全部', icon: Icons.auto_awesome_rounded),
+      (filter: FilterType.me, label: '只看我', icon: Icons.person_rounded),
+      (filter: FilterType.partner, label: '只看TA', icon: Icons.favorite_rounded),
+    ];
+
+    return Container(
+      height: 54,
+      padding: const EdgeInsets.all(5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.82)),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          for (final item in items)
+            Expanded(
+              child: _FilterPill(
+                label: item.label,
+                icon: item.icon,
+                selected: item.filter == filter,
+                onTap: () => onChanged(item.filter),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  const _FilterPill({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            height: double.infinity,
+            decoration: BoxDecoration(
+              color: selected ? AppColors.deepPink : Colors.transparent,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: selected
+                  ? [
+                      BoxShadow(
+                        color: AppColors.deepPink.withValues(alpha: 0.18),
+                        blurRadius: 12,
+                        offset: const Offset(0, 5),
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  icon,
+                  size: 16,
+                  color: selected ? Colors.white : AppColors.secondaryText,
+                ),
+                const SizedBox(width: 5),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: selected ? Colors.white : AppColors.secondaryText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
-      segments: const [
-        ButtonSegment(value: FilterType.all, label: Text('全部')),
-        ButtonSegment(value: FilterType.me, label: Text('只看我')),
-        ButtonSegment(value: FilterType.partner, label: Text('只看TA')),
-      ],
     );
   }
 }
@@ -429,42 +572,66 @@ class _StatsOverviewCard extends StatelessWidget {
 
     return AppCard(
       borderRadius: 32,
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      backgroundColor: AppColors.lightPink.withValues(alpha: 0.46),
+      padding: EdgeInsets.zero,
+      backgroundColor: AppColors.blush.withValues(alpha: 0.72),
+      borderColor: Colors.white.withValues(alpha: 0.82),
       child: Column(
         children: [
-          Row(
-            children: [
-              _StatItem(
-                value: '$togetherDays',
-                label: '一起进步\n天数',
-                color: AppColors.deepPink,
-                valueKey: const ValueKey('growth-stat-together-days'),
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30),
+              gradient: LinearGradient(
+                colors: [
+                  AppColors.lightPink.withValues(alpha: 0.44),
+                  Colors.white.withValues(alpha: 0.58),
+                  AppColors.mint.withValues(alpha: 0.34),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
-              const SizedBox(width: AppSpacing.sm),
-              _StatItem(
-                value: '${(totalRate * 100).round()}%',
-                label: '总完成率',
-                color: AppColors.successText,
-                valueKey: const ValueKey('growth-stat-total-rate'),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              _StatItem(
-                value: '$weekChecks',
-                label: '本周完成',
-                color: AppColors.reminder,
-                valueKey: const ValueKey('growth-stat-week-checks'),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: totalRate.clamp(0, 1),
-              minHeight: 10,
-              backgroundColor: AppColors.lightPink.withValues(alpha: 0.66),
-              color: AppColors.deepPink,
+            ),
+            child: Column(
+              children: [
+                const _CardTitle(
+                  icon: Icons.insights_rounded,
+                  title: '进步概览',
+                  subtitle: '最近打卡状态一眼看清',
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    _StatItem(
+                      value: '$togetherDays',
+                      label: '一起进步',
+                      unit: '天',
+                      color: AppColors.deepPink,
+                      backgroundColor: AppColors.lightPink,
+                      valueKey: const ValueKey('growth-stat-together-days'),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    _StatItem(
+                      value: '${(totalRate * 100).round()}',
+                      label: '总完成率',
+                      unit: '%',
+                      color: AppColors.successText,
+                      backgroundColor: AppColors.mint,
+                      valueKey: const ValueKey('growth-stat-total-rate'),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    _StatItem(
+                      value: '$weekChecks',
+                      label: '本周完成',
+                      unit: '次',
+                      color: AppColors.secondaryText,
+                      backgroundColor: AppColors.peach,
+                      valueKey: const ValueKey('growth-stat-week-checks'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                _ProgressSummary(rate: totalRate),
+              ],
             ),
           ),
         ],
@@ -477,44 +644,124 @@ class _StatItem extends StatelessWidget {
   const _StatItem({
     required this.value,
     required this.label,
+    required this.unit,
     required this.color,
+    required this.backgroundColor,
     required this.valueKey,
   });
 
   final String value;
   final String label;
+  final String unit;
   final Color color;
+  final Color backgroundColor;
   final Key valueKey;
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        height: 106,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.md,
+        ),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.14),
-          borderRadius: BorderRadius.circular(20),
+          color: backgroundColor.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.74)),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                key: valueKey,
-                semanticsLabel: '${label.replaceAll('\n', '')} $value',
-                style: AppTextStyles.title.copyWith(color: color, fontSize: 28),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    value,
+                    key: valueKey,
+                    semanticsLabel: '$label $value$unit',
+                    style: AppTextStyles.title.copyWith(
+                      color: color,
+                      fontSize: 30,
+                      height: 1,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 2, bottom: 2),
+                    child: Text(
+                      unit,
+                      style: AppTextStyles.caption.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: AppTextStyles.caption,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.secondaryText,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ProgressSummary extends StatelessWidget {
+  const _ProgressSummary({required this.rate});
+
+  final double rate;
+
+  @override
+  Widget build(BuildContext context) {
+    final percent = (rate * 100).round();
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(
+              '完成率',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.secondaryText,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              '$percent%',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.deepPink,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(999),
+          child: LinearProgressIndicator(
+            value: rate.clamp(0, 1),
+            minHeight: 9,
+            backgroundColor: Colors.white.withValues(alpha: 0.78),
+            color: AppColors.deepPink,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -556,91 +803,149 @@ class _CheckinCalendar extends StatelessWidget {
         .map((c) => DateTime(c.date.year, c.date.month, c.date.day))
         .toSet();
 
-    final cellWidth = (MediaQuery.sizeOf(context).width - 64) / 7;
-
     return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(
-              left: AppSpacing.xs,
-              bottom: AppSpacing.sm,
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text('打卡日历', style: AppTextStyles.section),
-                ),
-                IconButton(
-                  tooltip: '上个月',
-                  onPressed: onPreviousMonth,
-                  icon: const Icon(Icons.chevron_left_rounded),
-                  color: AppColors.deepPink,
-                ),
-                Text(
-                  '${currentMonth.year} 年 ${currentMonth.month} 月',
-                  style: AppTextStyles.body.copyWith(
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.text,
+      borderRadius: 30,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      backgroundColor: AppColors.paper,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final cellWidth = constraints.maxWidth / 7;
+          return Column(
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: _CardTitle(
+                      icon: Icons.calendar_month_rounded,
+                      title: '打卡日历',
+                      subtitle: '点击日期查看当天记录',
+                    ),
                   ),
-                ),
-                IconButton(
-                  tooltip: '下个月',
-                  onPressed: onNextMonth,
-                  icon: const Icon(Icons.chevron_right_rounded),
-                  color: AppColors.deepPink,
-                ),
-              ],
-            ),
-          ),
-          Row(
-            children: const ['一', '二', '三', '四', '五', '六', '日']
-                .map(
-                  (d) => Expanded(
-                    child: Center(
-                      child: Text(
-                        d,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.secondaryText,
-                        ),
+                  const SizedBox(width: AppSpacing.sm),
+                  _MonthButton(
+                    tooltip: '上个月',
+                    icon: Icons.chevron_left_rounded,
+                    onPressed: onPreviousMonth,
+                  ),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 88),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.blush.withValues(alpha: 0.84),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      '${currentMonth.year} 年 ${currentMonth.month} 月',
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.caption.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.text,
                       ),
                     ),
                   ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Wrap(
-            children: [
-              for (var i = 1; i < firstWeekday; i++)
-                SizedBox(width: cellWidth, height: 38),
-              for (var day = 1; day <= daysInMonth; day++)
-                SizedBox(
-                  width: cellWidth,
-                  height: 38,
-                  child: _CalendarCell(
-                    date: DateTime(currentMonth.year, currentMonth.month, day),
-                    day: day,
-                    isCompleted: completedDates.contains(
-                      DateTime(currentMonth.year, currentMonth.month, day),
-                    ),
-                    isToday: isCurrentMonth && day == today.day,
-                    onTap: () => onDaySelected(
-                      DateTime(currentMonth.year, currentMonth.month, day),
-                    ),
+                  _MonthButton(
+                    tooltip: '下个月',
+                    icon: Icons.chevron_right_rounded,
+                    onPressed: onNextMonth,
                   ),
-                ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Row(
+                children: const ['一', '二', '三', '四', '五', '六', '日']
+                    .map(
+                      (d) => Expanded(
+                        child: Center(
+                          child: Text(
+                            d,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.secondaryText,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                runSpacing: 6,
+                children: [
+                  for (var i = 1; i < firstWeekday; i++)
+                    SizedBox(width: cellWidth, height: 40),
+                  for (var day = 1; day <= daysInMonth; day++)
+                    SizedBox(
+                      width: cellWidth,
+                      height: 40,
+                      child: _CalendarCell(
+                        date: DateTime(
+                          currentMonth.year,
+                          currentMonth.month,
+                          day,
+                        ),
+                        day: day,
+                        isCompleted: completedDates.contains(
+                          DateTime(currentMonth.year, currentMonth.month, day),
+                        ),
+                        isToday: isCurrentMonth && day == today.day,
+                        onTap: () => onDaySelected(
+                          DateTime(currentMonth.year, currentMonth.month, day),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const _LegendDot(color: AppColors.successText, label: '已完成'),
+                  const SizedBox(width: AppSpacing.md),
+                  _LegendDot(
+                    color: AppColors.deepPink.withValues(alpha: 0.85),
+                    label: '今天',
+                  ),
+                ],
+              ),
             ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const Center(
-            child: _LegendDot(color: AppColors.successText, label: '已完成'),
-          ),
-        ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MonthButton extends StatelessWidget {
+  const _MonthButton({
+    required this.tooltip,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        color: AppColors.deepPink,
+        style: IconButton.styleFrom(
+          fixedSize: const Size(34, 34),
+          minimumSize: const Size(34, 34),
+          padding: EdgeInsets.zero,
+          backgroundColor: Colors.white.withValues(alpha: 0.72),
+          shape: const CircleBorder(),
+        ),
       ),
     );
   }
@@ -666,40 +971,62 @@ class _CalendarCell extends StatelessWidget {
     Color? bgColor;
     if (isCompleted) {
       bgColor = AppColors.successText;
+    } else if (isToday) {
+      bgColor = AppColors.lightPink.withValues(alpha: 0.62);
     }
 
     return Semantics(
       button: true,
       label: '查看 ${date.year}年${date.month}月${date.day}日 打卡记录',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          key: ValueKey('calendar-day-${date.year}-${date.month}-${date.day}'),
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Container(
-            decoration: BoxDecoration(
-              color: bgColor,
-              shape: BoxShape.circle,
-              border: isToday
-                  ? Border.all(color: AppColors.deepPink, width: 1.5)
-                  : null,
+      child: Center(
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            key: ValueKey(
+              'calendar-day-${date.year}-${date.month}-${date.day}',
             ),
-            child: Center(
-              child: isCompleted
-                  ? const Icon(
-                      Icons.check_rounded,
-                      color: Colors.white,
-                      size: 16,
-                    )
-                  : Text(
-                      '$day',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isToday ? FontWeight.w900 : FontWeight.w500,
-                        color: isToday ? AppColors.deepPink : AppColors.text,
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: bgColor,
+                shape: BoxShape.circle,
+                border: isToday
+                    ? Border.all(color: AppColors.deepPink, width: 1.6)
+                    : null,
+                boxShadow: isCompleted
+                    ? [
+                        BoxShadow(
+                          color: AppColors.successText.withValues(alpha: 0.18),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Center(
+                child: isCompleted
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 17,
+                      )
+                    : Text(
+                        '$day',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isToday
+                              ? FontWeight.w900
+                              : FontWeight.w600,
+                          color: isToday ? AppColors.deepPink : AppColors.text,
+                        ),
                       ),
-                    ),
+              ),
             ),
           ),
         ),
@@ -775,36 +1102,58 @@ class _WeeklyTrendCard extends StatelessWidget {
         .fold<double>(0, (a, b) => a > b ? a : b);
 
     return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
+      borderRadius: 30,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      backgroundColor: AppColors.paper,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(
-              left: AppSpacing.xs,
-              bottom: AppSpacing.md,
-            ),
-            child: Text('本周趋势', style: AppTextStyles.section),
+          const _CardTitle(
+            icon: Icons.bar_chart_rounded,
+            title: '本周趋势',
+            subtitle: '每天完成率变化',
           ),
+          const SizedBox(height: AppSpacing.md),
           SizedBox(
-            height: 120,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (var i = 0; i < 7; i++) ...[
-                  Expanded(
-                    child: _BarColumn(
-                      label: labels[i],
-                      rate: dailyRates[i],
-                      maxRate: maxRate,
-                      isToday: i == today.weekday - 1,
-                      key: ValueKey('$animationKey-$i'),
-                    ),
-                  ),
-                  if (i < 6) const SizedBox(width: AppSpacing.xs),
-                ],
-              ],
+            height: 148,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: AppColors.blush.withValues(alpha: 0.42),
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.sm,
+                  AppSpacing.md,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var i = 0; i < 7; i++) ...[
+                      Expanded(
+                        child: _BarColumn(
+                          label: labels[i],
+                          rate: dailyRates[i],
+                          maxRate: maxRate,
+                          isToday: i == today.weekday - 1,
+                          key: ValueKey('$animationKey-$i'),
+                        ),
+                      ),
+                      if (i < 6) const SizedBox(width: AppSpacing.xs),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            maxRate == 0 ? '本周还没有完成记录' : '粉色高亮为今天',
+            style: AppTextStyles.tiny.copyWith(
+              color: AppColors.secondaryText,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -851,48 +1200,80 @@ class _BarColumnState extends State<_BarColumn> {
         ? 0.0
         : widget.maxRate == 0
         ? 0.0
-        : (widget.rate / widget.maxRate * 72).clamp(4, 72).toDouble();
+        : (widget.rate / widget.maxRate * 72).clamp(6, 72).toDouble();
     final barHeight = _animatedIn ? targetHeight : 0.0;
+    final activeColor = widget.isToday
+        ? AppColors.deepPink
+        : AppColors.primary.withValues(alpha: 0.64);
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
-        if (!isFuture)
-          Text(
-            widget.rate == 0 ? '-' : '${(widget.rate * 100).round()}%',
+        SizedBox(
+          height: 16,
+          child: !isFuture
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.rate == 0 ? '-' : '${(widget.rate * 100).round()}%',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: widget.isToday
+                          ? AppColors.deepPink
+                          : AppColors.secondaryText,
+                    ),
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 74,
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 420),
+              curve: Curves.easeOutCubic,
+              width: 20,
+              height: barHeight,
+              decoration: BoxDecoration(
+                gradient: isFuture
+                    ? null
+                    : LinearGradient(
+                        colors: [
+                          activeColor.withValues(alpha: 0.96),
+                          activeColor.withValues(alpha: 0.48),
+                        ],
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                      ),
+                color: isFuture ? Colors.transparent : null,
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Container(
+          width: 26,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: widget.isToday
+                ? AppColors.deepPink.withValues(alpha: 0.12)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Text(
+            isFuture ? '' : widget.label,
             style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              fontWeight: widget.isToday ? FontWeight.w900 : FontWeight.w700,
               color: widget.isToday
                   ? AppColors.deepPink
                   : AppColors.secondaryText,
             ),
-          )
-        else
-          const Text('', style: TextStyle(fontSize: 10)),
-        const SizedBox(height: 4),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 420),
-          curve: Curves.easeOutBack,
-          height: barHeight,
-          decoration: BoxDecoration(
-            color: isFuture
-                ? Colors.transparent
-                : widget.isToday
-                ? AppColors.deepPink.withValues(alpha: 0.72)
-                : AppColors.lightPink.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(6),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          isFuture ? '' : widget.label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: widget.isToday ? FontWeight.w900 : FontWeight.w600,
-            color: widget.isToday
-                ? AppColors.deepPink
-                : AppColors.secondaryText,
           ),
         ),
       ],
@@ -909,27 +1290,45 @@ class _GrowthTimeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      borderRadius: 28,
-      padding: const EdgeInsets.all(AppSpacing.md),
+      borderRadius: 30,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      backgroundColor: AppColors.paper,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(left: AppSpacing.xs),
-            child: Text('成长时间线', style: AppTextStyles.section),
+          const _CardTitle(
+            icon: Icons.timeline_rounded,
+            title: '成长时间线',
+            subtitle: '最近的小进步都在这里',
           ),
           const SizedBox(height: AppSpacing.md),
           if (records.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-              child: Center(
-                child: Text(
-                  emptyMessage,
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.secondaryText,
-                    fontWeight: FontWeight.w700,
-                  ),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: AppColors.blush.withValues(alpha: 0.48),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.auto_stories_rounded,
+                      color: AppColors.deepPink.withValues(alpha: 0.62),
+                      size: 34,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      emptyMessage,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.body.copyWith(
+                        color: AppColors.secondaryText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             )
@@ -939,40 +1338,47 @@ class _GrowthTimeline extends StatelessWidget {
                 padding: EdgeInsets.only(
                   bottom: i < records.length - 1 ? AppSpacing.md : 0,
                 ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Column(
-                      children: [
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: i == 0
-                                ? AppColors.deepPink
-                                : AppColors.lightPink,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        if (i < records.length - 1)
-                          Container(
-                            width: 1.5,
-                            height: 32,
-                            color: AppColors.line,
-                          ),
-                      ],
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: i == 0
+                        ? AppColors.lightPink.withValues(alpha: 0.52)
+                        : AppColors.blush.withValues(alpha: 0.38),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.72),
                     ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Text(
-                        records[i],
-                        style: AppTextStyles.body.copyWith(
-                          color: AppColors.secondaryText,
-                          fontWeight: FontWeight.w700,
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: i == 0
+                              ? AppColors.deepPink
+                              : AppColors.primary.withValues(alpha: 0.18),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          i == 0 ? Icons.favorite_rounded : Icons.check_rounded,
+                          color: i == 0 ? Colors.white : AppColors.deepPink,
+                          size: 15,
                         ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Text(
+                          records[i],
+                          style: AppTextStyles.body.copyWith(
+                            color: AppColors.secondaryText,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               );
             }),

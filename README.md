@@ -72,3 +72,18 @@ growtogether://auth-callback
 ```
 
 Add this URL to Supabase Dashboard -> Authentication -> URL Configuration -> Redirect URLs. Without it, the verification email may open an invalid web page instead of returning to the app.
+
+For Chinese verification emails, edit Supabase Dashboard -> Authentication -> Email Templates -> Change Email Address:
+
+```text
+Subject: 确认你的邮箱
+```
+
+```html
+<h2>确认你的邮箱</h2>
+<p>点击下面的按钮完成邮箱认证：</p>
+<p><a href="{{ .ConfirmationURL }}">完成认证</a></p>
+<p>如果不是你本人操作，可以忽略这封邮件。</p>
+```
+
+Keep `{{ .ConfirmationURL }}` in the template. It contains the verification token and the app redirect URL.

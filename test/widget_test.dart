@@ -50,6 +50,22 @@ void main() {
     expect(store.refreshAllCount, 1);
   });
 
+  testWidgets('HomePage calendar art opens growth records', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: MockStore.instance,
+          child: const HomePage(),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.calendar_month_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('成长记录'), findsOneWidget);
+  });
+
   testWidgets('GrowTogether shell switches between the four tabs', (
     tester,
   ) async {
