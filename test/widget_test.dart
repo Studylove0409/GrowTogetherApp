@@ -7,12 +7,14 @@ import 'package:grow_together/data/mock/mock_store.dart';
 import 'package:grow_together/data/models/focus_session.dart';
 import 'package:grow_together/data/models/plan.dart';
 import 'package:grow_together/data/models/profile.dart';
+import 'package:grow_together/data/services/plan_occurrence_service.dart';
 import 'package:grow_together/data/store/store.dart';
 import 'package:grow_together/features/focus/focus_page.dart';
 import 'package:grow_together/features/plans/create_plan_page.dart';
 import 'package:grow_together/features/home/home_page.dart';
 import 'package:grow_together/features/plans/plan_detail_page.dart';
 import 'package:grow_together/features/plans/plan_list_scaffold.dart';
+import 'package:grow_together/features/plans/plans_page.dart';
 import 'package:grow_together/features/reminders/reminders_page.dart';
 import 'package:grow_together/data/models/reminder.dart';
 import 'package:grow_together/shared/utils/plan_icon_mapper.dart';
@@ -142,6 +144,24 @@ void main() {
     expect(find.text('明天考试'), findsNothing);
   });
 
+  testWidgets('PlansPage overview only summarizes today plans', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: _PlansOverviewDateFilterStore(),
+          child: const PlansPage(),
+        ),
+      ),
+    );
+
+    expect(find.text('今天已完成'), findsOneWidget);
+    expect(find.text('明天测试'), findsNothing);
+    expect(find.text('TA 今天计划'), findsOneWidget);
+    expect(find.text('TA 明天计划'), findsNothing);
+    expect(find.text('今日完成 1/1'), findsOneWidget);
+    expect(find.text('今日完成 0/1'), findsOneWidget);
+  });
+
   testWidgets('HomePage promotes unfinished own plans before completed ones', (
     tester,
   ) async {
@@ -238,7 +258,35 @@ void main() {
 
     expect(find.text('TA 邀请你一起专注'), findsNothing);
     expect(find.text('加入专注'), findsNothing);
-    expect(find.text('今天已经专注'), findsOneWidget);
+    expect(find.text('今日专注'), findsOneWidget);
+  });
+
+  testWidgets('FocusPage starts a regular focus session without a plan', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: _FocusRefreshStore(),
+          child: const FocusPage(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('未关联计划'), findsOneWidget);
+    expect(find.text('先选择计划'), findsNothing);
+
+    await tester.scrollUntilVisible(
+      find.widgetWithText(FilledButton, '开始专注'),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.widgetWithText(FilledButton, '开始专注'));
+    await tester.pump();
+
+    expect(find.text('25:00'), findsWidgets);
+    expect(find.text('正在专注：普通专注'), findsOneWidget);
   });
 
   test('Plan date range controls today availability', () {
@@ -263,6 +311,69 @@ void main() {
     expect(futureDailyPlan.isNotStartedYet, isTrue);
     expect(futureDailyPlan.canCurrentUserCheckin, isFalse);
     expect(futureDailyPlan.repeatLabel, '未开始');
+  });
+
+  test('PlanOccurrenceService filters plans by local calendar date', () {
+    final today = _todayOnly();
+    final lateToday = DateTime(today.year, today.month, today.day, 23, 30);
+    final tomorrow = _daysFromToday(1);
+
+    final todayOncePlan = _testPlan(
+      startDate: today,
+      endDate: today,
+      repeatType: PlanRepeatType.once,
+    );
+    final tomorrowOncePlan = _testPlan(
+      startDate: tomorrow,
+      endDate: tomorrow,
+      repeatType: PlanRepeatType.once,
+    );
+    final dailyPlan = _testPlan(
+      startDate: tomorrow,
+      endDate: tomorrow.add(const Duration(days: 2)),
+      repeatType: PlanRepeatType.daily,
+    );
+    final completedFuturePlan = tomorrowOncePlan.copyWith(doneToday: true);
+
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(todayOncePlan, today),
+      isTrue,
+    );
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(tomorrowOncePlan, today),
+      isFalse,
+    );
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(tomorrowOncePlan, lateToday),
+      isFalse,
+    );
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(tomorrowOncePlan, tomorrow),
+      isTrue,
+    );
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(dailyPlan, today),
+      isFalse,
+    );
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(dailyPlan, tomorrow),
+      isTrue,
+    );
+    expect(
+      PlanOccurrenceService.shouldPlanAppearOnDate(
+        dailyPlan,
+        tomorrow.add(const Duration(days: 3)),
+      ),
+      isFalse,
+    );
+    expect(
+      PlanOccurrenceService.completedCountForDate(
+        plans: [todayOncePlan, completedFuturePlan],
+        date: today,
+        owner: PlanOwner.me,
+      ),
+      0,
+    );
   });
 
   test('completed once plans stay visible on completion day', () {
@@ -682,11 +793,17 @@ void main() {
 
     await tester.tap(find.text('专注'));
     await tester.pump();
-    expect(find.text('今天已经专注'), findsOneWidget);
-    expect(find.text('本次专注为了哪个计划？'), findsOneWidget);
+    expect(find.text('今日专注'), findsOneWidget);
+    expect(find.text('先选择计划'), findsNothing);
     expect(find.text('25 分钟'), findsOneWidget);
 
-    await tester.tap(find.text('选择一个计划'));
+    await tester.scrollUntilVisible(
+      find.text('未关联计划'),
+      220,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('未关联计划'), findsOneWidget);
+    await tester.tap(find.text('未关联计划'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('学习英语 30 分钟'));
     await tester.pumpAndSettle();
@@ -713,7 +830,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, '开始专注'));
     await tester.pump();
-    expect(find.text('37:00'), findsOneWidget);
+    expect(find.text('37:00'), findsWidgets);
     expect(find.text('正在专注：学习英语 30 分钟'), findsOneWidget);
     expect(find.text('模式：自己专注'), findsOneWidget);
 
@@ -863,6 +980,42 @@ void main() {
     expect(store.getTodayFocusSessions().first.id, 'focus_test');
     expect(updated.focusScore, beforeScore + 5);
     expect(updated.lastFocusedAt, endedAt);
+  });
+
+  test('MockStore records regular focus without changing plan score', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '不应加分计划',
+      isShared: false,
+      dailyTask: '普通专注不归属到这里',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: false,
+    );
+    final beforeScore = store.getPlanById(plan.id)!.focusScore;
+    final endedAt = DateTime.now();
+
+    await store.saveFocusSession(
+      FocusSession(
+        id: 'focus_regular_test',
+        planId: null,
+        planTitle: '普通专注',
+        mode: FocusMode.solo,
+        plannedDurationMinutes: 25,
+        actualDurationSeconds: 25 * 60,
+        status: FocusSessionStatus.completed,
+        scoreDelta: 5,
+        startedAt: endedAt.subtract(const Duration(minutes: 25)),
+        endedAt: endedAt,
+        createdAt: endedAt,
+      ),
+    );
+
+    expect(store.getTodayFocusSessions().first.id, 'focus_regular_test');
+    expect(store.getTodayFocusSessions().first.planId, isNull);
+    expect(store.getPlanById(plan.id)?.focusScore, beforeScore);
   });
 
   test('MockStore creates and controls couple focus session', () async {
@@ -1795,6 +1948,57 @@ class _HomeDateFilterStore extends _RefreshSmokeStore {
   }
 }
 
+class _PlansOverviewDateFilterStore extends _RefreshSmokeStore {
+  final List<Plan> _plans = [
+    _homePlan(
+      id: 'today-completed-plan',
+      title: '今天已完成',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      doneToday: true,
+    ),
+    _homePlan(
+      id: 'tomorrow-plan',
+      title: '明天测试',
+      startDate: _daysFromToday(1),
+      endDate: _daysFromToday(1),
+    ),
+    _homePlan(
+      id: 'partner-today-plan',
+      title: 'TA 今天计划',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      owner: PlanOwner.partner,
+    ),
+    _homePlan(
+      id: 'partner-tomorrow-plan',
+      title: 'TA 明天计划',
+      startDate: _daysFromToday(1),
+      endDate: _daysFromToday(1),
+      owner: PlanOwner.partner,
+      partnerDoneToday: true,
+    ),
+  ];
+
+  @override
+  List<Plan> getPlans() => List.unmodifiable(_plans);
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      _plans.where((plan) => plan.owner == owner).toList();
+
+  @override
+  List<Plan> getAllPlans() => List.unmodifiable(_plans);
+
+  @override
+  Plan? getPlanById(String id) {
+    for (final plan in _plans) {
+      if (plan.id == id) return plan;
+    }
+    return null;
+  }
+}
+
 class _HomeProgressionStore extends _RefreshSmokeStore {
   final List<Plan> _plans = [
     _homePlan(
@@ -1896,13 +2100,15 @@ Plan _homePlan({
   required String title,
   required DateTime startDate,
   required DateTime endDate,
+  PlanOwner owner = PlanOwner.me,
   bool doneToday = false,
+  bool partnerDoneToday = false,
 }) {
   return Plan(
     id: id,
     title: title,
     subtitle: '$title说明',
-    owner: PlanOwner.me,
+    owner: owner,
     iconKey: 'book',
     minutes: 20,
     completedDays: doneToday ? 1 : 0,
@@ -1915,6 +2121,7 @@ Plan _homePlan({
     reminderTime: null,
     repeatType: PlanRepeatType.once,
     hasDateRange: true,
+    partnerDoneToday: partnerDoneToday,
   );
 }
 

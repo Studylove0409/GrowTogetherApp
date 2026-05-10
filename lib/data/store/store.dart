@@ -106,7 +106,7 @@ abstract class Store extends ChangeNotifier {
   Future<void> saveFocusSession(FocusSession session) async {}
 
   Future<FocusSession> createCoupleFocusInvite({
-    required Plan plan,
+    Plan? plan,
     required int plannedDurationMinutes,
   }) {
     throw UnimplementedError('Couple focus is not implemented by this store');

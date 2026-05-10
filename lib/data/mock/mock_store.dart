@@ -10,6 +10,7 @@ import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
 import '../models/reminder_settings.dart';
+import '../services/plan_occurrence_service.dart';
 import '../store/store.dart';
 import 'mock_data.dart';
 
@@ -67,8 +68,11 @@ class MockStore extends Store {
 
   @override
   List<Plan> getTodayFocusPlans() {
-    final active = _plans.where(_isVisibleToday).toList()
-      ..sort(_comparePlanPriority);
+    final today = PlanOccurrenceService.dateOnly(DateTime.now());
+    final active = PlanOccurrenceService.plansForDate(
+      plans: _plans.where(_isVisibleInActiveLists).toList(),
+      date: today,
+    )..sort(_comparePlanPriority);
     return List.unmodifiable(active.take(3));
   }
 
@@ -329,14 +333,14 @@ class MockStore extends Store {
 
   @override
   Future<FocusSession> createCoupleFocusInvite({
-    required Plan plan,
+    Plan? plan,
     required int plannedDurationMinutes,
   }) async {
     final now = DateTime.now();
     final session = FocusSession(
       id: 'focus_${now.microsecondsSinceEpoch}',
-      planId: plan.id,
-      planTitle: plan.title,
+      planId: plan?.id,
+      planTitle: plan?.title ?? '普通专注',
       mode: FocusMode.couple,
       plannedDurationMinutes: plannedDurationMinutes,
       actualDurationSeconds: 0,
@@ -452,7 +456,9 @@ class MockStore extends Store {
   }
 
   void _applyFocusScore(FocusSession session) {
-    final index = _plans.indexWhere((plan) => plan.id == session.planId);
+    final planId = session.planId;
+    if (planId == null) return;
+    final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index != -1 && session.scoreDelta > 0) {
       final plan = _plans[index];
       _plans[index] = plan.copyWith(
@@ -552,11 +558,6 @@ class MockStore extends Store {
 
   bool _isVisibleInActiveLists(Plan plan) {
     return plan.shouldShowInActiveLists;
-  }
-
-  bool _isVisibleToday(Plan plan) {
-    return _isVisibleInActiveLists(plan) &&
-        plan.isScheduledOnDate(DateTime.now());
   }
 
   void _finishOncePlanIfComplete(int index) {

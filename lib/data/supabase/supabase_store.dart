@@ -12,6 +12,7 @@ import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
 import '../models/reminder_settings.dart';
+import '../services/plan_occurrence_service.dart';
 import '../store/store.dart';
 import 'checkin_repository.dart';
 import 'focus_session_repository.dart';
@@ -562,8 +563,11 @@ class SupabaseStore extends Store {
 
   @override
   List<Plan> getTodayFocusPlans() {
-    final active = _plans.where(_isVisibleToday).toList()
-      ..sort(_comparePlanPriority);
+    final today = PlanOccurrenceService.dateOnly(DateTime.now());
+    final active = PlanOccurrenceService.plansForDate(
+      plans: _plans.where((plan) => plan.shouldShowInActiveLists).toList(),
+      date: today,
+    )..sort(_comparePlanPriority);
     return List.unmodifiable(active.take(3));
   }
 
@@ -808,7 +812,7 @@ class SupabaseStore extends Store {
 
   @override
   Future<FocusSession> createCoupleFocusInvite({
-    required Plan plan,
+    Plan? plan,
     required int plannedDurationMinutes,
   }) async {
     final session = await _focusRepo.createCoupleInvite(
@@ -990,6 +994,7 @@ class SupabaseStore extends Store {
     final planSessions = _focusSessions.where(
       (session) =>
           session.planId == plan.id &&
+          session.planId != null &&
           session.scoreDelta > 0 &&
           !session.isActive,
     );
@@ -1038,11 +1043,6 @@ class SupabaseStore extends Store {
     return plan.owner != PlanOwner.partner &&
         plan.hasReminder &&
         plan.canCurrentUserCheckin;
-  }
-
-  bool _isVisibleToday(Plan plan) {
-    return plan.shouldShowInActiveLists &&
-        plan.isScheduledOnDate(DateTime.now());
   }
 
   Plan _planWithTodayCheckin(

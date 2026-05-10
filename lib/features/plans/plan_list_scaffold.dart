@@ -4,6 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../data/models/plan.dart';
+import '../../data/services/plan_occurrence_service.dart';
 import '../../shared/widgets/empty_state_card.dart';
 import '../../shared/widgets/plan_loading_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
@@ -70,9 +71,10 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
 
   @override
   Widget build(BuildContext context) {
-    final datePlans = widget.plans
-        .where((plan) => plan.isVisibleOnDate(_selectedDate))
-        .toList();
+    final datePlans = PlanOccurrenceService.plansForDate(
+      plans: widget.plans,
+      date: _selectedDate,
+    );
     final filtered = _applyFilter(datePlans, _filterIndex);
 
     return Scaffold(
@@ -729,18 +731,17 @@ class _EmptyPlansHint extends StatelessWidget {
 }
 
 DateTime _todayOnly() {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day);
+  return PlanOccurrenceService.dateOnly(DateTime.now());
 }
 
 DateTime _dateOnly(DateTime date) {
-  return DateTime(date.year, date.month, date.day);
+  return PlanOccurrenceService.dateOnly(date);
 }
 
 bool _isToday(DateTime date) => _isSameDate(date, DateTime.now());
 
 bool _isSameDate(DateTime a, DateTime b) {
-  return a.year == b.year && a.month == b.month && a.day == b.day;
+  return PlanOccurrenceService.isSameDate(a, b);
 }
 
 String _formatDateLabel(DateTime date) {

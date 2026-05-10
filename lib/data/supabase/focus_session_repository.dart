@@ -15,20 +15,41 @@ class FocusSessionRepository {
     if (currentUserId == null) return [];
 
     final coupleId = await _activeCoupleId();
-    if (coupleId == null) return [];
-
-    final rows = await _supabase
+    final personalRows = await _supabase
         .from('focus_sessions')
         .select('*')
-        .eq('couple_id', coupleId)
+        .eq('created_by_user_id', currentUserId)
+        .filter('couple_id', 'is', null)
         .order('created_at', ascending: false)
         .limit(80);
+    final rows =
+        [
+          ...personalRows,
+          if (coupleId != null)
+            ...await _supabase
+                .from('focus_sessions')
+                .select('*')
+                .eq('couple_id', coupleId)
+                .order('created_at', ascending: false)
+                .limit(80),
+        ]..sort((a, b) {
+          final aDate =
+              _toDateTime(a['created_at']) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          final bDate =
+              _toDateTime(b['created_at']) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+          return bDate.compareTo(aDate);
+        });
 
-    return rows.map((row) => _rowToFocusSession(row, currentUserId)).toList();
+    return rows
+        .take(80)
+        .map((row) => _rowToFocusSession(row, currentUserId))
+        .toList();
   }
 
   Future<FocusSession> createCoupleInvite({
-    required Plan plan,
+    Plan? plan,
     required int plannedDurationMinutes,
   }) async {
     final currentUserId = _currentUserId;
@@ -39,7 +60,7 @@ class FocusSessionRepository {
     final row = await _supabase.rpc(
       'create_focus_invite',
       params: {
-        'p_plan_id': plan.id,
+        'p_plan_id': plan?.id,
         'p_planned_duration_minutes': plannedDurationMinutes,
       },
     );
@@ -121,8 +142,8 @@ class FocusSessionRepository {
     final creatorUserId = row['created_by_user_id'] as String?;
     return FocusSession(
       id: row['id'] as String,
-      planId: row['plan_id'] as String,
-      planTitle: row['plan_title'] as String? ?? '专注计划',
+      planId: row['plan_id'] as String?,
+      planTitle: row['plan_title'] as String? ?? '普通专注',
       mode: _toMode(row['mode'] as String?),
       plannedDurationMinutes: row['planned_duration_minutes'] as int? ?? 25,
       actualDurationSeconds: row['actual_duration_seconds'] as int? ?? 0,

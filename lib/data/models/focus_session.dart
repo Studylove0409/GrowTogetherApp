@@ -30,7 +30,7 @@ class FocusSession {
   });
 
   final String id;
-  final String planId;
+  final String? planId;
   final String planTitle;
   final FocusMode mode;
   final int plannedDurationMinutes;
@@ -90,10 +90,11 @@ class FocusSession {
     bool clearEndedAt = false,
     bool clearPartnerJoinedAt = false,
     bool clearPausedAt = false,
+    bool clearPlanId = false,
   }) {
     return FocusSession(
       id: id ?? this.id,
-      planId: planId ?? this.planId,
+      planId: clearPlanId ? null : (planId ?? this.planId),
       planTitle: planTitle ?? this.planTitle,
       mode: mode ?? this.mode,
       plannedDurationMinutes:

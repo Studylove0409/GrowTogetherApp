@@ -7,6 +7,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
+import '../../data/services/plan_occurrence_service.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/app_scaffold.dart';
@@ -29,10 +30,23 @@ class PlansPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = isSelected ? context.watch<Store>() : context.read<Store>();
     final plans = store.getPlans();
-    final myPlans = _plansByOwner(plans, PlanOwner.me);
-    final partnerPlans = _plansByOwner(plans, PlanOwner.partner);
-    final togetherPlans = _plansByOwner(plans, PlanOwner.together);
-    final visibleTogetherPlans = _preferredTogetherPlans(togetherPlans);
+    final today = PlanOccurrenceService.dateOnly(DateTime.now());
+    final myTodayPlans = PlanOccurrenceService.plansForDate(
+      plans: plans,
+      date: today,
+      owner: PlanOwner.me,
+    );
+    final partnerTodayPlans = PlanOccurrenceService.plansForDate(
+      plans: plans,
+      date: today,
+      owner: PlanOwner.partner,
+    );
+    final togetherTodayPlans = PlanOccurrenceService.plansForDate(
+      plans: plans,
+      date: today,
+      owner: PlanOwner.together,
+    );
+    final visibleTogetherPlans = _preferredTogetherPlans(togetherTodayPlans);
     final isInitialPlansLoading =
         store.isInitialPlansLoading && !store.hasHydratedPlanCache;
 
@@ -73,9 +87,16 @@ class PlansPage extends StatelessWidget {
                           icon: Icons.flag_rounded,
                           accentColor: AppColors.deepPink,
                           countColor: AppColors.deepPink,
-                          doneCount: _doneCount(myPlans),
-                          totalCount: myPlans.length,
-                          focusPlan: myPlans.isEmpty ? null : myPlans.first,
+                          doneCount:
+                              PlanOccurrenceService.completedCountForDate(
+                                plans: plans,
+                                date: today,
+                                owner: PlanOwner.me,
+                              ),
+                          totalCount: myTodayPlans.length,
+                          focusPlan: myTodayPlans.isEmpty
+                              ? null
+                              : myTodayPlans.first,
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) => const MyPlansPage(),
@@ -90,11 +111,16 @@ class PlansPage extends StatelessWidget {
                           icon: Icons.directions_run_rounded,
                           accentColor: AppColors.success,
                           countColor: AppColors.successText,
-                          doneCount: _doneCount(partnerPlans),
-                          totalCount: partnerPlans.length,
-                          focusPlan: partnerPlans.isEmpty
+                          doneCount:
+                              PlanOccurrenceService.completedCountForDate(
+                                plans: plans,
+                                date: today,
+                                owner: PlanOwner.partner,
+                              ),
+                          totalCount: partnerTodayPlans.length,
+                          focusPlan: partnerTodayPlans.isEmpty
                               ? null
-                              : partnerPlans.first,
+                              : partnerTodayPlans.first,
                           onTap: () => Navigator.of(context).push(
                             MaterialPageRoute<void>(
                               builder: (_) => const PartnerPlansPage(),
@@ -423,16 +449,8 @@ class _CoupleDecoration extends StatelessWidget {
   }
 }
 
-List<Plan> _plansByOwner(List<Plan> plans, PlanOwner owner) {
-  return plans.where((plan) => plan.owner == owner).toList();
-}
-
 List<Plan> _preferredTogetherPlans(List<Plan> plans) {
   return plans.take(2).toList();
-}
-
-int _doneCount(List<Plan> plans) {
-  return plans.where((plan) => plan.isDoneForCurrentUser).length;
 }
 
 String _togetherStatusLabel(TogetherStatus status) {

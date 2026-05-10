@@ -52,10 +52,13 @@ In-app reminders between active partners.
 
 ### `focus_sessions`
 
-Plan-linked focus sessions for solo and couple focus.
+Focus sessions for solo and couple focus. `plan_id` is nullable so users can
+start a regular focus session without associating it with a plan.
 
 - `mode = 'solo'`: regular personal focus record.
 - `mode = 'couple'`: creates a joinable focus invitation for the active couple.
+- `plan_id = null`: shown as `普通专注`; counts toward daily focus totals but
+  does not update any plan focus score.
 - Active lifecycle is `waiting` → `running` / `paused` → `completed`, `cancelled`, or `interrupted`.
 - Couple focus uses one `started_at` plus `total_paused_seconds` so both clients can render the same countdown.
 - `partner_joined_at` records whether TA has joined. It is used as the MVP online/join state.
@@ -68,13 +71,13 @@ Plan-linked focus sessions for solo and couple focus.
 - `upsert_today_checkin(p_plan_id, p_status, p_mood, p_note)`
 - `send_reminder(p_plan_id, p_type, p_content)`
 - `mark_reminder_read(p_reminder_id)`
-- `create_focus_invite(p_plan_id, p_planned_duration_minutes)`
+- `create_focus_invite(p_plan_id nullable, p_planned_duration_minutes)`
 - `join_focus_session(p_session_id)`
 - `start_focus_session(p_session_id)`
 - `pause_focus_session(p_session_id)`
 - `resume_focus_session(p_session_id)`
 - `finish_focus_session(p_session_id, p_status)`
-- `create_completed_focus_session(p_plan_id, p_mode, p_planned_duration_minutes, p_actual_duration_seconds, p_started_at, p_ended_at, p_status)`
+- `create_completed_focus_session(p_plan_id nullable, p_mode, p_planned_duration_minutes, p_actual_duration_seconds, p_started_at, p_ended_at, p_status)`
 
 ## Flutter Mapping
 

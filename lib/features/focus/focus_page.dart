@@ -128,9 +128,7 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
               onSelectDuration: _selectDuration,
               onCustomDuration: _showCustomDurationDialog,
               onSelectMode: (mode) => setState(() => _mode = mode),
-              onStart: _selectedPlan == null
-                  ? null
-                  : () => unawaited(_startFocus()),
+              onStart: () => unawaited(_startFocus()),
               onRefresh: _refreshVisibleFocusData,
             ),
             _FocusStage.waiting => _FocusWaitingView(
@@ -142,7 +140,7 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
             ),
             _FocusStage.running => _FocusRunningView(
               key: const ValueKey('focus-running'),
-              planTitle: _selectedPlan?.title ?? '',
+              planTitle: _selectedPlan?.title ?? '普通专注',
               mode: _mode,
               timeText: _formatSeconds(_remainingSeconds),
               progress: 1 - _remainingSeconds / (_selectedMinutes * 60),
@@ -321,8 +319,7 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
   }
 
   Future<void> _startFocus() async {
-    if (_selectedPlan == null) return;
-    final plan = _selectedPlan!;
+    final plan = _selectedPlan;
 
     if (_mode == FocusMode.couple) {
       await _runWithFeedback(() async {
@@ -497,7 +494,6 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
     final plan = _selectedPlan;
     final active = _activeSession;
     final startedAt = _startedAt;
-    if (plan == null && active == null) return;
     if (active == null && startedAt == null) return;
 
     _finishing = true;
@@ -512,8 +508,10 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
         : (status == FocusSessionStatus.completed
               ? active.plannedDurationMinutes * 60
               : _elapsedForSession(active));
+    final hasLinkedPlan = active?.planId != null || plan != null;
     final scoreDelta =
-        status == FocusSessionStatus.completed &&
+        hasLinkedPlan &&
+            status == FocusSessionStatus.completed &&
             actualSeconds >= _effectiveFocusSeconds
         ? _scorePerCompletedSession
         : 0;
@@ -539,8 +537,8 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
       } else {
         session = FocusSession(
           id: 'focus_${DateTime.now().microsecondsSinceEpoch}',
-          planId: plan!.id,
-          planTitle: plan.title,
+          planId: plan?.id,
+          planTitle: plan?.title ?? '普通专注',
           mode: _mode,
           plannedDurationMinutes: _selectedMinutes,
           actualDurationSeconds: actualSeconds,
@@ -716,7 +714,7 @@ class _FocusSetupView extends StatelessWidget {
   final FocusMode mode;
   final List<FocusSession> sessions;
   final bool busy;
-  final ValueChanged<Plan> onSelectPlan;
+  final ValueChanged<Plan?> onSelectPlan;
   final ValueChanged<int> onSelectDuration;
   final VoidCallback onCustomDuration;
   final ValueChanged<FocusMode> onSelectMode;
@@ -741,22 +739,23 @@ class _FocusSetupView extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           _FocusHeader(sessions: sessions),
           const SizedBox(height: AppSpacing.lg),
-          const _FocusSectionHeader(title: '开始专注'),
-          const SizedBox(height: AppSpacing.sm),
           _FocusConfigCard(
-            plans: plans,
-            selectedPlan: selectedPlan,
             selectedMinutes: selectedMinutes,
             options: durationOptions,
             mode: mode,
             busy: busy,
-            onSelectPlan: onSelectPlan,
             onSelectDuration: onSelectDuration,
             onCustomDuration: onCustomDuration,
             onSelectMode: onSelectMode,
             onStart: onStart,
           ),
-          const SizedBox(height: AppSpacing.lg),
+          const SizedBox(height: AppSpacing.md),
+          _FocusPlanSelector(
+            plans: plans,
+            selectedPlan: selectedPlan,
+            onSelectPlan: onSelectPlan,
+          ),
+          const SizedBox(height: AppSpacing.xl),
           _FocusSectionHeader(
             title: '今日专注记录',
             actionLabel: sessions.length > 3 ? '查看全部' : null,
@@ -855,276 +854,68 @@ class _FocusHeader extends StatelessWidget {
           0,
           (total, session) => total + session.actualDurationSeconds,
         );
-    final score = sessions.fold<int>(
-      0,
-      (total, session) => total + session.scoreDelta,
-    );
-
     return AppCard(
-      showDashedBorder: true,
-      borderColor: Colors.white.withValues(alpha: 0.86),
-      padding: const EdgeInsets.fromLTRB(20, 20, 18, 18),
-      backgroundColor: AppColors.lightPink.withValues(alpha: 0.50),
+      showDashedBorder: false,
+      padding: const EdgeInsets.all(16),
+      backgroundColor: Colors.white.withValues(alpha: 0.70),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '今天已经专注',
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.secondaryText,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _FocusMinutesDisplay(minutes: _formatMinutes(totalSeconds)),
-                const SizedBox(height: 8),
-                Text(
-                  totalSeconds > 0 ? '慢慢来，也是在一起变好' : '从一小段安静开始',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.body.copyWith(
-                    color: AppColors.secondaryText,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _FocusHeroBadge(
-                  coupleMinutes: _formatMinutes(coupleSeconds),
-                  completedCount: completedCount,
-                  score: score,
-                ),
-              ],
+            child: _FocusMetric(
+              label: '今日专注',
+              value: '${_formatMinutes(totalSeconds)} 分钟',
+              icon: Icons.timer_rounded,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          const SizedBox(width: 132, height: 138, child: _FocusClockGarden()),
+          Expanded(
+            child: _FocusMetric(
+              label: '完成次数',
+              value: '$completedCount 次',
+              icon: Icons.check_circle_rounded,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: _FocusMetric(
+              label: '共同专注',
+              value: '${_formatMinutes(coupleSeconds)} 分钟',
+              icon: Icons.favorite_rounded,
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _FocusMinutesDisplay extends StatelessWidget {
-  const _FocusMinutesDisplay({required this.minutes});
-
-  final int minutes;
-
-  @override
-  Widget build(BuildContext context) {
-    return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
-      child: Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(
-              text: '$minutes',
-              style: AppTextStyles.display.copyWith(
-                color: AppColors.deepPink,
-                fontSize: 50,
-                height: 1,
-              ),
-            ),
-            TextSpan(
-              text: ' 分钟',
-              style: AppTextStyles.display.copyWith(fontSize: 38, height: 1),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FocusHeroBadge extends StatelessWidget {
-  const _FocusHeroBadge({
-    required this.coupleMinutes,
-    required this.completedCount,
-    required this.score,
+class _FocusMetric extends StatelessWidget {
+  const _FocusMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
   });
 
-  final int coupleMinutes;
-  final int completedCount;
-  final int score;
+  final String label;
+  final String value;
+  final IconData icon;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.favorite_rounded,
-            color: AppColors.deepPink,
-            size: 17,
-          ),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              '共同专注 $coupleMinutes 分钟 · 完成 $completedCount 次 · +$score',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.secondaryText,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FocusClockGarden extends StatelessWidget {
-  const _FocusClockGarden();
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.center,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Positioned(
-          bottom: 4,
-          child: Container(
-            width: 126,
-            height: 24,
-            decoration: BoxDecoration(
-              color: AppColors.reminder.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(999),
-            ),
-          ),
+        Icon(icon, color: AppColors.deepPink, size: 20),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w900),
         ),
-        Positioned(
-          left: 4,
-          bottom: 22,
-          child: Icon(
-            Icons.eco_rounded,
-            color: AppColors.grassDeep.withValues(alpha: 0.72),
-            size: 42,
-          ),
-        ),
-        Positioned(
-          right: 2,
-          bottom: 18,
-          child: Icon(
-            Icons.local_florist_rounded,
-            color: AppColors.primary.withValues(alpha: 0.72),
-            size: 40,
-          ),
-        ),
-        Positioned(
-          top: 28,
-          child: Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: AppColors.paper,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary, width: 5),
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.18),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(
-                  Icons.favorite_rounded,
-                  color: AppColors.deepPink,
-                  size: 28,
-                ),
-                Positioned(
-                  top: 12,
-                  child: Container(
-                    width: 4,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      color: AppColors.deepPink,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  right: 14,
-                  child: Transform.rotate(
-                    angle: math.pi / 2.8,
-                    child: Container(
-                      width: 4,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        Positioned(
-          top: 18,
-          left: 38,
-          child: _ClockBell(color: AppColors.primary),
-        ),
-        Positioned(
-          top: 18,
-          right: 38,
-          child: _ClockBell(color: AppColors.deepPink),
-        ),
-        Positioned(
-          top: 36,
-          left: 0,
-          child: Icon(
-            Icons.favorite_rounded,
-            color: AppColors.primary.withValues(alpha: 0.32),
-            size: 24,
-          ),
-        ),
-        Positioned(
-          top: 20,
-          right: 8,
-          child: Icon(
-            Icons.favorite_rounded,
-            color: AppColors.primary.withValues(alpha: 0.36),
-            size: 22,
-          ),
-        ),
+        const SizedBox(height: 2),
+        Text(label, style: AppTextStyles.tiny),
       ],
-    );
-  }
-}
-
-class _ClockBell extends StatelessWidget {
-  const _ClockBell({required this.color});
-
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Transform.rotate(
-      angle: -0.16,
-      child: Container(
-        width: 26,
-        height: 12,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(999)),
-        ),
-      ),
     );
   }
 }
@@ -1195,20 +986,35 @@ class _FocusPlanSelector extends StatelessWidget {
 
   final List<Plan> plans;
   final Plan? selectedPlan;
-  final ValueChanged<Plan> onSelectPlan;
+  final ValueChanged<Plan?> onSelectPlan;
 
   @override
   Widget build(BuildContext context) {
     final selected = selectedPlan;
-    return _FocusFieldButton(
-      label: '计划',
-      title: selected?.title ?? '选择一个计划',
-      subtitle: selected == null ? '本次专注为了哪个计划？' : selected.dailyTask,
-      icon: selected?.icon ?? Icons.flag_rounded,
-      iconColor: selected?.iconColor ?? AppColors.deepPink,
-      iconBackgroundColor: selected?.iconBackgroundColor ?? AppColors.blush,
-      enabled: plans.isNotEmpty,
-      onTap: () => _showPlanPicker(context),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _FocusFieldButton(
+          label: '关联计划（可选）',
+          title: selected == null ? '未关联计划' : '已关联：${selected.title}',
+          subtitle: selected == null ? '专注结束后可记录为普通专注' : '选择后，本次专注会归属到对应计划',
+          icon: selected?.icon ?? Icons.flag_outlined,
+          iconColor: selected?.iconColor ?? AppColors.deepPink,
+          iconBackgroundColor: selected?.iconBackgroundColor ?? AppColors.blush,
+          enabled: plans.isNotEmpty,
+          onTap: () => _showPlanPicker(context),
+        ),
+        if (selected != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => onSelectPlan(null),
+              icon: const Icon(Icons.link_off_rounded, size: 17),
+              label: const Text('清除关联'),
+              style: TextButton.styleFrom(foregroundColor: AppColors.deepPink),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1252,65 +1058,68 @@ class _FocusFieldButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: title,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        borderRadius: BorderRadius.circular(22),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.72),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: AppColors.line.withValues(alpha: enabled ? 0.72 : 0.36),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: enabled ? onTap : null,
+          borderRadius: BorderRadius.circular(22),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.72),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: AppColors.line.withValues(alpha: enabled ? 0.72 : 0.36),
+              ),
             ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 46,
-                height: 46,
-                decoration: BoxDecoration(
-                  color: iconBackgroundColor,
-                  borderRadius: BorderRadius.circular(18),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  decoration: BoxDecoration(
+                    color: iconBackgroundColor,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Icon(icon, color: iconColor, size: 24),
                 ),
-                child: Icon(icon, color: iconColor, size: 24),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: AppTextStyles.tiny.copyWith(
-                        color: AppColors.secondaryText,
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: AppTextStyles.tiny.copyWith(
+                          color: AppColors.secondaryText,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.body.copyWith(
-                        fontWeight: FontWeight.w900,
+                      const SizedBox(height: 2),
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.body.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.caption,
-                    ),
-                  ],
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.caption,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Icon(
-                Icons.keyboard_arrow_down_rounded,
-                color: enabled ? AppColors.deepPink : AppColors.mutedText,
-              ),
-            ],
+                const SizedBox(width: AppSpacing.sm),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: enabled ? AppColors.deepPink : AppColors.mutedText,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1327,7 +1136,7 @@ class _PlanPickerSheet extends StatelessWidget {
 
   final List<Plan> plans;
   final Plan? selectedPlan;
-  final ValueChanged<Plan> onSelectPlan;
+  final ValueChanged<Plan?> onSelectPlan;
 
   @override
   Widget build(BuildContext context) {
@@ -1398,9 +1207,17 @@ class _PlanPickerSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
-            Text('选择计划', style: AppTextStyles.title),
+            Text('关联计划（可选）', style: AppTextStyles.title),
             const SizedBox(height: 4),
-            Text('先看分类，再选择本次专注绑定的计划。', style: AppTextStyles.caption),
+            Text('选择后，本次专注会归属到对应计划。', style: AppTextStyles.caption),
+            const SizedBox(height: AppSpacing.md),
+            _NoPlanChoiceTile(
+              selected: selectedPlan == null,
+              onTap: () {
+                onSelectPlan(null);
+                Navigator.of(context).pop();
+              },
+            ),
             const SizedBox(height: AppSpacing.md),
             Flexible(
               child: ListView.separated(
@@ -1436,6 +1253,66 @@ class _PlanPickerSection {
   final String subtitle;
   final IconData icon;
   final List<Plan> plans;
+}
+
+class _NoPlanChoiceTile extends StatelessWidget {
+  const _NoPlanChoiceTile({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      borderRadius: 22,
+      padding: const EdgeInsets.all(12),
+      showDashedBorder: false,
+      backgroundColor: selected
+          ? AppColors.lightPink.withValues(alpha: 0.70)
+          : Colors.white.withValues(alpha: 0.78),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.blush,
+              borderRadius: BorderRadius.circular(17),
+            ),
+            child: const Icon(
+              Icons.timer_outlined,
+              color: AppColors.deepPink,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '不关联计划',
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text('保存为普通专注记录', style: AppTextStyles.caption),
+              ],
+            ),
+          ),
+          Icon(
+            selected
+                ? Icons.check_circle_rounded
+                : Icons.radio_button_unchecked_rounded,
+            color: selected ? AppColors.deepPink : AppColors.mutedText,
+            size: 24,
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PlanPickerSectionView extends StatelessWidget {
@@ -1702,26 +1579,20 @@ class _FocusDurationSelector extends StatelessWidget {
 
 class _FocusConfigCard extends StatelessWidget {
   const _FocusConfigCard({
-    required this.plans,
-    required this.selectedPlan,
     required this.selectedMinutes,
     required this.options,
     required this.mode,
     required this.busy,
-    required this.onSelectPlan,
     required this.onSelectDuration,
     required this.onCustomDuration,
     required this.onSelectMode,
     required this.onStart,
   });
 
-  final List<Plan> plans;
-  final Plan? selectedPlan;
   final int selectedMinutes;
   final List<int> options;
   final FocusMode mode;
   final bool busy;
-  final ValueChanged<Plan> onSelectPlan;
   final ValueChanged<int> onSelectDuration;
   final VoidCallback onCustomDuration;
   final ValueChanged<FocusMode> onSelectMode;
@@ -1730,26 +1601,13 @@ class _FocusConfigCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      showDashedBorder: true,
-      padding: const EdgeInsets.all(18),
-      borderColor: AppColors.dashedLine,
+      showDashedBorder: false,
+      padding: const EdgeInsets.all(20),
+      backgroundColor: Colors.white.withValues(alpha: 0.78),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _FocusPlanSelector(
-            plans: plans,
-            selectedPlan: selectedPlan,
-            onSelectPlan: onSelectPlan,
-          ),
-          if (plans.isEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              '还没有可专注的计划，先创建一个自己的计划或共同计划，再回来开始专注。',
-              style: AppTextStyles.caption,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.md),
-          _FocusModeSelector(mode: mode, onSelectMode: onSelectMode),
+          Center(child: _FocusSetupTimerDisplay(minutes: selectedMinutes)),
           const SizedBox(height: AppSpacing.md),
           _FocusDurationSelector(
             selectedMinutes: selectedMinutes,
@@ -1758,13 +1616,33 @@ class _FocusConfigCard extends StatelessWidget {
             onCustomDuration: onCustomDuration,
           ),
           const SizedBox(height: AppSpacing.md),
+          _FocusModeSelector(mode: mode, onSelectMode: onSelectMode),
+          const SizedBox(height: AppSpacing.md),
           PrimaryButton(
-            label: selectedPlan == null ? '先选择计划' : '开始专注',
+            label: '开始专注',
             icon: Icons.play_arrow_rounded,
             onPressed: onStart,
             isLoading: busy,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _FocusSetupTimerDisplay extends StatelessWidget {
+  const _FocusSetupTimerDisplay({required this.minutes});
+
+  final int minutes;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '${minutes.toString().padLeft(2, '0')}:00',
+      style: AppTextStyles.display.copyWith(
+        color: AppColors.text,
+        fontSize: 58,
+        height: 1,
       ),
     );
   }
@@ -2206,7 +2084,10 @@ class _FocusResultView extends StatelessWidget {
                 label: '本次专注',
                 value: '${_formatMinutes(current.actualDurationSeconds)} 分钟',
               ),
-              _ResultLine(label: '绑定计划', value: current.planTitle),
+              _ResultLine(
+                label: '关联计划',
+                value: current.planId == null ? '普通专注' : current.planTitle,
+              ),
               _ResultLine(label: '获得执行分', value: '+${current.scoreDelta}'),
               _ResultLine(
                 label: '今日累计',
@@ -2216,6 +2097,8 @@ class _FocusResultView extends StatelessWidget {
               Text(
                 current.scoreDelta > 0
                     ? '为「${current.planTitle}」增加 +${current.scoreDelta} 执行分'
+                    : current.planId == null
+                    ? '本次记录为普通专注，已计入今日专注统计。'
                     : '未满 5 分钟不计执行分，记录也会好好保留。',
                 textAlign: TextAlign.center,
                 style: AppTextStyles.body.copyWith(
@@ -2284,7 +2167,10 @@ class _TodayFocusRecords extends StatelessWidget {
           if (sessions.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
-              child: Text('今天还没有专注记录，选一个计划开始吧。', style: AppTextStyles.caption),
+              child: Text(
+                '今天还没有专注记录，先开始一段 25 分钟吧。',
+                style: AppTextStyles.caption,
+              ),
             )
           else
             for (final entry in sessions.take(3).indexed) ...[
@@ -2333,7 +2219,7 @@ class _FocusRecordTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  session.planTitle,
+                  session.planId == null ? '普通专注' : session.planTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.body.copyWith(
@@ -2342,9 +2228,10 @@ class _FocusRecordTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
+                  '${_formatClock(session.startedAt ?? session.createdAt)}'
+                  ' - ${_formatClock(session.endedAt ?? session.createdAt)} · '
                   '${_formatMinutes(session.actualDurationSeconds)} 分钟 · '
-                  '${focusSessionStatusLabel(session.status)} · '
-                  '${_formatClock(session.endedAt ?? session.createdAt)}',
+                  '${focusModeLabel(session.mode)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.caption,

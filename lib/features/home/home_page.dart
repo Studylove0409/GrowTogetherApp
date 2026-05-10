@@ -6,6 +6,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../data/models/profile.dart';
 import '../../data/models/plan.dart';
+import '../../data/services/plan_occurrence_service.dart';
 import '../../data/store/store.dart';
 import '../../features/plans/create_plan_page.dart';
 import '../../features/plans/my_plans_page.dart';
@@ -31,14 +32,23 @@ class HomePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = isSelected ? context.watch<Store>() : context.read<Store>();
     final profile = store.getProfile();
-    final todayPlans = store.getPlans().where(_isTodayPlan).toList();
-    final myPlans = todayPlans.where((p) => p.owner == PlanOwner.me).toList();
-    final partnerPlans = todayPlans
-        .where((p) => p.owner == PlanOwner.partner)
-        .toList();
-    final togetherPlans = todayPlans
-        .where((p) => p.owner == PlanOwner.together)
-        .toList();
+    final today = PlanOccurrenceService.dateOnly(DateTime.now());
+    final plans = store.getPlans();
+    final myPlans = PlanOccurrenceService.plansForDate(
+      plans: plans,
+      date: today,
+      owner: PlanOwner.me,
+    );
+    final partnerPlans = PlanOccurrenceService.plansForDate(
+      plans: plans,
+      date: today,
+      owner: PlanOwner.partner,
+    );
+    final togetherPlans = PlanOccurrenceService.plansForDate(
+      plans: plans,
+      date: today,
+      owner: PlanOwner.together,
+    );
     final isInitialPlansLoading =
         store.isInitialPlansLoading && !store.hasHydratedPlanCache;
 
@@ -123,10 +133,6 @@ class HomePage extends StatelessWidget {
       ),
     );
   }
-}
-
-bool _isTodayPlan(Plan plan) {
-  return plan.isScheduledOnDate(DateTime.now());
 }
 
 class _HomePlansLoadingSection extends StatelessWidget {
