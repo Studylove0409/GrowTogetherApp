@@ -199,23 +199,35 @@ class _CheckinPageState extends State<CheckinPage> {
   Future<void> _saveCheckin() async {
     if (_saving) return;
 
-    setState(() => _saving = true);
+    final store = context.read<Store>();
+    final saveFuture = store.saveCheckin(
+      planId: widget.planId,
+      completed: _completed,
+      mood: _mood,
+      note: _noteController.text,
+    );
+
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _saving = true;
+      _showSuccess = true;
+    });
+
     try {
-      await context.read<Store>().saveCheckin(
-        planId: widget.planId,
-        completed: _completed,
-        mood: _mood,
-        note: _noteController.text,
-      );
+      await Future.wait([
+        saveFuture,
+        Future<void>.delayed(const Duration(milliseconds: 650)),
+      ]);
       if (!mounted) return;
-      HapticFeedback.mediumImpact();
-      setState(() => _showSuccess = true);
-      await Future<void>.delayed(const Duration(milliseconds: 1150));
+      await Future<void>.delayed(const Duration(milliseconds: 450));
       if (!mounted) return;
       Navigator.of(context).pop();
     } catch (error) {
       if (!mounted) return;
-      setState(() => _saving = false);
+      setState(() {
+        _saving = false;
+        _showSuccess = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('打卡失败，请稍后再试'),

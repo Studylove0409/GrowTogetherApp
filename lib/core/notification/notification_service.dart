@@ -9,15 +9,45 @@ class NotificationService {
   NotificationService._();
 
   static final _plugin = FlutterLocalNotificationsPlugin();
+  static const _dailyAppReminderId = 0x5F3759;
   static const _systemReminderChannel = MethodChannel(
     'grow_together/system_reminders',
   );
+  static const _initRetryInterval = Duration(seconds: 15);
   static Future<void>? _initFuture;
+  static DateTime? _lastInitFailureAt;
   static bool _localNotificationsReady = false;
+  static bool _doNotDisturbEnabled = false;
+  static int _doNotDisturbStartMinutes = 22 * 60 + 30;
+  static int _doNotDisturbEndMinutes = 8 * 60;
 
   static Future<void> init() async {
-    _initFuture ??= _init();
-    await _initFuture;
+    if (_localNotificationsReady) return;
+
+    final runningInit = _initFuture;
+    if (runningInit != null) {
+      await runningInit;
+      return;
+    }
+
+    final lastFailureAt = _lastInitFailureAt;
+    if (lastFailureAt != null &&
+        DateTime.now().difference(lastFailureAt) < _initRetryInterval) {
+      return;
+    }
+
+    final init = _init();
+    _initFuture = init;
+    try {
+      await init;
+    } finally {
+      if (_localNotificationsReady) {
+        _lastInitFailureAt = null;
+      } else {
+        _lastInitFailureAt = DateTime.now();
+        _initFuture = null;
+      }
+    }
   }
 
   static Future<void> _init() async {
@@ -52,14 +82,16 @@ class NotificationService {
     bool repeatsDaily = true,
     bool syncSystemAlarm = false,
   }) async {
-    final scheduledAt = _scheduledTime(hour, minute, scheduledDate);
-    if (scheduledAt == null) {
-      await cancelPlanReminder(planId);
-      return;
-    }
+    tz.TZDateTime? scheduledAt;
 
     try {
       await init();
+      scheduledAt = _scheduledTime(hour, minute, scheduledDate);
+      if (scheduledAt == null) {
+        await cancelPlanReminder(planId);
+        return;
+      }
+
       if (_localNotificationsReady) {
         await _cancelNotificationIds(planId);
 
@@ -92,13 +124,73 @@ class NotificationService {
       debugPrintStack(stackTrace: stackTrace);
     }
 
-    if (syncSystemAlarm && _shouldCreateSystemAlarm(scheduledAt)) {
+    if (syncSystemAlarm &&
+        scheduledAt != null &&
+        _shouldCreateSystemAlarm(scheduledAt)) {
       await _setSystemAlarm(
         title: '一起进步呀：$planTitle',
         hour: hour,
         minute: minute,
       );
     }
+  }
+
+  static Future<void> scheduleDailyAppReminder({
+    required int hour,
+    required int minute,
+  }) async {
+    try {
+      await init();
+      if (!_localNotificationsReady) return;
+
+      final scheduledAt = _scheduledTime(hour, minute, null);
+      if (scheduledAt == null) return;
+
+      await _plugin.cancel(_dailyAppReminderId);
+
+      const androidDetails = AndroidNotificationDetails(
+        'daily_app_reminders',
+        '每日提醒',
+        channelDescription: '每天提醒查看今日计划',
+        importance: Importance.high,
+        priority: Priority.high,
+        visibility: NotificationVisibility.public,
+      );
+      const details = NotificationDetails(android: androidDetails);
+
+      await _plugin.zonedSchedule(
+        _dailyAppReminderId,
+        '一起看看今天的小目标',
+        '和 TA 一起，把今天过得更好～',
+        scheduledAt,
+        details,
+        androidScheduleMode: await _androidScheduleMode(),
+        matchDateTimeComponents: DateTimeComponents.time,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Daily app reminder schedule failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  static Future<void> cancelDailyAppReminder() async {
+    try {
+      await init();
+      if (!_localNotificationsReady) return;
+      await _plugin.cancel(_dailyAppReminderId);
+    } catch (_) {}
+  }
+
+  static void configureDoNotDisturb({
+    required bool enabled,
+    required int startMinutes,
+    required int endMinutes,
+  }) {
+    _doNotDisturbEnabled = enabled;
+    _doNotDisturbStartMinutes = startMinutes;
+    _doNotDisturbEndMinutes = endMinutes;
   }
 
   static Future<void> cancelPlanReminder(String planId) async {
@@ -115,6 +207,7 @@ class NotificationService {
     required String body,
   }) async {
     try {
+      if (_isInDoNotDisturbNow()) return;
       await init();
       if (!_localNotificationsReady) return;
       const androidDetails = AndroidNotificationDetails(
@@ -129,6 +222,23 @@ class NotificationService {
 
       await _plugin.show(id, title, body, details);
     } catch (_) {}
+  }
+
+  static bool _isInDoNotDisturbNow() {
+    if (!_doNotDisturbEnabled) return false;
+    final now = DateTime.now();
+    final minutes = now.hour * 60 + now.minute;
+    return _isInDoNotDisturbMinutes(minutes);
+  }
+
+  static bool _isInDoNotDisturbMinutes(int minutes) {
+    final start = _doNotDisturbStartMinutes;
+    final end = _doNotDisturbEndMinutes;
+    if (start == end) return false;
+    if (start < end) {
+      return minutes >= start && minutes < end;
+    }
+    return minutes >= start || minutes < end;
   }
 
   static tz.TZDateTime? _scheduledTime(
@@ -194,6 +304,14 @@ class NotificationService {
         'partner_reminders',
         '伴侣提醒',
         description: '伴侣发来的提醒消息',
+        importance: Importance.high,
+      ),
+    );
+    await androidPlugin.createNotificationChannel(
+      const AndroidNotificationChannel(
+        'daily_app_reminders',
+        '每日提醒',
+        description: '每天提醒查看今日计划',
         importance: Importance.high,
       ),
     );

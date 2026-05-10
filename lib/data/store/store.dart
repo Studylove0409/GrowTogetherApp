@@ -4,6 +4,7 @@ import '../models/focus_session.dart';
 import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
+import '../models/reminder_settings.dart';
 
 /// 统一数据门面接口。
 ///
@@ -131,4 +132,10 @@ abstract class Store extends ChangeNotifier {
   });
 
   Future<void> markReceivedRemindersRead();
+
+  // ========================= Reminder Settings =========================
+
+  ReminderSettings getReminderSettings() => const ReminderSettings();
+
+  Future<void> updateReminderSettings(ReminderSettings settings) async {}
 }

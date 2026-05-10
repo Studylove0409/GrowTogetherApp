@@ -9,6 +9,7 @@ import '../models/focus_session.dart';
 import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
+import '../models/reminder_settings.dart';
 import '../store/store.dart';
 import 'mock_data.dart';
 
@@ -19,7 +20,9 @@ import 'mock_data.dart';
 class MockStore extends Store {
   MockStore._()
     : _plans = List.of(MockData.plans),
-      _reminders = List.of(MockData.reminders);
+      _reminders = List.of(MockData.reminders) {
+    unawaited(_applyReminderSettings());
+  }
 
   static final MockStore instance = MockStore._();
 
@@ -28,6 +31,7 @@ class MockStore extends Store {
   final List<Plan> _plans;
   final List<Reminder> _reminders;
   final List<FocusSession> _focusSessions = [];
+  ReminderSettings _reminderSettings = const ReminderSettings();
 
   // ========================= Profile =========================
 
@@ -502,6 +506,18 @@ class MockStore extends Store {
     if (changed) notifyListeners();
   }
 
+  // ========================= Reminder Settings =========================
+
+  @override
+  ReminderSettings getReminderSettings() => _reminderSettings;
+
+  @override
+  Future<void> updateReminderSettings(ReminderSettings settings) async {
+    _reminderSettings = settings;
+    await _applyReminderSettings();
+    notifyListeners();
+  }
+
   // ========================= 辅助 =========================
 
   /// 计划优先级用于首页排序：我待打卡 > TA 待打卡 > 已完成
@@ -577,5 +593,22 @@ class MockStore extends Store {
     return plan.owner != PlanOwner.partner &&
         plan.hasReminder &&
         plan.canCurrentUserCheckin;
+  }
+
+  Future<void> _applyReminderSettings() async {
+    NotificationService.configureDoNotDisturb(
+      enabled: _reminderSettings.doNotDisturbEnabled,
+      startMinutes: _reminderSettings.doNotDisturbStartMinutes,
+      endMinutes: _reminderSettings.doNotDisturbEndMinutes,
+    );
+
+    if (_reminderSettings.dailyReminderEnabled) {
+      await NotificationService.scheduleDailyAppReminder(
+        hour: _reminderSettings.dailyReminderTime.hour,
+        minute: _reminderSettings.dailyReminderTime.minute,
+      );
+    } else {
+      await NotificationService.cancelDailyAppReminder();
+    }
   }
 }

@@ -9,15 +9,28 @@ import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 
-class CheckinRecordPage extends StatelessWidget {
+class CheckinRecordPage extends StatefulWidget {
   const CheckinRecordPage({super.key, required this.planId});
 
   final String planId;
 
   @override
+  State<CheckinRecordPage> createState() => _CheckinRecordPageState();
+}
+
+class _CheckinRecordPageState extends State<CheckinRecordPage> {
+  late DateTime _visibleMonth;
+
+  @override
+  void initState() {
+    super.initState();
+    _visibleMonth = _monthOnly(DateTime.now());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final store = context.watch<Store>();
-    final plan = store.getPlanById(planId);
+    final plan = store.getPlanById(widget.planId);
     if (plan == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('打卡记录')),
@@ -26,6 +39,9 @@ class CheckinRecordPage extends StatelessWidget {
     }
 
     final records = plan.checkins;
+    final visibleRecords = records
+        .where((record) => _isSameMonth(record.date, _visibleMonth))
+        .toList();
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -51,21 +67,25 @@ class CheckinRecordPage extends StatelessWidget {
             children: [
               _RecordPlanHeader(plan: plan),
               const SizedBox(height: AppSpacing.md),
-              _MonthHeader(plan: plan),
+              _MonthHeader(
+                visibleMonth: _visibleMonth,
+                onPreviousMonth: () => _changeMonth(-1),
+                onNextMonth: _canGoNextMonth ? () => _changeMonth(1) : null,
+              ),
               const SizedBox(height: AppSpacing.lg),
-              _CalendarCard(plan: plan, records: records),
+              _CalendarCard(visibleMonth: _visibleMonth, records: records),
               const SizedBox(height: AppSpacing.lg),
               const Padding(
                 padding: EdgeInsets.only(left: 4),
                 child: Text('最近打卡', style: AppTextStyles.section),
               ),
               const SizedBox(height: AppSpacing.md),
-              if (records.isEmpty)
+              if (visibleRecords.isEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 32),
                     child: Text(
-                      '还没有打卡记录',
+                      '这个月还没有打卡记录',
                       style: AppTextStyles.caption.copyWith(
                         color: AppColors.secondaryText,
                       ),
@@ -73,7 +93,7 @@ class CheckinRecordPage extends StatelessWidget {
                   ),
                 )
               else
-                ...records.map(
+                ...visibleRecords.map(
                   (record) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                     child: _CheckinTile(record: record),
@@ -103,6 +123,16 @@ class CheckinRecordPage extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool get _canGoNextMonth {
+    return _visibleMonth.isBefore(_monthOnly(DateTime.now()));
+  }
+
+  void _changeMonth(int offset) {
+    setState(() {
+      _visibleMonth = _addMonths(_visibleMonth, offset);
+    });
   }
 }
 
@@ -148,13 +178,18 @@ class _RecordPlanHeader extends StatelessWidget {
 }
 
 class _MonthHeader extends StatelessWidget {
-  const _MonthHeader({required this.plan});
+  const _MonthHeader({
+    required this.visibleMonth,
+    required this.onPreviousMonth,
+    required this.onNextMonth,
+  });
 
-  final Plan plan;
+  final DateTime visibleMonth;
+  final VoidCallback onPreviousMonth;
+  final VoidCallback? onNextMonth;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -163,18 +198,20 @@ class _MonthHeader extends StatelessWidget {
             Icons.chevron_left_rounded,
             color: AppColors.deepPink,
           ),
-          onPressed: () {},
+          onPressed: onPreviousMonth,
         ),
         Text(
-          '${now.year} 年 ${now.month} 月',
+          '${visibleMonth.year} 年 ${visibleMonth.month} 月',
           style: AppTextStyles.title.copyWith(fontSize: 20),
         ),
         IconButton(
-          icon: const Icon(
+          icon: Icon(
             Icons.chevron_right_rounded,
-            color: AppColors.deepPink,
+            color: onNextMonth == null
+                ? AppColors.secondaryText.withValues(alpha: 0.34)
+                : AppColors.deepPink,
           ),
-          onPressed: () {},
+          onPressed: onNextMonth,
         ),
       ],
     );
@@ -182,21 +219,28 @@ class _MonthHeader extends StatelessWidget {
 }
 
 class _CalendarCard extends StatelessWidget {
-  const _CalendarCard({required this.plan, required this.records});
+  const _CalendarCard({required this.visibleMonth, required this.records});
 
-  final Plan plan;
+  final DateTime visibleMonth;
   final List<CheckinRecord> records;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    final firstWeekday = DateTime(now.year, now.month, 1).weekday;
+    final daysInMonth = DateTime(
+      visibleMonth.year,
+      visibleMonth.month + 1,
+      0,
+    ).day;
+    final firstWeekday = DateTime(
+      visibleMonth.year,
+      visibleMonth.month,
+      1,
+    ).weekday;
     final completedDates = records
         .where((r) => r.completed)
         .map((r) => DateTime(r.date.year, r.date.month, r.date.day))
         .toSet();
-    final today = DateTime(now.year, now.month, now.day);
+    final today = _dateOnly(DateTime.now());
 
     return AppCard(
       borderRadius: 28,
@@ -236,9 +280,12 @@ class _CalendarCard extends StatelessWidget {
                   child: _DayCell(
                     day: day,
                     isCompleted: completedDates.contains(
-                      DateTime(now.year, now.month, day),
+                      DateTime(visibleMonth.year, visibleMonth.month, day),
                     ),
-                    isToday: day == today.day,
+                    isToday: _isSameDate(
+                      DateTime(visibleMonth.year, visibleMonth.month, day),
+                      today,
+                    ),
                   ),
                 ),
             ],
@@ -247,6 +294,26 @@ class _CalendarCard extends StatelessWidget {
       ),
     );
   }
+}
+
+DateTime _dateOnly(DateTime date) {
+  return DateTime(date.year, date.month, date.day);
+}
+
+DateTime _monthOnly(DateTime date) {
+  return DateTime(date.year, date.month);
+}
+
+DateTime _addMonths(DateTime month, int offset) {
+  return DateTime(month.year, month.month + offset);
+}
+
+bool _isSameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
+bool _isSameMonth(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month;
 }
 
 class _DayCell extends StatelessWidget {

@@ -576,7 +576,7 @@ void main() {
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
     expect(find.text('待绑定'), findsOneWidget);
-    expect(find.text('我们的空间邀请码'), findsOneWidget);
+    expect(find.text('邀请另一半'), findsOneWidget);
 
     await tester.tap(find.text('首页'));
     await tester.pumpAndSettle();

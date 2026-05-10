@@ -22,15 +22,24 @@ class GrowTogetherApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<Store>.value(
-      value: SupabaseConfig.isConfigured ? SupabaseStore() : MockStore.instance,
-      child: MaterialApp(
-        title: '一起进步呀',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light,
-        darkTheme: AppTheme.light,
-        home: const GrowTogetherShell(),
-      ),
+    final app = MaterialApp(
+      title: '一起进步呀',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.light,
+      home: const GrowTogetherShell(),
+    );
+
+    if (!SupabaseConfig.isConfigured) {
+      return ChangeNotifierProvider<Store>.value(
+        value: MockStore.instance,
+        child: app,
+      );
+    }
+
+    return ChangeNotifierProvider<Store>(
+      create: (_) => SupabaseStore(),
+      child: app,
     );
   }
 }

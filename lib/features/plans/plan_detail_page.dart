@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/models/profile.dart';
 import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../data/models/reminder.dart';
@@ -24,6 +25,7 @@ class PlanDetailPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = context.watch<Store>();
     final plan = store.getPlanById(planId);
+    final profile = store.getProfile();
     if (plan == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('计划详情')),
@@ -56,7 +58,7 @@ class PlanDetailPage extends StatelessWidget {
             children: [
               _PlanOverviewCard(plan: plan),
               const SizedBox(height: AppSpacing.md),
-              _TodayActionCard(plan: plan),
+              _TodayActionCard(plan: plan, profile: profile),
               const SizedBox(height: AppSpacing.md),
               _RecentCheckinsCard(
                 plan: plan,
@@ -911,9 +913,10 @@ class _InlineMeta extends StatelessWidget {
 }
 
 class _TodayActionCard extends StatelessWidget {
-  const _TodayActionCard({required this.plan});
+  const _TodayActionCard({required this.plan, required this.profile});
 
   final Plan plan;
+  final Profile profile;
 
   @override
   Widget build(BuildContext context) {
@@ -945,7 +948,7 @@ class _TodayActionCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           if (plan.owner == PlanOwner.together) ...[
-            _CoupleStatusPanel(plan: plan),
+            _CoupleStatusPanel(plan: plan, profile: profile),
             const SizedBox(height: AppSpacing.md),
           ],
           Row(
@@ -1000,9 +1003,10 @@ class _TodayActionCard extends StatelessWidget {
 }
 
 class _CoupleStatusPanel extends StatelessWidget {
-  const _CoupleStatusPanel({required this.plan});
+  const _CoupleStatusPanel({required this.plan, required this.profile});
 
   final Plan plan;
+  final Profile profile;
 
   @override
   Widget build(BuildContext context) {
@@ -1017,6 +1021,8 @@ class _CoupleStatusPanel extends StatelessWidget {
           Expanded(
             child: _PersonStatusTile(
               label: '我',
+              avatarUrl: profile.avatarUrl,
+              fallbackIcon: Icons.face_6_rounded,
               completed: plan.doneToday,
               checkedIn: plan.hasCurrentUserCheckinToday,
               color: AppColors.deepPink,
@@ -1025,7 +1031,11 @@ class _CoupleStatusPanel extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: _PersonStatusTile(
-              label: 'TA',
+              label: profile.isBound && profile.partnerName.trim().isNotEmpty
+                  ? profile.partnerName.trim()
+                  : 'TA',
+              avatarUrl: profile.partnerAvatarUrl,
+              fallbackIcon: Icons.favorite_rounded,
               completed: plan.partnerDoneToday,
               checkedIn: plan.hasPartnerCheckinToday,
               color: AppColors.successText,
@@ -1040,12 +1050,16 @@ class _CoupleStatusPanel extends StatelessWidget {
 class _PersonStatusTile extends StatelessWidget {
   const _PersonStatusTile({
     required this.label,
+    required this.avatarUrl,
+    required this.fallbackIcon,
     required this.completed,
     required this.checkedIn,
     required this.color,
   });
 
   final String label;
+  final String? avatarUrl;
+  final IconData fallbackIcon;
   final bool completed;
   final bool checkedIn;
   final Color color;
@@ -1064,16 +1078,48 @@ class _PersonStatusTile extends StatelessWidget {
         : '待打卡';
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: AppSpacing.md,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.68),
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         children: [
+          _TinyProfileAvatar(
+            imageUrl: avatarUrl,
+            color: color,
+            fallbackIcon: fallbackIcon,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.secondaryText,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  statusText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: effectiveColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 4),
           Icon(
             completed
                 ? Icons.check_circle_rounded
@@ -1081,21 +1127,66 @@ class _PersonStatusTile extends StatelessWidget {
                 ? Icons.error_outline_rounded
                 : Icons.radio_button_unchecked_rounded,
             color: effectiveColor,
-            size: 22,
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              '$label$statusText',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTextStyles.body.copyWith(
-                color: effectiveColor,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
+            size: 18,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _TinyProfileAvatar extends StatelessWidget {
+  const _TinyProfileAvatar({
+    required this.imageUrl,
+    required this.color,
+    required this.fallbackIcon,
+  });
+
+  final String? imageUrl;
+  final Color color;
+  final IconData fallbackIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl?.trim();
+
+    return Container(
+      width: 38,
+      height: 38,
+      padding: const EdgeInsets.all(2.5),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.16),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: url == null || url.isEmpty
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(fallbackIcon, color: color, size: 20),
+              )
+            : Image.network(
+                url,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) => DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(fallbackIcon, color: color, size: 20),
+                ),
+              ),
       ),
     );
   }

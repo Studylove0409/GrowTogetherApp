@@ -44,18 +44,19 @@ class AccountRepository {
     required String password,
   }) async {
     await _supabase.auth.signInWithPassword(email: email, password: password);
-    await _supabase.rpc(
-      'create_profile_for_current_user',
-      params: {'p_nickname': '一起进步的你'},
-    );
+    await _supabase.rpc('create_profile_for_current_user');
   }
 
   Future<void> signOutToAnonymous() async {
     await _supabase.auth.signOut();
     await _supabase.auth.signInAnonymously();
-    await _supabase.rpc(
-      'create_profile_for_current_user',
-      params: {'p_nickname': '一起进步的你'},
-    );
+    await _supabase.rpc('create_profile_for_current_user');
+  }
+
+  Future<void> deleteCurrentUserAccount() async {
+    await _supabase.rpc('delete_current_user_account');
+    await _supabase.auth.signOut();
+    await _supabase.auth.signInAnonymously();
+    await _supabase.rpc('create_profile_for_current_user');
   }
 }

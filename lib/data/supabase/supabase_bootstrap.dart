@@ -22,10 +22,7 @@ class SupabaseBootstrap {
         await auth.signInAnonymously();
       }
 
-      await Supabase.instance.client.rpc(
-        'create_profile_for_current_user',
-        params: {'p_nickname': '一起进步的你'},
-      );
+      await Supabase.instance.client.rpc('create_profile_for_current_user');
     } on AuthException catch (error) {
       debugPrint('Supabase auth bootstrap skipped: ${error.message}');
     } on PostgrestException catch (error) {

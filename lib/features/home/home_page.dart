@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../data/models/profile.dart';
 import '../../data/models/plan.dart';
 import '../../data/store/store.dart';
 import '../../features/plans/create_plan_page.dart';
@@ -26,6 +27,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final store = isSelected ? context.watch<Store>() : context.read<Store>();
+    final profile = store.getProfile();
     final todayPlans = store.getPlans().where(_isTodayPlan).toList();
     final myPlans = todayPlans.where((p) => p.owner == PlanOwner.me).toList();
     final partnerPlans = todayPlans
@@ -48,9 +50,9 @@ class HomePage extends StatelessWidget {
             138,
           ),
           children: [
-            const _HomeHeader(),
+            _HomeHeader(profile: profile),
             const SizedBox(height: AppSpacing.xl),
-            _GrowthHeroCard(togetherDays: store.getProfile().togetherDays),
+            _GrowthHeroCard(profile: profile),
             const SizedBox(height: AppSpacing.lg),
             _HomePlanSection(
               title: '我的今日计划',
@@ -187,18 +189,26 @@ class _HomePlanSection extends StatelessWidget {
 
 List<Plan> _prioritizedVisiblePlans(List<Plan> plans) {
   final actionable = plans.where(_needsTodayAction).toList();
-  final completed = plans.where((plan) => !_needsTodayAction(plan)).toList();
+  if (actionable.isNotEmpty) {
+    return actionable.take(2).toList();
+  }
 
-  return [...actionable, ...completed].take(2).toList();
+  return plans.take(2).toList();
 }
 
 // ========================= 顶部头部 =========================
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  const _HomeHeader({required this.profile});
+
+  final Profile profile;
 
   @override
   Widget build(BuildContext context) {
+    final partnerName = profile.isBound && profile.partnerName.trim().isNotEmpty
+        ? profile.partnerName.trim()
+        : 'TA';
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -209,7 +219,9 @@ class _HomeHeader extends StatelessWidget {
               Text('一起进步呀', style: AppTextStyles.display),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                '和 TA 一起，把今天过得更好',
+                '和 $partnerName 一起，把今天过得更好',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: AppTextStyles.body.copyWith(
                   color: AppColors.secondaryText,
                   fontWeight: FontWeight.w700,
@@ -228,9 +240,9 @@ class _HomeHeader extends StatelessWidget {
 // ========================= 成长 Hero 卡片 =========================
 
 class _GrowthHeroCard extends StatelessWidget {
-  const _GrowthHeroCard({required this.togetherDays});
+  const _GrowthHeroCard({required this.profile});
 
-  final int togetherDays;
+  final Profile profile;
 
   @override
   Widget build(BuildContext context) {
@@ -243,10 +255,11 @@ class _GrowthHeroCard extends StatelessWidget {
         builder: (context, constraints) {
           final compact = constraints.maxWidth < 370;
           final artSize = compact ? 116.0 : 128.0;
-          final numberSize = compact ? 42.0 : 48.0;
+          final numberSize = compact ? 40.0 : 44.0;
+          final togetherDays = profile.togetherDays;
 
           return Container(
-            height: compact ? 158 : 166,
+            height: compact ? 188 : 196,
             padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
               compact ? AppSpacing.md : AppSpacing.lg,
@@ -305,17 +318,30 @@ class _GrowthHeroCard extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
-                              '你们已经一起进步',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppTextStyles.body.copyWith(
-                                color: AppColors.secondaryText,
-                                fontSize: compact ? 13 : 14,
-                                fontWeight: FontWeight.w800,
-                              ),
+                            Row(
+                              children: [
+                                CoupleAvatarStack(
+                                  currentUserAvatarUrl: profile.avatarUrl,
+                                  partnerAvatarUrl: profile.partnerAvatarUrl,
+                                  isCoupleBound: profile.isBound,
+                                  size: compact ? 62 : 68,
+                                ),
+                                SizedBox(width: compact ? 10 : 12),
+                                Expanded(
+                                  child: Text(
+                                    '你们已经一起进步',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTextStyles.body.copyWith(
+                                      color: AppColors.secondaryText,
+                                      fontSize: compact ? 13 : 14,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: compact ? 6 : 4),
                             FittedBox(
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
@@ -337,7 +363,7 @@ class _GrowthHeroCard extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            SizedBox(height: compact ? 4 : 5),
                             Text(
                               '轻轻努力，未来可期！',
                               maxLines: 1,
@@ -468,6 +494,201 @@ class _HeroCalendarArt extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+class CoupleAvatarStack extends StatelessWidget {
+  const CoupleAvatarStack({
+    super.key,
+    required this.currentUserAvatarUrl,
+    required this.partnerAvatarUrl,
+    required this.isCoupleBound,
+    this.size = 52,
+  });
+
+  final String? currentUserAvatarUrl;
+  final String? partnerAvatarUrl;
+  final bool isCoupleBound;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final primarySize = size * 0.78;
+    final partnerSize = size * 0.66;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            right: 0,
+            bottom: 1,
+            child: isCoupleBound
+                ? SoftAvatar(
+                    imageUrl: partnerAvatarUrl,
+                    size: partnerSize,
+                    backgroundColor: AppColors.lightPink,
+                    iconColor: AppColors.deepPink,
+                  )
+                : PartnerPlaceholderAvatar(size: partnerSize),
+          ),
+          Positioned(
+            left: 0,
+            top: 0,
+            child: SoftAvatar(
+              imageUrl: currentUserAvatarUrl,
+              size: primarySize,
+              backgroundColor: AppColors.blush,
+              iconColor: AppColors.deepPink,
+            ),
+          ),
+          Positioned(
+            right: size * 0.18,
+            top: size * 0.06,
+            child: Container(
+              width: size * 0.25,
+              height: size * 0.25,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.94),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.line, width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withValues(alpha: 0.16),
+                    blurRadius: 8,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Icon(
+                Icons.favorite_rounded,
+                color: AppColors.deepPink,
+                size: size * 0.14,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SoftAvatar extends StatelessWidget {
+  const SoftAvatar({
+    super.key,
+    required this.imageUrl,
+    required this.size,
+    required this.backgroundColor,
+    required this.iconColor,
+  });
+
+  final String? imageUrl;
+  final double size;
+  final Color backgroundColor;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl?.trim();
+
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.04),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.16),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: url == null || url.isEmpty
+            ? _DefaultSoftAvatar(
+                size: size,
+                backgroundColor: backgroundColor,
+                iconColor: iconColor,
+              )
+            : Image.network(
+                url,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) =>
+                    _DefaultSoftAvatar(
+                      size: size,
+                      backgroundColor: backgroundColor,
+                      iconColor: iconColor,
+                    ),
+              ),
+      ),
+    );
+  }
+}
+
+class PartnerPlaceholderAvatar extends StatelessWidget {
+  const PartnerPlaceholderAvatar({super.key, required this.size});
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: size,
+      height: size,
+      padding: EdgeInsets.all(size * 0.04),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 1.4),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: AppColors.paper,
+          shape: BoxShape.circle,
+          border: Border.all(color: AppColors.line.withValues(alpha: 0.62)),
+        ),
+        child: Icon(
+          Icons.add_rounded,
+          color: AppColors.deepPink.withValues(alpha: 0.72),
+          size: size * 0.42,
+        ),
+      ),
+    );
+  }
+}
+
+class _DefaultSoftAvatar extends StatelessWidget {
+  const _DefaultSoftAvatar({
+    required this.size,
+    required this.backgroundColor,
+    required this.iconColor,
+  });
+
+  final double size;
+  final Color backgroundColor;
+  final Color iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
+      child: Icon(Icons.face_6_rounded, color: iconColor, size: size * 0.42),
     );
   }
 }

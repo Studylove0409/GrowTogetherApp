@@ -12,7 +12,9 @@ import '../../core/config/supabase_config.dart';
 import '../../core/notification/fcm_service.dart';
 import '../../data/models/account_identity.dart';
 import '../../data/models/couple_invitation.dart';
+import '../../data/models/plan.dart';
 import '../../data/models/profile.dart';
+import '../../data/models/reminder_settings.dart';
 import '../../data/store/store.dart';
 import '../../data/supabase/account_repository.dart';
 import '../../data/supabase/profile_repository.dart';
@@ -39,6 +41,8 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
   final _profileRepository = const ProfileRepository();
   final _accountRepository = const AccountRepository();
   late Future<_ProfilePageData> _profileFuture;
+  bool _isAvatarPickerActive = false;
+  bool _skipNextResumeRefresh = false;
 
   @override
   void initState() {
@@ -59,10 +63,24 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
     });
   }
 
+  void _setAvatarPickerActive(bool active) {
+    _isAvatarPickerActive = active;
+    if (active) {
+      _skipNextResumeRefresh = true;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed && widget.isSelected) {
+    if (state != AppLifecycleState.resumed || !widget.isSelected) return;
+
+    if (_isAvatarPickerActive || _skipNextResumeRefresh) {
+      _skipNextResumeRefresh = false;
+      return;
+    }
+
+    if (mounted) {
       _refreshProfile();
     }
   }
@@ -146,6 +164,7 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
                     isBound: profile.isBound,
                     avatarUrl: profile.avatarUrl,
                     partnerAvatarUrl: profile.partnerAvatarUrl,
+                    anniversaryDate: profile.anniversaryDate,
                     inviteCode: profile.inviteCode,
                     hasInviteError: hasError,
                     isSupabaseConfigured: SupabaseConfig.isConfigured,
@@ -154,6 +173,7 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
                     profileRepository: _profileRepository,
                     onOpenPlans: widget.onOpenPlans,
                     onRelationshipChanged: _refreshProfile,
+                    onAvatarPickerActiveChanged: _setAvatarPickerActive,
                     onAccountChanged: () async {
                       await FcmService.syncTokenToCurrentUser();
                       if (!context.mounted) return;
@@ -244,14 +264,6 @@ class _ProfilePageTitle extends StatelessWidget {
                   )
                 : const SizedBox(width: 38, height: 38),
           ),
-          Positioned(
-            right: 0,
-            child: _CircleIconButton(
-              icon: Icons.tune_rounded,
-              tooltip: '设置',
-              onPressed: () => _showSnack(context, '设置功能准备中'),
-            ),
-          ),
         ],
       ),
     );
@@ -299,6 +311,7 @@ class _ProfileInfoCard extends StatefulWidget {
     required this.isBound,
     required this.avatarUrl,
     required this.partnerAvatarUrl,
+    required this.anniversaryDate,
     required this.inviteCode,
     required this.hasInviteError,
     required this.isSupabaseConfigured,
@@ -307,6 +320,7 @@ class _ProfileInfoCard extends StatefulWidget {
     required this.profileRepository,
     required this.onOpenPlans,
     required this.onRelationshipChanged,
+    required this.onAvatarPickerActiveChanged,
     required this.onAccountChanged,
   });
 
@@ -316,6 +330,7 @@ class _ProfileInfoCard extends StatefulWidget {
   final bool isBound;
   final String? avatarUrl;
   final String? partnerAvatarUrl;
+  final DateTime? anniversaryDate;
   final String inviteCode;
   final bool hasInviteError;
   final bool isSupabaseConfigured;
@@ -324,6 +339,7 @@ class _ProfileInfoCard extends StatefulWidget {
   final ProfileRepository profileRepository;
   final VoidCallback onOpenPlans;
   final VoidCallback onRelationshipChanged;
+  final ValueChanged<bool> onAvatarPickerActiveChanged;
   final Future<void> Function() onAccountChanged;
 
   @override
@@ -420,12 +436,19 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
       return;
     }
 
-    final pickedImage = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 1024,
-      maxHeight: 1024,
-      imageQuality: 86,
-    );
+    XFile? pickedImage;
+    try {
+      widget.onAvatarPickerActiveChanged(true);
+      pickedImage = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 86,
+      );
+    } finally {
+      widget.onAvatarPickerActiveChanged(false);
+    }
+
     if (pickedImage == null || !mounted) return;
 
     setState(() => _isSubmitting = true);
@@ -451,6 +474,103 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
       debugPrint('Avatar upload failed: $error');
       if (!mounted) return;
       _showSnack(context, '头像上传失败，请稍后再试。');
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _editNickname() async {
+    if (_isSubmitting) return;
+
+    if (!widget.isSupabaseConfigured) {
+      _showSnack(context, '当前没有连接 Supabase，暂时不能修改昵称。');
+      return;
+    }
+
+    final nickname = await _showTextInputDialog(
+      context,
+      title: '修改昵称',
+      hintText: '输入新的昵称',
+      initialValue: widget.name,
+      icon: Icons.person_rounded,
+      validator: (value) {
+        if (value.trim().isEmpty) return '昵称不能为空';
+        if (value.characters.length > 16) return '昵称最多 16 个字';
+        return null;
+      },
+    );
+    if (nickname == null || _isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.profileRepository.updateCurrentUserNickname(nickname);
+      if (!mounted) return;
+      await widget.onAccountChanged();
+      if (!mounted) return;
+      _showSnack(context, '昵称已更新');
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+      _showSnack(context, _profileUpdateErrorMessage(error.message));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  Future<void> _pickAnniversaryDate() async {
+    if (_isSubmitting) return;
+
+    if (!widget.isBound) {
+      _showInfoDialog(
+        context,
+        title: '情侣纪念日',
+        message: '绑定另一半后，这里会自动记录你们的一起进步天数。',
+      );
+      return;
+    }
+
+    if (!widget.isSupabaseConfigured) {
+      _showSnack(context, '当前没有连接 Supabase，暂时不能修改纪念日。');
+      return;
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final fallback = widget.anniversaryDate ?? today;
+    final initialDate = fallback.isAfter(today) ? today : fallback;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: today,
+      helpText: '选择情侣纪念日',
+      cancelText: '取消',
+      confirmText: '保存',
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(
+              primary: AppColors.deepPink,
+              onPrimary: Colors.white,
+              surface: const Color(0xFFFFF6F9),
+              onSurface: AppColors.text,
+            ),
+          ),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
+    );
+    if (picked == null || !mounted || _isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.profileRepository.updateCurrentCoupleAnniversary(picked);
+      if (!mounted) return;
+      await widget.onAccountChanged();
+      if (!mounted) return;
+      _showSnack(context, '情侣纪念日已更新');
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+      _showSnack(context, _profileUpdateErrorMessage(error.message));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -493,11 +613,288 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
     }
   }
 
+  Future<void> _confirmAndDeleteAccount() async {
+    if (_isSubmitting) return;
+
+    if (!widget.isSupabaseConfigured || !widget.account.isConfigured) {
+      _showSnack(context, '当前没有连接 Supabase，暂时不能注销账号。');
+      return;
+    }
+
+    final confirmation = await _showTextInputDialog(
+      context,
+      title: '注销账号',
+      hintText: '输入“注销账号”确认',
+      icon: Icons.person_remove_rounded,
+      validator: (value) => value.trim() == '注销账号' ? null : '请完整输入“注销账号”再继续',
+    );
+    if (confirmation == null || _isSubmitting) return;
+    if (!mounted) return;
+
+    final confirmed = await showAppCuteDialog<bool>(
+      context,
+      builder: (dialogContext) => AppCuteDialog(
+        title: '确认注销账号',
+        description: '这会永久删除你的账号、资料、计划、打卡、提醒和情侣关系。操作完成后会自动切换为新的临时账号。',
+        icon: const DialogIconBadge(
+          icon: Icons.warning_amber_rounded,
+          color: AppColors.deepPink,
+        ),
+        primaryText: '永久注销',
+        cancelText: '再想想',
+        isDanger: true,
+        onCancel: () => Navigator.of(dialogContext).pop(false),
+        onPrimary: () => Navigator.of(dialogContext).pop(true),
+      ),
+    );
+    if (confirmed != true || !mounted || _isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await widget.repository.deleteCurrentUserAccount();
+      if (!mounted) return;
+      await widget.onAccountChanged();
+      if (!mounted) return;
+      _showSnack(context, '账号已注销，当前已切换为新的临时账号。');
+    } on PostgrestException catch (error) {
+      if (!mounted) return;
+      _showSnack(context, _deleteAccountErrorMessage(error.message));
+    } on AuthException catch (error) {
+      if (!mounted) return;
+      _showSnack(context, _accountErrorMessage(error.message));
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  void _showPersonalProfileDialog(BuildContext context) {
+    showAppCuteDialog(
+      context,
+      builder: (dialogContext) => AppCuteDialog(
+        title: '个人资料',
+        description: '可以更新头像和昵称，TA 会在情侣空间里看到你的最新资料。',
+        icon: _CuteAvatar(
+          size: 72,
+          imageUrl: widget.avatarUrl,
+          isUploading: _isSubmitting,
+          shadowOpacity: 0.12,
+          borderWidth: 4,
+        ),
+        primaryText: '更换头像',
+        secondaryText: '修改昵称',
+        cancelText: '取消',
+        onCancel: () => Navigator.of(dialogContext).pop(),
+        onSecondary: _isSubmitting
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                _editNickname();
+              },
+        onPrimary: _isSubmitting
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                _pickAndUploadAvatar();
+              },
+        children: [
+          DialogInfoCard(
+            icon: Icons.person_rounded,
+            title: '昵称',
+            body: widget.name.isEmpty ? '一起进步的你' : widget.name,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDataSyncDialog(BuildContext context, AccountIdentity account) {
+    _showInfoDialog(
+      context,
+      title: '数据同步状态',
+      message: account.isConfigured
+          ? '当前已连接 Supabase。你的资料、计划、打卡、提醒和情侣关系会通过云端同步。'
+          : '当前未连接 Supabase，页面使用本地 Mock 数据展示。发布或真机联调时需要提供 SUPABASE_ANON_KEY。',
+    );
+  }
+
+  void _showAccountSecurityDialog(
+    BuildContext context,
+    AccountIdentity account,
+  ) {
+    final primaryText = account.isEmailConfirmed ? '设置密码' : '绑定邮箱';
+
+    showAppCuteDialog(
+      context,
+      builder: (dialogContext) => AppCuteDialog(
+        title: '账号与安全',
+        description: '你现在使用的是临时账号。绑定邮箱后，卸载 App 或换手机也可以找回数据。',
+        icon: const DialogIconBadge(icon: Icons.shield_rounded),
+        primaryText: primaryText,
+        secondaryText: account.isRecoverable ? null : '登录已有账号',
+        cancelText: '稍后再说',
+        onCancel: () => Navigator.of(dialogContext).pop(),
+        onSecondary: account.isRecoverable || _isSubmitting
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                _signIn();
+              },
+        onPrimary: _isSubmitting
+            ? null
+            : () {
+                Navigator.of(dialogContext).pop();
+                if (account.isEmailConfirmed) {
+                  _setPassword();
+                } else {
+                  _linkEmail();
+                }
+              },
+        children: const [
+          DialogInfoCard(
+            icon: Icons.lock_clock_rounded,
+            title: '数据保护提醒',
+            body: '建议尽快绑定邮箱，避免数据丢失。',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmClearCache(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清除缓存'),
+        content: const Text('将清理当前页面的临时展示缓存。你的计划、打卡和账号数据不会被删除。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      imageCache.clear();
+      imageCache.clearLiveImages();
+      _showSnack(context, '缓存已清理');
+    }
+  }
+
+  Future<void> _saveReminderSettings(ReminderSettings settings) async {
+    await context.read<Store>().updateReminderSettings(settings);
+    if (!mounted) return;
+    _showSnack(context, '提醒设置已更新');
+  }
+
+  Future<void> _pickDailyReminderTime(ReminderSettings settings) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: settings.dailyReminderTime,
+      helpText: '选择每日提醒时间',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked == null || !mounted) return;
+
+    await _saveReminderSettings(
+      settings.copyWith(dailyReminderEnabled: true, dailyReminderTime: picked),
+    );
+  }
+
+  Future<void> _pickDoNotDisturbTime(
+    ReminderSettings settings, {
+    required bool pickStart,
+  }) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: pickStart
+          ? settings.doNotDisturbStart
+          : settings.doNotDisturbEnd,
+      helpText: pickStart ? '选择免打扰开始时间' : '选择免打扰结束时间',
+      cancelText: '取消',
+      confirmText: '确定',
+    );
+    if (picked == null || !mounted) return;
+
+    await _saveReminderSettings(
+      settings.copyWith(
+        doNotDisturbEnabled: true,
+        doNotDisturbStart: pickStart ? picked : null,
+        doNotDisturbEnd: pickStart ? null : picked,
+      ),
+    );
+  }
+
+  Future<void> _showDoNotDisturbSheet(ReminderSettings settings) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _DoNotDisturbSheet(
+        settings: settings,
+        onToggle: (enabled) async {
+          Navigator.of(sheetContext).pop();
+          await _saveReminderSettings(
+            settings.copyWith(doNotDisturbEnabled: enabled),
+          );
+        },
+        onPickStart: () {
+          Navigator.of(sheetContext).pop();
+          _pickDoNotDisturbTime(settings, pickStart: true);
+        },
+        onPickEnd: () {
+          Navigator.of(sheetContext).pop();
+          _pickDoNotDisturbTime(settings, pickStart: false);
+        },
+      ),
+    );
+  }
+
+  Future<void> _showPlanReminderSheet(BuildContext context) async {
+    final plans = context
+        .read<Store>()
+        .getPlans()
+        .where(_shouldShowPlanReminder)
+        .toList();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _PlanReminderSheet(
+        plans: plans,
+        onOpenPlans: () {
+          Navigator.of(sheetContext).pop();
+          widget.onOpenPlans();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final account = widget.account;
     final accountColor = _accountStatusColor(account);
     final accountLabel = _accountStatusLabel(account);
+    final store = context.watch<Store>();
+    final reminderSettings = store.getReminderSettings();
+    final planReminderCount = store
+        .getPlans()
+        .where(_shouldShowPlanReminder)
+        .length;
+    final anniversaryDateLabel = widget.anniversaryDate == null
+        ? null
+        : _formatDateLabel(widget.anniversaryDate!);
+    final anniversarySubtitle = widget.isBound
+        ? anniversaryDateLabel == null
+              ? '你们已经一起进步第 ${widget.togetherDays} 天'
+              : '$anniversaryDateLabel · 第 ${widget.togetherDays} 天'
+        : '绑定后自动记录你们的一起进步天数';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -516,32 +913,19 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
         ),
         const SizedBox(height: 24),
         _SettingsSection(
-          title: '账号与空间',
+          title: '账号',
           children: [
             SettingsTile(
-              icon: Icons.card_giftcard_rounded,
+              icon: Icons.person_rounded,
               iconColor: AppColors.deepPink,
-              title: '我们的空间邀请码',
-              onTap: () => _showInviteCodeDialog(
-                context,
-                inviteCode: widget.inviteCode,
-                hasError: widget.hasInviteError,
-                isSupabaseConfigured: widget.isSupabaseConfigured,
-              ),
-            ),
-            SettingsTile(
-              icon: account.isEmailConfirmed
-                  ? Icons.lock_rounded
-                  : Icons.login_rounded,
-              iconColor: accountColor,
-              title: '登录账号',
-              subtitle: account.isEmailConfirmed ? account.email : null,
-              onTap: account.isEmailConfirmed ? _setPassword : _signIn,
+              title: '个人资料',
+              subtitle: '头像、昵称和成长空间资料',
+              onTap: () => _showPersonalProfileDialog(context),
             ),
             SettingsTile(
               icon: _accountIcon(account),
               iconColor: accountColor,
-              title: '保护你的账号',
+              title: '账号与安全',
               subtitle: account.isConfigured
                   ? _accountDescription(account)
                   : '当前没有连接 Supabase，账号保护不可用。',
@@ -549,14 +933,8 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
                   ? const _MutedTag('已保护')
                   : const _ActionHint('去绑定'),
               onTap: account.isConfigured
-                  ? (account.isEmailConfirmed ? _setPassword : _linkEmail)
+                  ? () => _showAccountSecurityDialog(context, account)
                   : null,
-            ),
-            SettingsTile(
-              icon: Icons.event_note_rounded,
-              iconColor: AppColors.lavender,
-              title: '我的计划',
-              onTap: widget.onOpenPlans,
             ),
           ],
         ),
@@ -582,41 +960,191 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
                     : AppColors.secondaryText,
               ),
             ),
-            if (widget.isBound)
-              DangerSettingsTile(
-                title: _isSubmitting ? '解除中...' : '解除绑定',
-                subtitle: '解除后，你们需要重新输入邀请码才能再次绑定。',
-                onTap: _isSubmitting ? null : _confirmAndEndRelationship,
+            SettingsTile(
+              icon: Icons.card_giftcard_rounded,
+              iconColor: AppColors.deepPink,
+              title: '邀请另一半',
+              subtitle: '查看邀请码，让 TA 加入你的成长空间',
+              onTap: () => _showInviteCodeDialog(
+                context,
+                inviteCode: widget.inviteCode,
+                hasError: widget.hasInviteError,
+                isSupabaseConfigured: widget.isSupabaseConfigured,
               ),
+            ),
+            SettingsTile(
+              icon: Icons.event_available_rounded,
+              iconColor: AppColors.reminder,
+              title: '情侣纪念日',
+              subtitle: anniversarySubtitle,
+              trailing: widget.isBound
+                  ? _MutedTag('第 ${widget.togetherDays} 天')
+                  : null,
+              onTap: _isSubmitting ? null : _pickAnniversaryDate,
+            ),
+            widget.isBound
+                ? DangerSettingsTile(
+                    title: _isSubmitting ? '解除中...' : '解除绑定',
+                    subtitle: '解除后，你们需要重新输入邀请码才能再次绑定。',
+                    onTap: _isSubmitting ? null : _confirmAndEndRelationship,
+                  )
+                : SettingsTile(
+                    icon: Icons.heart_broken_rounded,
+                    iconColor: AppColors.secondaryText,
+                    title: '解除绑定',
+                    subtitle: '当前未绑定，无需解除',
+                    trailing: const _MutedTag('不可用'),
+                  ),
           ],
         ),
         const SizedBox(height: 26),
         _SettingsSection(
-          title: '更多',
+          title: '提醒',
           children: [
+            SettingsTile(
+              icon: Icons.today_rounded,
+              iconColor: AppColors.deepPink,
+              title: '每日提醒',
+              subtitle: reminderSettings.dailyReminderEnabled
+                  ? '每天 ${reminderSettings.dailyReminderTime.format(context)} 提醒看看今日计划'
+                  : '已关闭每日计划提醒',
+              trailing: _SettingsSwitch(
+                value: reminderSettings.dailyReminderEnabled,
+                onChanged: (enabled) => _saveReminderSettings(
+                  reminderSettings.copyWith(dailyReminderEnabled: enabled),
+                ),
+              ),
+              onTap: () => _pickDailyReminderTime(reminderSettings),
+            ),
+            SettingsTile(
+              icon: Icons.alarm_rounded,
+              iconColor: AppColors.reminder,
+              title: '打卡提醒',
+              subtitle: '计划中的提醒时间会自动安排通知',
+              trailing: _MutedTag('$planReminderCount 个'),
+              onTap: () => _showPlanReminderSheet(context),
+            ),
+            SettingsTile(
+              icon: Icons.favorite_rounded,
+              iconColor: AppColors.deepPink,
+              title: '另一半动态提醒',
+              subtitle: 'TA 打卡、提醒或邀请时通知你',
+              trailing: widget.isBound
+                  ? _SettingsSwitch(
+                      value: reminderSettings.partnerActivityReminderEnabled,
+                      onChanged: (enabled) => _saveReminderSettings(
+                        reminderSettings.copyWith(
+                          partnerActivityReminderEnabled: enabled,
+                        ),
+                      ),
+                    )
+                  : const _MutedTag('未绑定'),
+              onTap: widget.isBound
+                  ? () => _saveReminderSettings(
+                      reminderSettings.copyWith(
+                        partnerActivityReminderEnabled:
+                            !reminderSettings.partnerActivityReminderEnabled,
+                      ),
+                    )
+                  : null,
+            ),
+            SettingsTile(
+              icon: Icons.nights_stay_rounded,
+              iconColor: AppColors.secondaryText,
+              title: '免打扰时间',
+              subtitle: reminderSettings.doNotDisturbEnabled
+                  ? '${reminderSettings.doNotDisturbStart.format(context)} - ${reminderSettings.doNotDisturbEnd.format(context)} 减少提醒打扰'
+                  : '关闭，夜间仍会接收提醒',
+              trailing: _SettingsSwitch(
+                value: reminderSettings.doNotDisturbEnabled,
+                onChanged: (enabled) => _saveReminderSettings(
+                  reminderSettings.copyWith(doNotDisturbEnabled: enabled),
+                ),
+              ),
+              onTap: () => _showDoNotDisturbSheet(reminderSettings),
+            ),
+          ],
+        ),
+        const SizedBox(height: 26),
+        _SettingsSection(
+          title: '数据',
+          children: [
+            SettingsTile(
+              icon: Icons.cloud_done_rounded,
+              iconColor: account.isConfigured
+                  ? AppColors.success
+                  : AppColors.secondaryText,
+              title: '数据同步状态',
+              subtitle: account.isConfigured
+                  ? '已连接 Supabase，计划和资料会自动同步'
+                  : '当前使用本地 Mock 数据',
+              trailing: _MutedTag(account.isConfigured ? '已同步' : '本地'),
+              onTap: () => _showDataSyncDialog(context, account),
+            ),
+            SettingsTile(
+              icon: Icons.cleaning_services_rounded,
+              iconColor: AppColors.lavender,
+              title: '清除缓存',
+              subtitle: '清理临时图片和本地展示缓存',
+              onTap: () => _confirmClearCache(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: 26),
+        _SettingsSection(
+          title: '关于',
+          children: [
+            SettingsTile(
+              icon: Icons.feedback_rounded,
+              iconColor: AppColors.reminder,
+              title: '反馈与建议',
+              subtitle: '告诉我们你希望一起进步呀变得更好',
+              onTap: () => _showInfoDialog(
+                context,
+                title: '反馈与建议',
+                message: '可以把建议发送到：song3286791241@gmail.com',
+              ),
+            ),
             SettingsTile(
               icon: Icons.info_rounded,
               iconColor: AppColors.success,
-              title: '关于我们',
+              title: '关于 App',
               onTap: () => _showAboutUsDialog(context),
             ),
             SettingsTile(
-              icon: Icons.settings_rounded,
-              iconColor: AppColors.secondaryText,
-              title: '设置',
-              onTap: () => _showSnack(context, '设置功能准备中'),
+              icon: Icons.new_releases_rounded,
+              iconColor: AppColors.lavender,
+              title: '当前版本',
+              trailing: const _MutedTag('1.0.0+1'),
             ),
-            if (!account.isAnonymous)
-              DangerSettingsTile(
-                icon: Icons.logout_rounded,
-                title: _isSubmitting ? '退出中...' : '退出登录',
-                subtitle: '退出后会切换为新的临时账号。',
-                onTap: _isSubmitting ? null : _signOut,
-              ),
+          ],
+        ),
+        const SizedBox(height: 26),
+        _SettingsSection(
+          title: '底部',
+          children: [
+            DangerSettingsTile(
+              icon: Icons.logout_rounded,
+              title: _isSubmitting ? '退出中...' : '退出登录',
+              subtitle: account.isAnonymous ? '当前是临时账号，无需退出' : '退出后会切换为新的临时账号。',
+              onTap: account.isAnonymous || _isSubmitting ? null : _signOut,
+            ),
+            DangerSettingsTile(
+              icon: Icons.person_remove_rounded,
+              title: _isSubmitting ? '注销中...' : '注销账号',
+              subtitle: '永久删除账号需要额外确认',
+              onTap: _isSubmitting ? null : _confirmAndDeleteAccount,
+            ),
           ],
         ),
       ],
     );
+  }
+
+  bool _shouldShowPlanReminder(Plan plan) {
+    return plan.hasReminder &&
+        plan.owner != PlanOwner.partner &&
+        !plan.isDoneForCurrentUser;
   }
 
   Future<void> _confirmAndEndRelationship() async {
@@ -690,6 +1218,10 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
     return '头像上传失败，请稍后再试。';
   }
 
+  String _formatDateLabel(DateTime date) {
+    return '${date.year}年${date.month}月${date.day}日';
+  }
+
   String _accountStatusLabel(AccountIdentity account) {
     if (!account.isAnonymous && account.hasEmail) return '已登录';
     if (account.hasEmail) return '待确认';
@@ -722,6 +1254,31 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
       return '邮箱还没有确认，请先完成邮箱验证。';
     }
     return '账号操作失败，请稍后再试。';
+  }
+
+  String _profileUpdateErrorMessage(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('anniversary') || lower.contains('function')) {
+      return '纪念日功能还没同步到数据库，请先应用最新 Supabase 迁移。';
+    }
+    if (lower.contains('future')) {
+      return '纪念日不能选择未来日期。';
+    }
+    if (lower.contains('active couple')) {
+      return '需要先绑定另一半，才能设置情侣纪念日。';
+    }
+    return '资料更新失败，请稍后再试。';
+  }
+
+  String _deleteAccountErrorMessage(String message) {
+    final lower = message.toLowerCase();
+    if (lower.contains('function') || lower.contains('delete_current_user')) {
+      return '注销账号功能还没同步到数据库，请先应用最新 Supabase 迁移。';
+    }
+    if (lower.contains('authentication')) {
+      return '登录状态已失效，请重新进入 App 后再试。';
+    }
+    return '注销失败，请稍后再试。';
   }
 }
 
@@ -1142,6 +1699,332 @@ class _MutedTag extends StatelessWidget {
   }
 }
 
+class _SettingsSwitch extends StatelessWidget {
+  const _SettingsSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 48,
+      child: Transform.scale(
+        scale: 0.78,
+        child: Switch.adaptive(
+          value: value,
+          activeColor: AppColors.deepPink,
+          activeTrackColor: AppColors.lightPink,
+          inactiveThumbColor: AppColors.secondaryText.withValues(alpha: 0.62),
+          inactiveTrackColor: AppColors.line.withValues(alpha: 0.74),
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+class _DoNotDisturbSheet extends StatelessWidget {
+  const _DoNotDisturbSheet({
+    required this.settings,
+    required this.onToggle,
+    required this.onPickStart,
+    required this.onPickEnd,
+  });
+
+  final ReminderSettings settings;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF6F9),
+          borderRadius: BorderRadius.circular(28),
+          border: Border.all(color: AppColors.line.withValues(alpha: 0.62)),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.primary.withValues(alpha: 0.16),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const _SettingsIcon(
+                  icon: Icons.nights_stay_rounded,
+                  color: AppColors.secondaryText,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '免打扰时间',
+                    style: AppTextStyles.section.copyWith(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                _SettingsSwitch(
+                  value: settings.doNotDisturbEnabled,
+                  onChanged: onToggle,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '开启后，这个时间段内会减少另一半动态和前台提醒打扰。',
+              style: AppTextStyles.caption.copyWith(
+                color: AppColors.secondaryText,
+                fontWeight: FontWeight.w700,
+                height: 1.45,
+              ),
+            ),
+            const SizedBox(height: 16),
+            _SoftTimeTile(
+              label: '开始时间',
+              value: settings.doNotDisturbStart.format(context),
+              onTap: onPickStart,
+            ),
+            const SizedBox(height: 10),
+            _SoftTimeTile(
+              label: '结束时间',
+              value: settings.doNotDisturbEnd.format(context),
+              onTap: onPickEnd,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SoftTimeTile extends StatelessWidget {
+  const _SoftTimeTile({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final String value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.68),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+          child: Row(
+            children: [
+              Text(
+                label,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.text,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                value,
+                style: AppTextStyles.body.copyWith(
+                  color: AppColors.deepPink,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.secondaryText,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanReminderSheet extends StatelessWidget {
+  const _PlanReminderSheet({required this.plans, required this.onOpenPlans});
+
+  final List<Plan> plans;
+  final VoidCallback onOpenPlans;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxSheetHeight = MediaQuery.sizeOf(context).height * 0.78;
+
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          constraints: BoxConstraints(maxHeight: maxSheetHeight),
+          margin: const EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF6F9),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: AppColors.line.withValues(alpha: 0.62)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.16),
+                blurRadius: 28,
+                offset: const Offset(0, 14),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const _SettingsIcon(
+                    icon: Icons.alarm_rounded,
+                    color: AppColors.reminder,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '打卡提醒',
+                      style: AppTextStyles.section.copyWith(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '这里集中展示已设置提醒时间的计划。需要调整时，可以进入计划详情编辑提醒时间。',
+                style: AppTextStyles.caption.copyWith(
+                  color: AppColors.secondaryText,
+                  fontWeight: FontWeight.w700,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (plans.isEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.66),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '还没有计划开启打卡提醒',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.secondaryText,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: plans.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final plan = plans[index];
+                      return _PlanReminderRow(plan: plan);
+                    },
+                  ),
+                ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: onOpenPlans,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.deepPink,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  child: const Text(
+                    '去计划页调整',
+                    style: TextStyle(fontWeight: FontWeight.w900),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PlanReminderRow extends StatelessWidget {
+  const _PlanReminderRow({required this.plan});
+
+  final Plan plan;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          _SettingsIcon(icon: plan.icon, color: plan.iconColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  plan.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.body.copyWith(
+                    color: AppColors.text,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  plan.repeatLabel,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.secondaryText,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _MutedTag(plan.reminderTime?.format(context) ?? '--:--'),
+        ],
+      ),
+    );
+  }
+}
+
 class _StatusBadge extends StatelessWidget {
   const _StatusBadge({required this.label, required this.color});
 
@@ -1299,14 +2182,10 @@ class _CuteAvatar extends StatelessWidget {
     return Semantics(
       button: true,
       label: semanticLabel,
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: isUploading ? null : onTap,
-          child: avatar,
-        ),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: isUploading ? null : onTap,
+        child: avatar,
       ),
     );
   }
@@ -1337,6 +2216,7 @@ class _AvatarImage extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.cover,
+      gaplessPlayback: true,
       errorBuilder: (context, error, stackTrace) => StickerAsset(
         assetPath: AppAssets.bearAvatar,
         placeholderIcon: Icons.face_6_rounded,
@@ -1345,6 +2225,383 @@ class _AvatarImage extends StatelessWidget {
         borderRadius: 999,
         backgroundColor: AppColors.lightPink,
       ),
+    );
+  }
+}
+
+Future<T?> showAppCuteDialog<T>(
+  BuildContext context, {
+  required WidgetBuilder builder,
+}) {
+  return showGeneralDialog<T>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withValues(alpha: 0.40),
+    transitionDuration: const Duration(milliseconds: 180),
+    pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+    transitionBuilder: (context, animation, secondaryAnimation, child) {
+      final curved = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+      );
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.96, end: 1).animate(curved),
+          child: child,
+        ),
+      );
+    },
+  );
+}
+
+class AppCuteDialog extends StatelessWidget {
+  const AppCuteDialog({
+    super.key,
+    required this.title,
+    required this.description,
+    this.icon,
+    required this.primaryText,
+    this.secondaryText,
+    this.cancelText,
+    this.onPrimary,
+    this.onSecondary,
+    this.onCancel,
+    this.isDanger = false,
+    this.children = const [],
+  });
+
+  final String title;
+  final String description;
+  final Widget? icon;
+  final String primaryText;
+  final String? secondaryText;
+  final String? cancelText;
+  final VoidCallback? onPrimary;
+  final VoidCallback? onSecondary;
+  final VoidCallback? onCancel;
+  final bool isDanger;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = isDanger ? AppColors.deepPink : AppColors.deepPink;
+
+    return Dialog(
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 30, vertical: 24),
+      backgroundColor: Colors.transparent,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 430),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF6F9),
+            borderRadius: BorderRadius.circular(30),
+            border: Border.all(color: AppColors.line.withValues(alpha: 0.62)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.18),
+                blurRadius: 34,
+                offset: const Offset(0, 18),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.07),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (icon != null) ...[icon!, const SizedBox(width: 14)],
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: AppTextStyles.section.copyWith(
+                                  color: AppColors.text,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.12,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                description,
+                                style: AppTextStyles.body.copyWith(
+                                  color: AppColors.secondaryText,
+                                  fontSize: 14,
+                                  height: 1.45,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (onCancel != null) ...[
+                        const SizedBox(width: 10),
+                        DialogCloseButton(onPressed: onCancel),
+                      ],
+                    ],
+                  ),
+                  if (children.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    ...children,
+                  ],
+                  const SizedBox(height: 20),
+                  if (secondaryText != null) ...[
+                    DialogSecondaryButton(
+                      text: secondaryText!,
+                      onPressed: onSecondary,
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  DialogPrimaryButton(
+                    text: primaryText,
+                    color: primaryColor,
+                    onPressed: onPrimary,
+                  ),
+                  if (cancelText != null && onCancel != null) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: onCancel,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.secondaryText,
+                        minimumSize: const Size.fromHeight(38),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        cancelText!,
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.secondaryText,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DialogIconBadge extends StatelessWidget {
+  const DialogIconBadge({
+    super.key,
+    required this.icon,
+    this.color = AppColors.deepPink,
+  });
+
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 58,
+      height: 58,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: 0.11),
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.14),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Icon(icon, color: color, size: 28),
+    );
+  }
+}
+
+class DialogInfoCard extends StatelessWidget {
+  const DialogInfoCard({
+    super.key,
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.54)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.lightPink.withValues(alpha: 0.62),
+              ),
+              child: Icon(icon, color: AppColors.deepPink, size: 18),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    body,
+                    style: AppTextStyles.caption.copyWith(
+                      color: AppColors.secondaryText,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class DialogPrimaryButton extends StatelessWidget {
+  const DialogPrimaryButton({
+    super.key,
+    required this.text,
+    required this.color,
+    this.onPressed,
+  });
+
+  final String text;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 54,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(999),
+          gradient: LinearGradient(
+            colors: [
+              color,
+              Color.lerp(color, AppColors.primary, 0.35) ?? color,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: onPressed == null ? 0 : 0.22),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: FilledButton(
+          onPressed: onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.transparent,
+            disabledBackgroundColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            foregroundColor: Colors.white,
+            disabledForegroundColor: Colors.white.withValues(alpha: 0.58),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(999),
+            ),
+            textStyle: AppTextStyles.body.copyWith(
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+            ),
+          ),
+          child: Text(text),
+        ),
+      ),
+    );
+  }
+}
+
+class DialogSecondaryButton extends StatelessWidget {
+  const DialogSecondaryButton({super.key, required this.text, this.onPressed});
+
+  final String text;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 50,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.deepPink,
+          disabledForegroundColor: AppColors.deepPink.withValues(alpha: 0.42),
+          backgroundColor: AppColors.lightPink.withValues(alpha: 0.42),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(999),
+          ),
+          textStyle: AppTextStyles.body.copyWith(fontWeight: FontWeight.w900),
+        ),
+        child: Text(text),
+      ),
+    );
+  }
+}
+
+class DialogCloseButton extends StatelessWidget {
+  const DialogCloseButton({super.key, required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: onPressed,
+      style: IconButton.styleFrom(
+        backgroundColor: Colors.white.withValues(alpha: 0.64),
+        foregroundColor: AppColors.secondaryText,
+        fixedSize: const Size(36, 36),
+        shape: const CircleBorder(),
+      ),
+      icon: const Icon(Icons.close_rounded, size: 20),
+      tooltip: '关闭',
     );
   }
 }
@@ -1570,6 +2827,7 @@ Future<String?> _showTextInputDialog(
   required String? Function(String value) validator,
   bool obscureText = false,
   TextInputType? keyboardType,
+  String? initialValue,
 }) async {
   return showDialog<String>(
     context: context,
@@ -1580,6 +2838,7 @@ Future<String?> _showTextInputDialog(
       validator: validator,
       obscureText: obscureText,
       keyboardType: keyboardType,
+      initialValue: initialValue,
     ),
   );
 }
@@ -1592,6 +2851,7 @@ class _SingleTextInputDialog extends StatefulWidget {
     required this.validator,
     required this.obscureText,
     this.keyboardType,
+    this.initialValue,
   });
 
   final String title;
@@ -1600,14 +2860,21 @@ class _SingleTextInputDialog extends StatefulWidget {
   final String? Function(String value) validator;
   final bool obscureText;
   final TextInputType? keyboardType;
+  final String? initialValue;
 
   @override
   State<_SingleTextInputDialog> createState() => _SingleTextInputDialogState();
 }
 
 class _SingleTextInputDialogState extends State<_SingleTextInputDialog> {
-  final _controller = TextEditingController();
+  late final TextEditingController _controller;
   String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
 
   @override
   void dispose() {
@@ -1761,6 +3028,26 @@ void _showAboutUsDialog(BuildContext context) {
       SizedBox(height: AppSpacing.md),
       SelectableText('联系开发者：song3286791241@gmail.com'),
     ],
+  );
+}
+
+void _showInfoDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: Text(title),
+      content: Text(message),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('知道了'),
+        ),
+      ],
+    ),
   );
 }
 

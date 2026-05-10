@@ -9,6 +9,7 @@ import '../models/focus_session.dart';
 import '../models/plan.dart';
 import '../models/profile.dart';
 import '../models/reminder.dart';
+import '../models/reminder_settings.dart';
 import '../store/store.dart';
 import 'checkin_repository.dart';
 import 'focus_session_repository.dart';
@@ -32,6 +33,7 @@ class SupabaseStore extends Store {
   List<Plan> _plans = [];
   List<Reminder> _reminders = [];
   List<FocusSession> _focusSessions = [];
+  ReminderSettings _reminderSettings = const ReminderSettings();
   final Set<String> _notifiedFocusInviteIds = {};
   final Set<String> _notifiedReminderIds = {};
   bool _reminderNotificationsPrimed = false;
@@ -48,6 +50,8 @@ class SupabaseStore extends Store {
   // ========================= 初始化 =========================
 
   Future<void> _init() async {
+    await _loadReminderSettings();
+    unawaited(_applyReminderSettings());
     await Future.wait([_loadProfile(), _loadFocusSessions(), _loadReminders()]);
     await _loadPlans();
     _subscribeRealtime();
@@ -59,6 +63,12 @@ class SupabaseStore extends Store {
   Future<void> _loadProfile() async {
     try {
       _profile = await _profileRepo.getCurrentProfile();
+    } catch (_) {}
+  }
+
+  Future<void> _loadReminderSettings() async {
+    try {
+      _reminderSettings = await _profileRepo.getCurrentReminderSettings();
     } catch (_) {}
   }
 
@@ -129,6 +139,15 @@ class SupabaseStore extends Store {
   }
 
   void _showNewFocusInviteNotifications(List<FocusSession> sessions) {
+    if (!_reminderSettings.partnerActivityReminderEnabled) {
+      _notifiedFocusInviteIds.addAll(
+        sessions
+            .where((session) => session.canJoin)
+            .map((session) => session.id),
+      );
+      return;
+    }
+
     for (final session in sessions.where((session) => session.canJoin)) {
       if (!_notifiedFocusInviteIds.add(session.id)) continue;
 
@@ -150,6 +169,14 @@ class SupabaseStore extends Store {
           !reminder.isRead &&
           !_isLegacyFocusInviteReminder(reminder),
     );
+
+    if (!_reminderSettings.partnerActivityReminderEnabled) {
+      _notifiedReminderIds.addAll(
+        incomingUnread.map((reminder) => reminder.id),
+      );
+      _reminderNotificationsPrimed = true;
+      return;
+    }
 
     if (!_reminderNotificationsPrimed) {
       _notifiedReminderIds.addAll(
@@ -256,11 +283,13 @@ class SupabaseStore extends Store {
     try {
       await Future.wait([
         _loadProfile(),
+        _loadReminderSettings(),
         _loadFocusSessions(),
         _loadReminders(),
       ]);
       await _loadPlans();
       await _syncPlanReminders();
+      await _applyReminderSettings();
       notifyListeners();
     } finally {
       _autoRefreshInFlight = false;
@@ -445,15 +474,36 @@ class SupabaseStore extends Store {
     required CheckinMood mood,
     required String note,
   }) async {
-    await _checkinRepo.upsertTodayCheckin(
-      planId: planId,
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+
+    final previousPlan = _plans[index];
+    if (!previousPlan.canCurrentUserCheckin) return;
+
+    _plans[index] = _planWithTodayCheckin(
+      previousPlan,
       completed: completed,
       mood: mood,
       note: note,
     );
-    await _finishOncePlanIfComplete(planId);
-    await _loadPlans();
     notifyListeners();
+
+    try {
+      await _checkinRepo.upsertTodayCheckin(
+        planId: planId,
+        completed: completed,
+        mood: mood,
+        note: note.trim(),
+      );
+      await _finishOncePlanIfCompleteFromLocal(planId);
+    } catch (_) {
+      final rollbackIndex = _plans.indexWhere((plan) => plan.id == planId);
+      if (rollbackIndex != -1) {
+        _plans[rollbackIndex] = previousPlan;
+        notifyListeners();
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -461,15 +511,36 @@ class SupabaseStore extends Store {
     String planId, {
     required bool doneToday,
   }) async {
-    await _checkinRepo.upsertTodayCheckin(
-      planId: planId,
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+
+    final previousPlan = _plans[index];
+    if (!previousPlan.canCurrentUserCheckin) return;
+
+    _plans[index] = _planWithTodayCheckin(
+      previousPlan,
       completed: doneToday,
       mood: CheckinMood.happy,
       note: '',
     );
-    await _finishOncePlanIfComplete(planId);
-    await _loadPlans();
     notifyListeners();
+
+    try {
+      await _checkinRepo.upsertTodayCheckin(
+        planId: planId,
+        completed: doneToday,
+        mood: CheckinMood.happy,
+        note: '',
+      );
+      await _finishOncePlanIfCompleteFromLocal(planId);
+    } catch (_) {
+      final rollbackIndex = _plans.indexWhere((plan) => plan.id == planId);
+      if (rollbackIndex != -1) {
+        _plans[rollbackIndex] = previousPlan;
+        notifyListeners();
+      }
+      rethrow;
+    }
   }
 
   // ========================= Focus =========================
@@ -647,6 +718,23 @@ class SupabaseStore extends Store {
     }
   }
 
+  // ========================= Reminder Settings =========================
+
+  @override
+  ReminderSettings getReminderSettings() => _reminderSettings;
+
+  @override
+  Future<void> updateReminderSettings(ReminderSettings settings) async {
+    _reminderSettings = settings;
+    await _applyReminderSettings();
+    notifyListeners();
+    try {
+      await _profileRepo.updateCurrentReminderSettings(settings);
+    } catch (error) {
+      debugPrint('Reminder settings save skipped: $error');
+    }
+  }
+
   // ========================= 辅助 =========================
 
   static int planPriority(Plan plan) {
@@ -729,13 +817,66 @@ class SupabaseStore extends Store {
         plan.isScheduledOnDate(DateTime.now());
   }
 
-  Future<void> _finishOncePlanIfComplete(String planId) async {
-    final plan = await _planRepo.fetchPlanById(planId);
-    if (plan == null || !plan.isOnce || !plan.isDoneForCurrentUser) return;
+  Plan _planWithTodayCheckin(
+    Plan plan, {
+    required bool completed,
+    required CheckinMood mood,
+    required String note,
+  }) {
+    final today = DateTime.now();
+    final todayOnly = DateTime(today.year, today.month, today.day);
+    final checkins = [
+      CheckinRecord(
+        date: todayOnly,
+        completed: completed,
+        mood: mood,
+        note: note.trim(),
+        actor: CheckinActor.me,
+      ),
+      ...plan.checkins.where(
+        (record) =>
+            record.actor != CheckinActor.me ||
+            !_isSameDate(record.date, todayOnly),
+      ),
+    ];
+
+    final wasDoneToday = plan.doneToday;
+    final completedDays = completed && !wasDoneToday
+        ? plan.completedDays + 1
+        : !completed && wasDoneToday
+        ? (plan.completedDays - 1).clamp(0, plan.totalDays).toInt()
+        : plan.completedDays;
+
+    return plan.copyWith(
+      doneToday: completed,
+      completedDays: completedDays,
+      checkins: checkins,
+    );
+  }
+
+  Future<void> _finishOncePlanIfCompleteFromLocal(String planId) async {
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+
+    final plan = _plans[index];
+    if (!plan.isOnce || !plan.isDoneForCurrentUser) return;
     if (plan.owner == PlanOwner.together && !plan.isTogetherDoneToday) return;
 
-    await _planRepo.endPlan(planId);
-    await NotificationService.cancelPlanReminder(planId);
+    try {
+      await _planRepo.endPlan(planId);
+      _plans[index] = plan.copyWith(
+        status: PlanStatus.ended,
+        endedAt: DateTime.now(),
+      );
+      notifyListeners();
+      await NotificationService.cancelPlanReminder(planId);
+    } catch (error) {
+      debugPrint('Finish once plan after checkin failed: $error');
+    }
+  }
+
+  bool _isSameDate(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
   }
 
   Future<void> _syncPlanReminders() async {
@@ -761,6 +902,23 @@ class SupabaseStore extends Store {
         );
       }),
     );
+  }
+
+  Future<void> _applyReminderSettings() async {
+    NotificationService.configureDoNotDisturb(
+      enabled: _reminderSettings.doNotDisturbEnabled,
+      startMinutes: _reminderSettings.doNotDisturbStartMinutes,
+      endMinutes: _reminderSettings.doNotDisturbEndMinutes,
+    );
+
+    if (_reminderSettings.dailyReminderEnabled) {
+      await NotificationService.scheduleDailyAppReminder(
+        hour: _reminderSettings.dailyReminderTime.hour,
+        minute: _reminderSettings.dailyReminderTime.minute,
+      );
+    } else {
+      await NotificationService.cancelDailyAppReminder();
+    }
   }
 
   @override

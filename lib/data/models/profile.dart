@@ -7,6 +7,7 @@ class Profile {
     required this.isBound,
     this.avatarUrl,
     this.partnerAvatarUrl,
+    this.anniversaryDate,
   });
 
   final String name;
@@ -16,4 +17,5 @@ class Profile {
   final bool isBound;
   final String? avatarUrl;
   final String? partnerAvatarUrl;
+  final DateTime? anniversaryDate;
 }
