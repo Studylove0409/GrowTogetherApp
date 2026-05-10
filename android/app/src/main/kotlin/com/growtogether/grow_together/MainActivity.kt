@@ -37,6 +37,26 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                "setOneTimeAlarm" -> {
+                    val title = call.argument<String>("title") ?: "一起进步呀计划提醒"
+                    val hour = call.argument<Int>("hour")
+                    val minute = call.argument<Int>("minute")
+
+                    if (hour == null || minute == null) {
+                        result.error("invalid_arguments", "hour and minute are required", null)
+                        return@setMethodCallHandler
+                    }
+
+                    try {
+                        setOneTimeAlarm(title, hour, minute)
+                        result.success(null)
+                    } catch (error: ActivityNotFoundException) {
+                        result.error("alarm_app_not_found", "No alarm app can handle SET_ALARM", null)
+                    } catch (error: Exception) {
+                        result.error("alarm_setup_failed", error.message, null)
+                    }
+                }
+
                 else -> result.notImplemented()
             }
         }
@@ -57,6 +77,17 @@ class MainActivity : FlutterActivity() {
             putExtra(AlarmClock.EXTRA_HOUR, hour)
             putExtra(AlarmClock.EXTRA_MINUTES, minute)
             putExtra(AlarmClock.EXTRA_DAYS, days)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+        }
+
+        startActivity(intent)
+    }
+
+    private fun setOneTimeAlarm(title: String, hour: Int, minute: Int) {
+        val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_MESSAGE, title)
+            putExtra(AlarmClock.EXTRA_HOUR, hour)
+            putExtra(AlarmClock.EXTRA_MINUTES, minute)
             putExtra(AlarmClock.EXTRA_SKIP_UI, true)
         }
 

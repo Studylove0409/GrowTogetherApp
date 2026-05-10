@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -8,7 +9,11 @@ class NotificationService {
   NotificationService._();
 
   static final _plugin = FlutterLocalNotificationsPlugin();
+  static const _systemReminderChannel = MethodChannel(
+    'grow_together/system_reminders',
+  );
   static Future<void>? _initFuture;
+  static bool _localNotificationsReady = false;
 
   static Future<void> init() async {
     _initFuture ??= _init();
@@ -30,7 +35,9 @@ class NotificationService {
     try {
       await _plugin.initialize(settings);
       await _configureAndroid();
+      _localNotificationsReady = true;
     } catch (error, stackTrace) {
+      _localNotificationsReady = false;
       debugPrint('Local notification setup skipped: $error');
       debugPrintStack(stackTrace: stackTrace);
     }
@@ -41,46 +48,64 @@ class NotificationService {
     required String planTitle,
     required int hour,
     required int minute,
+    DateTime? scheduledDate,
+    bool repeatsDaily = true,
     bool syncSystemAlarm = false,
   }) async {
-    try {
-      await init();
-      await _plugin.cancel(planId.hashCode);
-
-      const androidDetails = AndroidNotificationDetails(
-        'plan_reminders',
-        '计划提醒',
-        channelDescription: '每日计划打卡提醒',
-        importance: Importance.high,
-        priority: Priority.high,
-        visibility: NotificationVisibility.public,
-      );
-      const details = NotificationDetails(android: androidDetails);
-
-      await _plugin.zonedSchedule(
-        planId.hashCode,
-        '⏰ 该打卡啦',
-        '「$planTitle」今天还没有完成哦～',
-        _nextTime(hour, minute),
-        details,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        matchDateTimeComponents: DateTimeComponents.time,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-      );
-    } catch (_) {
-      // 测试环境或平台通道不可用时静默跳过
+    final scheduledAt = _scheduledTime(hour, minute, scheduledDate);
+    if (scheduledAt == null) {
+      await cancelPlanReminder(planId);
+      return;
     }
 
-    // Do not create Android Clock alarms here. They cannot be reliably
-    // cancelled by plan id, so date-bounded plans would keep ringing after
-    // their end date. Cancellable local notifications are used instead.
+    try {
+      await init();
+      if (_localNotificationsReady) {
+        await _cancelNotificationIds(planId);
+
+        const androidDetails = AndroidNotificationDetails(
+          'plan_reminders',
+          '计划提醒',
+          channelDescription: '每日计划打卡提醒',
+          importance: Importance.high,
+          priority: Priority.high,
+          visibility: NotificationVisibility.public,
+        );
+        const details = NotificationDetails(android: androidDetails);
+
+        await _plugin.zonedSchedule(
+          _notificationId(planId),
+          '⏰ 该打卡啦',
+          '「$planTitle」今天还没有完成哦～',
+          scheduledAt,
+          details,
+          androidScheduleMode: await _androidScheduleMode(),
+          matchDateTimeComponents: repeatsDaily
+              ? DateTimeComponents.time
+              : null,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+        );
+      }
+    } catch (error, stackTrace) {
+      debugPrint('Plan reminder schedule failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+
+    if (syncSystemAlarm && _shouldCreateSystemAlarm(scheduledAt)) {
+      await _setSystemAlarm(
+        title: '一起进步呀：$planTitle',
+        hour: hour,
+        minute: minute,
+      );
+    }
   }
 
   static Future<void> cancelPlanReminder(String planId) async {
     try {
       await init();
-      await _plugin.cancel(planId.hashCode);
+      if (!_localNotificationsReady) return;
+      await _cancelNotificationIds(planId);
     } catch (_) {}
   }
 
@@ -91,6 +116,7 @@ class NotificationService {
   }) async {
     try {
       await init();
+      if (!_localNotificationsReady) return;
       const androidDetails = AndroidNotificationDetails(
         'partner_reminders',
         '伴侣提醒',
@@ -105,20 +131,36 @@ class NotificationService {
     } catch (_) {}
   }
 
-  static tz.TZDateTime _nextTime(int hour, int minute) {
+  static tz.TZDateTime? _scheduledTime(
+    int hour,
+    int minute,
+    DateTime? scheduledDate,
+  ) {
     final now = tz.TZDateTime.now(tz.local);
-    var scheduled = tz.TZDateTime(
+    if (scheduledDate == null) {
+      var scheduled = tz.TZDateTime(
+        tz.local,
+        now.year,
+        now.month,
+        now.day,
+        hour,
+        minute,
+      );
+      if (!scheduled.isAfter(now)) {
+        scheduled = scheduled.add(const Duration(days: 1));
+      }
+      return scheduled;
+    }
+
+    final scheduled = tz.TZDateTime(
       tz.local,
-      now.year,
-      now.month,
-      now.day,
+      scheduledDate.year,
+      scheduledDate.month,
+      scheduledDate.day,
       hour,
       minute,
     );
-    if (scheduled.isBefore(now)) {
-      scheduled = scheduled.add(const Duration(days: 1));
-    }
-    return scheduled;
+    return scheduled.isAfter(now) ? scheduled : null;
   }
 
   static Future<void> _setLocalTimeZone() async {
@@ -155,5 +197,54 @@ class NotificationService {
         importance: Importance.high,
       ),
     );
+  }
+
+  static Future<AndroidScheduleMode> _androidScheduleMode() async {
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (androidPlugin == null) return AndroidScheduleMode.exactAllowWhileIdle;
+
+    final canScheduleExact =
+        await androidPlugin.canScheduleExactNotifications() ?? false;
+    return canScheduleExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+  }
+
+  static Future<void> _cancelNotificationIds(String planId) async {
+    final legacyId = planId.hashCode;
+    final currentId = _notificationId(planId);
+    await _plugin.cancel(legacyId);
+    if (currentId != legacyId) {
+      await _plugin.cancel(currentId);
+    }
+  }
+
+  static int _notificationId(String planId) => planId.hashCode & 0x7fffffff;
+
+  static bool _shouldCreateSystemAlarm(tz.TZDateTime scheduledAt) {
+    final now = tz.TZDateTime.now(tz.local);
+    return scheduledAt.year == now.year &&
+        scheduledAt.month == now.month &&
+        scheduledAt.day == now.day &&
+        scheduledAt.isAfter(now);
+  }
+
+  static Future<void> _setSystemAlarm({
+    required String title,
+    required int hour,
+    required int minute,
+  }) async {
+    try {
+      await _systemReminderChannel.invokeMethod<void>('setOneTimeAlarm', {
+        'title': title,
+        'hour': hour,
+        'minute': minute,
+      });
+    } catch (error) {
+      debugPrint('System alarm setup skipped: $error');
+    }
   }
 }

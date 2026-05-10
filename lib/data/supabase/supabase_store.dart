@@ -710,6 +710,8 @@ class SupabaseStore extends Store {
       planTitle: plan.title,
       hour: reminderTime.hour,
       minute: reminderTime.minute,
+      scheduledDate: plan.isOnce ? plan.startDate : null,
+      repeatsDaily: plan.isDaily,
       syncSystemAlarm: syncSystemAlarm,
     );
   }
@@ -752,6 +754,8 @@ class SupabaseStore extends Store {
           planTitle: plan.title,
           hour: reminderTime.hour,
           minute: reminderTime.minute,
+          scheduledDate: plan.isOnce ? plan.startDate : null,
+          repeatsDaily: plan.isDaily,
         );
       }),
     );
