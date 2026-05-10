@@ -5,6 +5,61 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
+class SystemCalendarSyncResult {
+  const SystemCalendarSyncResult._({
+    required this.success,
+    required this.userMessage,
+  });
+
+  final bool success;
+  final String userMessage;
+
+  static const successResult = SystemCalendarSyncResult._(
+    success: true,
+    userMessage: '计划已保存，已同步到系统日历',
+  );
+
+  static const missingNativeSupport = SystemCalendarSyncResult._(
+    success: false,
+    userMessage: '计划已保存，但当前安装包不包含系统日历同步能力，请重新安装完整 APK',
+  );
+
+  static const permissionDenied = SystemCalendarSyncResult._(
+    success: false,
+    userMessage: '计划已保存，但没有日历权限，请在系统设置里允许日历权限后重试',
+  );
+
+  static const noWritableCalendar = SystemCalendarSyncResult._(
+    success: false,
+    userMessage: '计划已保存，但手机没有可写系统日历，请先打开系统日历并登录或新建日历',
+  );
+
+  static const reminderNotCreated = SystemCalendarSyncResult._(
+    success: false,
+    userMessage: '计划已保存到系统日历，但系统没有开启事件提醒，请检查该日历是否允许通知提醒',
+  );
+
+  static const requestInProgress = SystemCalendarSyncResult._(
+    success: false,
+    userMessage: '计划已保存，但日历授权请求还在处理中，请稍后重试同步',
+  );
+
+  static const invalidDate = SystemCalendarSyncResult._(
+    success: false,
+    userMessage: '计划已保存，但计划日期无效，未写入系统日历',
+  );
+
+  static SystemCalendarSyncResult failed([String? detail]) {
+    final normalized = detail?.trim();
+    return SystemCalendarSyncResult._(
+      success: false,
+      userMessage: normalized == null || normalized.isEmpty
+          ? '计划已保存，但系统日历同步失败，请稍后重试'
+          : '计划已保存，但系统日历同步失败：$normalized',
+    );
+  }
+}
+
 class NotificationService {
   NotificationService._();
 
@@ -80,7 +135,10 @@ class NotificationService {
     required int minute,
     DateTime? scheduledDate,
     bool repeatsDaily = true,
-    bool syncSystemAlarm = false,
+    bool syncSystemCalendar = false,
+    DateTime? calendarStartDate,
+    DateTime? calendarEndDate,
+    bool calendarHasDateRange = false,
   }) async {
     tz.TZDateTime? scheduledAt;
 
@@ -124,15 +182,37 @@ class NotificationService {
       debugPrintStack(stackTrace: stackTrace);
     }
 
-    if (syncSystemAlarm &&
-        scheduledAt != null &&
-        _shouldCreateSystemAlarm(scheduledAt)) {
-      await _setSystemAlarm(
-        title: '一起进步呀：$planTitle',
+    if (syncSystemCalendar) {
+      await _syncSystemCalendarReminder(
+        planTitle: planTitle,
         hour: hour,
         minute: minute,
+        startDate: calendarStartDate ?? scheduledDate,
+        endDate: calendarEndDate ?? calendarStartDate ?? scheduledDate,
+        repeatsDaily: repeatsDaily,
+        hasDateRange: calendarHasDateRange,
       );
     }
+  }
+
+  static Future<SystemCalendarSyncResult> syncPlanReminderToSystemCalendar({
+    required String planTitle,
+    required int hour,
+    required int minute,
+    required DateTime startDate,
+    required DateTime endDate,
+    required bool repeatsDaily,
+    required bool hasDateRange,
+  }) {
+    return _syncSystemCalendarReminder(
+      planTitle: planTitle,
+      hour: hour,
+      minute: minute,
+      startDate: startDate,
+      endDate: endDate,
+      repeatsDaily: repeatsDaily,
+      hasDateRange: hasDateRange,
+    );
   }
 
   static Future<void> scheduleDailyAppReminder({
@@ -342,27 +422,71 @@ class NotificationService {
 
   static int _notificationId(String planId) => planId.hashCode & 0x7fffffff;
 
-  static bool _shouldCreateSystemAlarm(tz.TZDateTime scheduledAt) {
-    final now = tz.TZDateTime.now(tz.local);
-    return scheduledAt.year == now.year &&
-        scheduledAt.month == now.month &&
-        scheduledAt.day == now.day &&
-        scheduledAt.isAfter(now);
-  }
-
-  static Future<void> _setSystemAlarm({
-    required String title,
+  static Future<SystemCalendarSyncResult> _syncSystemCalendarReminder({
+    required String planTitle,
     required int hour,
     required int minute,
+    required DateTime? startDate,
+    required DateTime? endDate,
+    required bool repeatsDaily,
+    required bool hasDateRange,
   }) async {
+    if (startDate == null) return SystemCalendarSyncResult.invalidDate;
+
+    final title = '一起进步呀：$planTitle';
+    final startsAt = tz.TZDateTime(
+      tz.local,
+      startDate.year,
+      startDate.month,
+      startDate.day,
+      hour,
+      minute,
+    );
+    final endsAt = startsAt.add(const Duration(minutes: 15));
+    final repeatUntil = repeatsDaily && hasDateRange && endDate != null
+        ? tz.TZDateTime(
+            tz.local,
+            endDate.year,
+            endDate.month,
+            endDate.day,
+            23,
+            59,
+            59,
+          )
+        : null;
+
     try {
-      await _systemReminderChannel.invokeMethod<void>('setOneTimeAlarm', {
-        'title': title,
-        'hour': hour,
-        'minute': minute,
-      });
+      await _systemReminderChannel
+          .invokeMethod<Object?>('createCalendarReminder', {
+            'title': title,
+            'startMillis': startsAt.millisecondsSinceEpoch,
+            'endMillis': endsAt.millisecondsSinceEpoch,
+            'repeatsDaily': repeatsDaily,
+            'repeatUntilMillis': repeatUntil?.millisecondsSinceEpoch,
+          });
+      return SystemCalendarSyncResult.successResult;
+    } on MissingPluginException catch (error) {
+      debugPrint('System calendar reminder native method missing: $error');
+      return SystemCalendarSyncResult.missingNativeSupport;
+    } on PlatformException catch (error) {
+      debugPrint('System calendar reminder setup skipped: $error');
+      switch (error.code) {
+        case 'calendar_permission_denied':
+          return SystemCalendarSyncResult.permissionDenied;
+        case 'calendar_no_writable_calendar':
+          return SystemCalendarSyncResult.noWritableCalendar;
+        case 'calendar_reminder_not_created':
+          return SystemCalendarSyncResult.reminderNotCreated;
+        case 'calendar_request_in_progress':
+          return SystemCalendarSyncResult.requestInProgress;
+        case 'invalid_arguments':
+          return SystemCalendarSyncResult.invalidDate;
+        default:
+          return SystemCalendarSyncResult.failed(error.message);
+      }
     } catch (error) {
-      debugPrint('System alarm setup skipped: $error');
+      debugPrint('System calendar reminder setup skipped: $error');
+      return SystemCalendarSyncResult.failed(error.toString());
     }
   }
 }

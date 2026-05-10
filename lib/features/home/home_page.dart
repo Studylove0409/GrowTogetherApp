@@ -14,6 +14,7 @@ import '../../features/plans/plan_detail_page.dart';
 import '../../features/plans/together_plans_page.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/avatar_preview.dart';
 import '../../shared/widgets/empty_state_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
 import '../../shared/widgets/section_header.dart';
@@ -64,6 +65,7 @@ class HomePage extends StatelessWidget {
                 MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
               ),
               onPlanTap: (plan) => _openPlan(context, plan),
+              onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
               onEmptyAction: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(builder: (_) => const CreatePlanPage()),
               ),
@@ -92,6 +94,7 @@ class HomePage extends StatelessWidget {
                 ),
               ),
               onPlanTap: (plan) => _openPlan(context, plan),
+              onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
               onEmptyAction: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
                   builder: (_) =>
@@ -120,9 +123,18 @@ bool _needsTodayAction(Plan plan) {
   };
 }
 
+Future<void> _saveQuickCheckin(BuildContext context, Plan plan) {
+  return context.read<Store>().saveCheckin(
+    planId: plan.id,
+    completed: true,
+    mood: CheckinMood.happy,
+    note: '',
+  );
+}
+
 // ========================= 首页计划区块 =========================
 
-class _HomePlanSection extends StatelessWidget {
+class _HomePlanSection extends StatefulWidget {
   const _HomePlanSection({
     required this.title,
     required this.plans,
@@ -132,6 +144,7 @@ class _HomePlanSection extends StatelessWidget {
     required this.onViewAll,
     required this.onPlanTap,
     this.onEmptyAction,
+    this.onQuickCheckin,
   });
 
   final String title;
@@ -142,48 +155,110 @@ class _HomePlanSection extends StatelessWidget {
   final VoidCallback onViewAll;
   final ValueChanged<Plan> onPlanTap;
   final VoidCallback? onEmptyAction;
+  final Future<void> Function(Plan plan)? onQuickCheckin;
+
+  @override
+  State<_HomePlanSection> createState() => _HomePlanSectionState();
+}
+
+class _HomePlanSectionState extends State<_HomePlanSection> {
+  final Set<String> _optimisticDonePlanIds = <String>{};
+
+  @override
+  void didUpdateWidget(covariant _HomePlanSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final visiblePlanIds = widget.plans.map((plan) => plan.id).toSet();
+    _optimisticDonePlanIds.removeWhere((id) => !visiblePlanIds.contains(id));
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (plans.isEmpty) {
+    if (widget.plans.isEmpty) {
       return Column(
         children: [
-          SectionHeader(title: title),
+          SectionHeader(title: widget.title),
           const SizedBox(height: AppSpacing.sm),
           EmptyStateCard(
-            message: emptyMessage,
-            actionLabel: emptyActionLabel,
-            onAction: onEmptyAction,
+            message: widget.emptyMessage,
+            actionLabel: widget.emptyActionLabel,
+            onAction: widget.onEmptyAction,
           ),
         ],
       );
     }
 
-    final visible = prioritizeActionablePlans
-        ? _prioritizedVisiblePlans(plans)
-        : plans.take(2).toList();
+    final visible = widget.prioritizeActionablePlans
+        ? _prioritizedVisiblePlans(widget.plans)
+        : widget.plans.take(2).toList();
 
     return Column(
       children: [
         SectionHeader(
-          title: title,
-          actionLabel: '全部 ${plans.length}',
-          onAction: onViewAll,
+          title: widget.title,
+          actionLabel: '全部 ${widget.plans.length}',
+          onAction: widget.onViewAll,
         ),
         const SizedBox(height: AppSpacing.md),
         for (final plan in visible) ...[
           PlanListTile(
             plan: plan,
-            statusLabel: _statusLabel(plan),
-            statusColor: _statusColor(plan),
-            statusIcon: _statusIcon(plan),
+            statusLabel: _statusLabel(
+              plan,
+              optimisticDone: _optimisticDonePlanIds.contains(plan.id),
+            ),
+            statusColor: _statusColor(
+              plan,
+              optimisticDone: _optimisticDonePlanIds.contains(plan.id),
+            ),
+            statusIcon: _statusIcon(
+              plan,
+              optimisticDone: _optimisticDonePlanIds.contains(plan.id),
+            ),
             showReminderTime: false,
-            onTap: () => onPlanTap(plan),
+            onTap: () => widget.onPlanTap(plan),
+            onStatusTap: _canQuickCheckin(plan)
+                ? () => _quickCheckin(plan)
+                : null,
+            statusTooltip: '完成打卡：${plan.title}',
+            statusSemanticsLabel: '完成${plan.title}打卡',
           ),
           const SizedBox(height: AppSpacing.sm),
         ],
       ],
     );
+  }
+
+  bool _canQuickCheckin(Plan plan) {
+    return widget.onQuickCheckin != null &&
+        !_optimisticDonePlanIds.contains(plan.id) &&
+        plan.canCurrentUserCheckin &&
+        !plan.hasCurrentUserCheckinToday;
+  }
+
+  Future<void> _quickCheckin(Plan plan) async {
+    final quickCheckin = widget.onQuickCheckin;
+    if (quickCheckin == null) return;
+
+    setState(() => _optimisticDonePlanIds.add(plan.id));
+    try {
+      await quickCheckin(plan);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已完成「${plan.title}」打卡'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _optimisticDonePlanIds.remove(plan.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('打卡失败，请稍后再试'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
 
@@ -325,6 +400,19 @@ class _GrowthHeroCard extends StatelessWidget {
                                   partnerAvatarUrl: profile.partnerAvatarUrl,
                                   isCoupleBound: profile.isBound,
                                   size: compact ? 62 : 68,
+                                  onCurrentAvatarTap: () => showAvatarPreview(
+                                    context,
+                                    title: '我的头像',
+                                    imageUrl: profile.avatarUrl,
+                                  ),
+                                  onPartnerAvatarTap: profile.isBound
+                                      ? () => showAvatarPreview(
+                                          context,
+                                          title:
+                                              '${profile.partnerName.trim().isEmpty ? 'TA' : profile.partnerName.trim()}的头像',
+                                          imageUrl: profile.partnerAvatarUrl,
+                                        )
+                                      : null,
                                 ),
                                 SizedBox(width: compact ? 10 : 12),
                                 Expanded(
@@ -505,36 +593,30 @@ class CoupleAvatarStack extends StatelessWidget {
     required this.partnerAvatarUrl,
     required this.isCoupleBound,
     this.size = 52,
+    this.onCurrentAvatarTap,
+    this.onPartnerAvatarTap,
   });
 
   final String? currentUserAvatarUrl;
   final String? partnerAvatarUrl;
   final bool isCoupleBound;
   final double size;
+  final VoidCallback? onCurrentAvatarTap;
+  final VoidCallback? onPartnerAvatarTap;
 
   @override
   Widget build(BuildContext context) {
-    final primarySize = size * 0.78;
-    final partnerSize = size * 0.66;
+    final stackWidth = size * 1.28;
+    final stackHeight = size * 0.94;
+    final primarySize = size * 0.72;
+    final partnerSize = size * 0.72;
 
     return SizedBox(
-      width: size,
-      height: size,
+      width: stackWidth,
+      height: stackHeight,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Positioned(
-            right: 0,
-            bottom: 1,
-            child: isCoupleBound
-                ? SoftAvatar(
-                    imageUrl: partnerAvatarUrl,
-                    size: partnerSize,
-                    backgroundColor: AppColors.lightPink,
-                    iconColor: AppColors.deepPink,
-                  )
-                : PartnerPlaceholderAvatar(size: partnerSize),
-          ),
           Positioned(
             left: 0,
             top: 0,
@@ -543,11 +625,25 @@ class CoupleAvatarStack extends StatelessWidget {
               size: primarySize,
               backgroundColor: AppColors.blush,
               iconColor: AppColors.deepPink,
+              onTap: onCurrentAvatarTap,
             ),
           ),
           Positioned(
-            right: size * 0.18,
-            top: size * 0.06,
+            right: 0,
+            top: size * 0.12,
+            child: isCoupleBound
+                ? SoftAvatar(
+                    imageUrl: partnerAvatarUrl,
+                    size: partnerSize,
+                    backgroundColor: AppColors.lightPink,
+                    iconColor: AppColors.deepPink,
+                    onTap: onPartnerAvatarTap,
+                  )
+                : PartnerPlaceholderAvatar(size: partnerSize),
+          ),
+          Positioned(
+            left: stackWidth * 0.5 - size * 0.125,
+            top: size * 0.03,
             child: Container(
               width: size * 0.25,
               height: size * 0.25,
@@ -583,18 +679,20 @@ class SoftAvatar extends StatelessWidget {
     required this.size,
     required this.backgroundColor,
     required this.iconColor,
+    this.onTap,
   });
 
   final String? imageUrl;
   final double size;
   final Color backgroundColor;
   final Color iconColor;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final url = imageUrl?.trim();
 
-    return Container(
+    final avatar = Container(
       width: size,
       height: size,
       padding: EdgeInsets.all(size * 0.04),
@@ -629,6 +727,18 @@ class SoftAvatar extends StatelessWidget {
                       iconColor: iconColor,
                     ),
               ),
+      ),
+    );
+
+    if (onTap == null) return avatar;
+
+    return Semantics(
+      button: true,
+      label: '预览头像',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: avatar,
       ),
     );
   }
@@ -745,7 +855,10 @@ class _HeartBubble extends StatelessWidget {
 
 // ========================= 辅助函数 =========================
 
-String _statusLabel(Plan plan) {
+String _statusLabel(Plan plan, {bool optimisticDone = false}) {
+  if (optimisticDone) {
+    return plan.owner == PlanOwner.together ? '我已打卡' : '已完成';
+  }
   if (plan.isOverdue) return '已逾期';
   return switch (plan.owner) {
     PlanOwner.partner =>
@@ -769,7 +882,8 @@ String _statusLabel(Plan plan) {
   };
 }
 
-Color _statusColor(Plan plan) {
+Color _statusColor(Plan plan, {bool optimisticDone = false}) {
+  if (optimisticDone) return AppColors.successText;
   if (plan.isOverdue) return AppColors.reminder;
   if (plan.owner == PlanOwner.partner && plan.hasPartnerCheckinToday) {
     return plan.partnerDoneToday ? AppColors.successText : AppColors.reminder;
@@ -780,7 +894,8 @@ Color _statusColor(Plan plan) {
   return plan.isDoneForCurrentUser ? AppColors.successText : AppColors.deepPink;
 }
 
-IconData _statusIcon(Plan plan) {
+IconData _statusIcon(Plan plan, {bool optimisticDone = false}) {
+  if (optimisticDone) return Icons.check_circle_rounded;
   if (plan.owner == PlanOwner.partner &&
       plan.hasPartnerCheckinToday &&
       !plan.partnerDoneToday) {

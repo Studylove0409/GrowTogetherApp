@@ -10,6 +10,7 @@ import '../../data/store/store.dart';
 import '../../data/models/plan.dart';
 import '../../data/models/reminder.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/avatar_preview.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/primary_pill_button.dart';
 import '../checkin/checkin_page.dart';
@@ -1023,6 +1024,11 @@ class _CoupleStatusPanel extends StatelessWidget {
               label: '我',
               avatarUrl: profile.avatarUrl,
               fallbackIcon: Icons.face_6_rounded,
+              onAvatarTap: () => showAvatarPreview(
+                context,
+                title: '我的头像',
+                imageUrl: profile.avatarUrl,
+              ),
               completed: plan.doneToday,
               checkedIn: plan.hasCurrentUserCheckinToday,
               color: AppColors.deepPink,
@@ -1036,6 +1042,12 @@ class _CoupleStatusPanel extends StatelessWidget {
                   : 'TA',
               avatarUrl: profile.partnerAvatarUrl,
               fallbackIcon: Icons.favorite_rounded,
+              onAvatarTap: () => showAvatarPreview(
+                context,
+                title:
+                    '${profile.partnerName.trim().isEmpty ? 'TA' : profile.partnerName.trim()}的头像',
+                imageUrl: profile.partnerAvatarUrl,
+              ),
               completed: plan.partnerDoneToday,
               checkedIn: plan.hasPartnerCheckinToday,
               color: AppColors.successText,
@@ -1052,6 +1064,7 @@ class _PersonStatusTile extends StatelessWidget {
     required this.label,
     required this.avatarUrl,
     required this.fallbackIcon,
+    required this.onAvatarTap,
     required this.completed,
     required this.checkedIn,
     required this.color,
@@ -1060,6 +1073,7 @@ class _PersonStatusTile extends StatelessWidget {
   final String label;
   final String? avatarUrl;
   final IconData fallbackIcon;
+  final VoidCallback onAvatarTap;
   final bool completed;
   final bool checkedIn;
   final Color color;
@@ -1089,6 +1103,7 @@ class _PersonStatusTile extends StatelessWidget {
             imageUrl: avatarUrl,
             color: color,
             fallbackIcon: fallbackIcon,
+            onTap: onAvatarTap,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1140,17 +1155,19 @@ class _TinyProfileAvatar extends StatelessWidget {
     required this.imageUrl,
     required this.color,
     required this.fallbackIcon,
+    required this.onTap,
   });
 
   final String? imageUrl;
   final Color color;
   final IconData fallbackIcon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final url = imageUrl?.trim();
 
-    return Container(
+    final avatar = Container(
       width: 38,
       height: 38,
       padding: const EdgeInsets.all(2.5),
@@ -1187,6 +1204,16 @@ class _TinyProfileAvatar extends StatelessWidget {
                   child: Icon(fallbackIcon, color: color, size: 20),
                 ),
               ),
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      label: '预览头像',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: avatar,
       ),
     );
   }

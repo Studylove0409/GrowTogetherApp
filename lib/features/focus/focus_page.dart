@@ -11,6 +11,7 @@ import '../../data/models/focus_session.dart';
 import '../../data/models/plan.dart';
 import '../../data/store/store.dart';
 import '../../shared/widgets/app_card.dart';
+import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/primary_button.dart';
 
 enum _FocusStage { setup, waiting, running, result }
@@ -109,9 +110,8 @@ class _FocusPageState extends State<FocusPage> with WidgetsBindingObserver {
       _scheduleStoreSync(plans: plans, focusSessions: store.getFocusSessions());
     }
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
+    return AppScaffold(
+      child: SafeArea(
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 220),
           child: switch (_stage) {
@@ -766,8 +766,6 @@ class _FocusSetupView extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.sm),
           _TodayFocusRecords(sessions: sessions),
-          const SizedBox(height: AppSpacing.md),
-          const _FocusGardenFooter(),
         ],
       ),
     );
@@ -2432,79 +2430,6 @@ class _FocusRecordsSheet extends StatelessWidget {
       ),
     );
   }
-}
-
-class _FocusGardenFooter extends StatelessWidget {
-  const _FocusGardenFooter();
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 54,
-      child: CustomPaint(
-        painter: _FocusGardenPainter(),
-        child: const SizedBox.expand(),
-      ),
-    );
-  }
-}
-
-class _FocusGardenPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final grassPaint = Paint()
-      ..color = AppColors.grass.withValues(alpha: 0.60)
-      ..style = PaintingStyle.fill;
-    final hill = Path()
-      ..moveTo(0, size.height * 0.58)
-      ..quadraticBezierTo(
-        size.width * 0.22,
-        size.height * 0.30,
-        size.width * 0.48,
-        size.height * 0.54,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.72,
-        size.height * 0.76,
-        size.width,
-        size.height * 0.44,
-      )
-      ..lineTo(size.width, size.height)
-      ..lineTo(0, size.height)
-      ..close();
-    canvas.drawPath(hill, grassPaint);
-
-    final stemPaint = Paint()
-      ..color = AppColors.grassDeep.withValues(alpha: 0.70)
-      ..strokeWidth = 2
-      ..strokeCap = StrokeCap.round;
-    final flowerPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.72);
-    final centerPaint = Paint()..color = AppColors.flowerYellow;
-
-    for (final dx in [
-      28.0,
-      size.width * 0.22,
-      size.width * 0.48,
-      size.width * 0.74,
-    ]) {
-      final base = Offset(dx, size.height * 0.76);
-      final top = Offset(dx, size.height * 0.44);
-      canvas.drawLine(base, top, stemPaint);
-      for (var i = 0; i < 5; i++) {
-        final angle = i * math.pi * 2 / 5;
-        canvas.drawCircle(
-          top + Offset(math.cos(angle) * 6, math.sin(angle) * 6),
-          5,
-          flowerPaint,
-        );
-      }
-      canvas.drawCircle(top, 4, centerPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _FocusGardenPainter oldDelegate) => false;
 }
 
 class _CustomDurationDialog extends StatefulWidget {

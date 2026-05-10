@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/notification/notification_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -34,6 +35,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   DateTime _endDate = DateTime.now().add(const Duration(days: 30));
   bool _reminderEnabled = false;
   bool _dateRangeEnabled = false;
+  bool _syncSystemCalendar = false;
   PlanRepeatType _repeatType = PlanRepeatType.once;
   bool _saving = false;
 
@@ -169,9 +171,20 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               label: '提醒时间',
               value: _reminderEnabled ? _reminderTime.format(context) : '关闭',
               enabled: _reminderEnabled,
-              onChanged: (value) => setState(() => _reminderEnabled = value),
+              onChanged: (value) => setState(() {
+                _reminderEnabled = value;
+                if (!value) _syncSystemCalendar = false;
+              }),
               onTap: _reminderEnabled ? _pickReminderTime : null,
             ),
+            if (widget.existingPlan == null && _reminderEnabled) ...[
+              const SizedBox(height: AppSpacing.sm),
+              _SystemCalendarSyncField(
+                enabled: _syncSystemCalendar,
+                onChanged: (value) =>
+                    setState(() => _syncSystemCalendar = value),
+              ),
+            ],
           ],
         ),
       ),
@@ -297,6 +310,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
 
     setState(() => _saving = true);
     try {
+      var calendarSyncRequested = false;
+      SystemCalendarSyncResult? calendarSyncResult;
+
       if (existing != null) {
         await store.updatePlan(
           planId: existing.id,
@@ -311,7 +327,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           hasDateRange: effectiveHasDateRange,
         );
       } else {
-        await store.createPlan(
+        final createdPlan = await store.createPlan(
           title: name,
           isShared: _owner == PlanOwner.together,
           dailyTask: description.isEmpty ? name : description,
@@ -322,14 +338,29 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           hasDateRange: effectiveHasDateRange,
           iconKey: _selectedIconKey,
         );
+        calendarSyncRequested = _reminderEnabled && _syncSystemCalendar;
+        if (calendarSyncRequested && reminderTime != null) {
+          calendarSyncResult =
+              await NotificationService.syncPlanReminderToSystemCalendar(
+                planTitle: createdPlan.title,
+                hour: reminderTime.hour,
+                minute: reminderTime.minute,
+                startDate: createdPlan.startDate,
+                endDate: createdPlan.endDate,
+                repeatsDaily: createdPlan.isDaily,
+                hasDateRange: createdPlan.hasDateRange,
+              );
+        }
       }
 
       if (!mounted) return;
+      final message = existing != null
+          ? '计划已更新'
+          : calendarSyncRequested
+          ? calendarSyncResult?.userMessage ?? '计划已保存，但没有提醒时间，未写入系统日历'
+          : '计划已保存';
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(existing != null ? '计划已更新' : '计划已保存'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
       Navigator.of(context).pop();
     } catch (error) {
@@ -1296,6 +1327,71 @@ class _OptionalSettingField extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.xs),
           ],
+          Switch.adaptive(
+            value: enabled,
+            activeColor: AppColors.deepPink,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SystemCalendarSyncField extends StatelessWidget {
+  const _SystemCalendarSyncField({
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      borderRadius: 28,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: AppColors.lightPink.withValues(alpha: 0.68),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.event_available_rounded,
+              color: AppColors.deepPink,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '同步到系统日历提醒',
+                  style: AppTextStyles.body.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.secondaryText,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '保存时写入系统日历；修改或删除计划后，需要到系统日历里管理旧提醒。',
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.mutedText,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.xs),
           Switch.adaptive(
             value: enabled,
             activeColor: AppColors.deepPink,

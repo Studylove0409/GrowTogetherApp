@@ -20,6 +20,9 @@ class PlanListTile extends StatelessWidget {
     this.subtitleSuffix,
     this.trailing,
     this.onTap,
+    this.onStatusTap,
+    this.statusTooltip,
+    this.statusSemanticsLabel,
   });
 
   final Plan plan;
@@ -31,6 +34,9 @@ class PlanListTile extends StatelessWidget {
   final String? subtitleSuffix;
   final Widget? trailing;
   final VoidCallback? onTap;
+  final VoidCallback? onStatusTap;
+  final String? statusTooltip;
+  final String? statusSemanticsLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +102,9 @@ class PlanListTile extends StatelessWidget {
                     color: statusColor,
                     icon: statusIcon,
                     compact: true,
+                    onTap: onStatusTap,
+                    tooltip: statusTooltip,
+                    semanticsLabel: statusSemanticsLabel,
                   ),
                   if (trailing != null) ...[
                     const SizedBox(height: 8),

@@ -20,6 +20,7 @@ class PlanListScaffold extends StatefulWidget {
     required this.onTapPlan,
     this.onRefresh,
     this.onDeletePlan,
+    this.onQuickCheckin,
     this.addButtonLabel,
     this.showAddButton = true,
     this.headerBuilder,
@@ -34,6 +35,7 @@ class PlanListScaffold extends StatefulWidget {
   final ValueChanged<Plan> onTapPlan;
   final Future<void> Function()? onRefresh;
   final Future<void> Function(Plan plan)? onDeletePlan;
+  final Future<void> Function(Plan plan)? onQuickCheckin;
   final String? addButtonLabel;
   final bool showAddButton;
   final Widget Function(BuildContext)? headerBuilder;
@@ -45,6 +47,8 @@ class PlanListScaffold extends StatefulWidget {
 class _PlanListScaffoldState extends State<PlanListScaffold> {
   int _filterIndex = 0;
   DateTime _selectedDate = _todayOnly();
+  final Set<String> _quickCheckingPlanIds = <String>{};
+  final Set<String> _optimisticDonePlanIds = <String>{};
 
   @override
   void didUpdateWidget(covariant PlanListScaffold oldWidget) {
@@ -52,6 +56,8 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     if (_filterIndex >= widget.filterOptions.length) {
       _filterIndex = 0;
     }
+    final visiblePlanIds = widget.plans.map((plan) => plan.id).toSet();
+    _optimisticDonePlanIds.removeWhere((id) => !visiblePlanIds.contains(id));
   }
 
   @override
@@ -221,6 +227,41 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     }
   }
 
+  Future<void> _quickCheckin(Plan plan) async {
+    final quickCheckin = widget.onQuickCheckin;
+    if (quickCheckin == null || _quickCheckingPlanIds.contains(plan.id)) {
+      return;
+    }
+
+    setState(() {
+      _quickCheckingPlanIds.add(plan.id);
+      _optimisticDonePlanIds.add(plan.id);
+    });
+    try {
+      await quickCheckin(plan);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已完成「${plan.title}」打卡'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _optimisticDonePlanIds.remove(plan.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('打卡失败，请稍后再试'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _quickCheckingPlanIds.remove(plan.id));
+      }
+    }
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -282,6 +323,8 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
   }
 
   Widget _buildPlanTile(Plan plan) {
+    final quickStatusTap = _quickStatusTapFor(plan);
+    final optimisticDone = _optimisticDonePlanIds.contains(plan.id);
     if (plan.owner == PlanOwner.together) {
       if (plan.isEnded && !plan.isCompletedOnceToday) {
         return PlanListTile(
@@ -298,6 +341,8 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           ? ('未完成', AppColors.reminder, Icons.warning_rounded)
           : plan.isOverdue && _isToday(_selectedDate)
           ? ('已逾期', AppColors.reminder, Icons.warning_rounded)
+          : optimisticDone
+          ? ('我已打卡', AppColors.successText, Icons.check_circle_rounded)
           : plan.isCurrentUserIncompleteOn(_selectedDate)
           ? ('我未完成', AppColors.reminder, Icons.error_outline_rounded)
           : plan.isPartnerIncompleteOn(_selectedDate) &&
@@ -311,6 +356,9 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         statusIcon: icon,
         showProgress: true,
         onTap: () => widget.onTapPlan(plan),
+        onStatusTap: quickStatusTap,
+        statusTooltip: '完成打卡：${plan.title}',
+        statusSemanticsLabel: '完成${plan.title}打卡',
       );
     }
     if (plan.isEnded && !plan.isCompletedOnceToday) {
@@ -323,7 +371,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         onTap: () => widget.onTapPlan(plan),
       );
     }
-    final done = _isDoneForPlanOwner(plan);
+    final done = _isDoneForPlanOwner(plan) || optimisticDone;
     final incomplete = _isIncompleteForPlanOwner(plan);
     final pastMissed = _isPastMissed(plan);
     return PlanListTile(
@@ -351,7 +399,20 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           : Icons.radio_button_unchecked_rounded,
       showProgress: true,
       onTap: () => widget.onTapPlan(plan),
+      onStatusTap: quickStatusTap,
+      statusTooltip: '完成打卡：${plan.title}',
+      statusSemanticsLabel: '完成${plan.title}打卡',
     );
+  }
+
+  VoidCallback? _quickStatusTapFor(Plan plan) {
+    if (widget.onQuickCheckin == null) return null;
+    if (_quickCheckingPlanIds.contains(plan.id)) return null;
+    if (_optimisticDonePlanIds.contains(plan.id)) return null;
+    if (!_isToday(_selectedDate)) return null;
+    if (!plan.canCurrentUserCheckin) return null;
+    if (plan.hasCurrentUserCheckinToday) return null;
+    return () => _quickCheckin(plan);
   }
 
   bool _isDoneForPlanOwner(Plan plan) {

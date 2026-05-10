@@ -53,6 +53,7 @@ abstract class Store extends ChangeNotifier {
     PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey,
+    bool syncSystemCalendar = false,
   });
 
   Future<void> updatePlan({

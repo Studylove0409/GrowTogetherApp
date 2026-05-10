@@ -73,9 +73,11 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        home: ChangeNotifierProvider<Store>.value(
-          value: store,
-          child: const HomePage(),
+        home: Scaffold(
+          body: ChangeNotifierProvider<Store>.value(
+            value: store,
+            child: const HomePage(),
+          ),
         ),
       ),
     );
@@ -118,6 +120,29 @@ void main() {
     expect(find.text('第一项待打卡'), findsOneWidget);
     expect(find.text('后面的待打卡'), findsOneWidget);
     expect(find.text('中间已完成'), findsNothing);
+  });
+
+  testWidgets('HomePage completes own today plan from status pill', (
+    tester,
+  ) async {
+    final store = _HomeQuickCheckinStore();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<Store>.value(
+            value: store,
+            child: const HomePage(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('完成打卡：首页一键打卡'));
+    await tester.pumpAndSettle();
+
+    expect(store.getPlanById('home-quick-checkin')?.doneToday, isTrue);
+    expect(find.text('已完成「首页一键打卡」打卡'), findsOneWidget);
   });
 
   testWidgets('HomePage calendar art opens growth records', (tester) async {
@@ -407,6 +432,111 @@ void main() {
     expect(find.text('今天未完成计划'), findsNothing);
     expect(find.text('今天已完成计划'), findsOneWidget);
   });
+
+  testWidgets('PlanListScaffold completes pending plan from status pill', (
+    tester,
+  ) async {
+    var quickCheckinCount = 0;
+    var openedPlanCount = 0;
+    final plan = _testPlan(
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      repeatType: PlanRepeatType.once,
+    ).copyWith(id: 'quick-plan', title: '等待完成计划');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: [plan],
+          planCountLabel: '共 1 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_) => openedPlanCount++,
+          onQuickCheckin: (_) async => quickCheckinCount++,
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('完成打卡：等待完成计划'));
+    await tester.pumpAndSettle();
+
+    expect(quickCheckinCount, 1);
+    expect(openedPlanCount, 0);
+    expect(find.text('已完成「等待完成计划」打卡'), findsOneWidget);
+
+    await tester.tap(find.text('等待完成计划'));
+    await tester.pumpAndSettle();
+
+    expect(quickCheckinCount, 1);
+    expect(openedPlanCount, 1);
+  });
+
+  testWidgets(
+    'PlanListScaffold only enables quick checkin for eligible plans',
+    (tester) async {
+      final today = _todayOnly();
+      final pendingPlan = _testPlan(
+        startDate: today,
+        endDate: today,
+        repeatType: PlanRepeatType.once,
+      ).copyWith(id: 'pending-plan', title: '可直接打卡');
+      final completedPlan =
+          _testPlan(
+            startDate: today,
+            endDate: today,
+            repeatType: PlanRepeatType.once,
+          ).copyWith(
+            id: 'completed-plan',
+            title: '已经打卡',
+            doneToday: true,
+            completedDays: 1,
+          );
+      final unfinishedPlan =
+          _testPlan(
+            startDate: today,
+            endDate: today,
+            repeatType: PlanRepeatType.once,
+          ).copyWith(
+            id: 'unfinished-plan',
+            title: '今天未完成',
+            checkins: [
+              CheckinRecord(
+                date: today,
+                completed: false,
+                mood: CheckinMood.normal,
+                note: '',
+              ),
+            ],
+          );
+      final partnerPlan = _testPlan(
+        startDate: today,
+        endDate: today,
+        repeatType: PlanRepeatType.once,
+      ).copyWith(id: 'partner-plan', title: 'TA 的计划', owner: PlanOwner.partner);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: PlanListScaffold(
+            title: '我的计划',
+            filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
+            plans: [pendingPlan, completedPlan, unfinishedPlan, partnerPlan],
+            planCountLabel: '共 4 个计划',
+            owner: PlanOwner.me,
+            onAdd: () {},
+            onTapPlan: (_) {},
+            onQuickCheckin: (_) async {},
+          ),
+        ),
+      );
+
+      expect(find.byTooltip('完成打卡：可直接打卡'), findsOneWidget);
+      expect(find.byTooltip('完成打卡：已经打卡'), findsNothing);
+      expect(find.byTooltip('完成打卡：今天未完成'), findsNothing);
+      expect(find.byTooltip('完成打卡：TA 的计划'), findsNothing);
+    },
+  );
 
   testWidgets('PlanListScaffold asks before deleting a swiped plan', (
     tester,
@@ -1406,6 +1536,7 @@ class _ReminderBadgeStore extends Store {
     PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
+    bool syncSystemCalendar = false,
   }) {
     throw UnimplementedError();
   }
@@ -1513,6 +1644,7 @@ class _RefreshSmokeStore extends Store {
     PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
+    bool syncSystemCalendar = false,
   }) {
     throw UnimplementedError();
   }
@@ -1642,6 +1774,60 @@ class _HomeProgressionStore extends _RefreshSmokeStore {
       if (plan.id == id) return plan;
     }
     return null;
+  }
+}
+
+class _HomeQuickCheckinStore extends _RefreshSmokeStore {
+  final List<Plan> _plans = [
+    _homePlan(
+      id: 'home-quick-checkin',
+      title: '首页一键打卡',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+    ),
+  ];
+
+  @override
+  List<Plan> getPlans() => List.unmodifiable(_plans);
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      _plans.where((plan) => plan.owner == owner).toList();
+
+  @override
+  List<Plan> getAllPlans() => List.unmodifiable(_plans);
+
+  @override
+  Plan? getPlanById(String id) {
+    for (final plan in _plans) {
+      if (plan.id == id) return plan;
+    }
+    return null;
+  }
+
+  @override
+  Future<void> saveCheckin({
+    required String planId,
+    required bool completed,
+    required CheckinMood mood,
+    required String note,
+  }) async {
+    final index = _plans.indexWhere((plan) => plan.id == planId);
+    if (index == -1) return;
+    final plan = _plans[index];
+    _plans[index] = plan.copyWith(
+      doneToday: completed,
+      completedDays: completed ? 1 : 0,
+      checkins: [
+        CheckinRecord(
+          date: _todayOnly(),
+          completed: completed,
+          mood: mood,
+          note: note,
+        ),
+      ],
+    );
+    notifyListeners();
   }
 }
 
@@ -1844,6 +2030,7 @@ class _BlockedPromptReminderStore extends Store {
     PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
+    bool syncSystemCalendar = false,
   }) {
     throw UnimplementedError();
   }
@@ -1972,6 +2159,7 @@ class _ReminderDateFilterStore extends Store {
     PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
+    bool syncSystemCalendar = false,
   }) {
     throw UnimplementedError();
   }

@@ -11,6 +11,8 @@ class ProfileRepository {
   const ProfileRepository({SupabaseClient? client}) : _client = client;
 
   final SupabaseClient? _client;
+  static final Map<String, _SignedAvatarUrl> _signedAvatarUrlCache = {};
+  static const Duration _signedAvatarUrlTtl = Duration(minutes: 50);
 
   SupabaseClient get _supabase => _client ?? Supabase.instance.client;
 
@@ -103,7 +105,15 @@ class ProfileRepository {
       params: {'p_avatar_url': path},
     );
 
-    return _supabase.storage.from('avatars').createSignedUrl(path, 60 * 60);
+    _signedAvatarUrlCache.remove(path);
+    final signedUrl = await _supabase.storage
+        .from('avatars')
+        .createSignedUrl(path, 60 * 60);
+    _signedAvatarUrlCache[path] = _SignedAvatarUrl(
+      url: signedUrl,
+      expiresAt: DateTime.now().add(_signedAvatarUrlTtl),
+    );
+    return signedUrl;
   }
 
   Future<ReminderSettings> getCurrentReminderSettings() async {
@@ -295,9 +305,19 @@ class ProfileRepository {
     }
 
     try {
-      return await _supabase.storage
+      final cached = _signedAvatarUrlCache[value];
+      if (cached != null && cached.expiresAt.isAfter(DateTime.now())) {
+        return cached.url;
+      }
+
+      final signedUrl = await _supabase.storage
           .from('avatars')
           .createSignedUrl(value, 60 * 60);
+      _signedAvatarUrlCache[value] = _SignedAvatarUrl(
+        url: signedUrl,
+        expiresAt: DateTime.now().add(_signedAvatarUrlTtl),
+      );
+      return signedUrl;
     } on StorageException {
       return null;
     }
@@ -380,4 +400,11 @@ class ProfileRepository {
             error.code == '42703' ||
             message.contains('column'));
   }
+}
+
+class _SignedAvatarUrl {
+  const _SignedAvatarUrl({required this.url, required this.expiresAt});
+
+  final String url;
+  final DateTime expiresAt;
 }

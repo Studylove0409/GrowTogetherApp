@@ -38,6 +38,19 @@ build/app/outputs/flutter-apk/app-release.apk
 
 Do not use plain `flutter build apk --release` for release testing. It omits the Supabase key and produces a MockStore/static-data build.
 
+## Remote Updates
+
+For small Dart/UI/business-logic updates, use Shorebird after the one-time setup:
+
+```bash
+shorebird login
+shorebird init --display-name "一起进步呀"
+SUPABASE_ANON_KEY=sb_publishable_... scripts/shorebird_release_android.sh
+SUPABASE_ANON_KEY=sb_publishable_... scripts/shorebird_patch_android.sh
+```
+
+The first command pair creates and installs a Shorebird-enabled APK. Later `shorebird_patch_android.sh` publishes remote patches for users who installed that APK. Native Android, permission, Gradle, plugin, and bundled-asset changes still require a full APK. See [docs/deployment/remote-updates.md](docs/deployment/remote-updates.md).
+
 ## Verification
 
 ```bash

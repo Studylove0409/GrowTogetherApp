@@ -22,6 +22,12 @@ class MyPlansPage extends StatelessWidget {
       owner: PlanOwner.me,
       onRefresh: context.read<Store>().refreshPlans,
       onDeletePlan: (plan) => context.read<Store>().deletePlan(plan.id),
+      onQuickCheckin: (plan) => context.read<Store>().saveCheckin(
+        planId: plan.id,
+        completed: true,
+        mood: CheckinMood.happy,
+        note: '',
+      ),
       onAdd: () {
         Navigator.of(context).push(
           MaterialPageRoute<void>(

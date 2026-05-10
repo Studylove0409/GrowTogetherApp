@@ -377,6 +377,7 @@ class SupabaseStore extends Store {
     PlanRepeatType repeatType = PlanRepeatType.once,
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
+    bool syncSystemCalendar = false,
   }) async {
     final plan = await _planRepo.createPlan(
       isShared: isShared,
@@ -393,7 +394,7 @@ class SupabaseStore extends Store {
     notifyListeners();
     if (plan.hasReminder) {
       if (_shouldScheduleReminder(plan)) {
-        _scheduleReminder(plan, syncSystemAlarm: true);
+        _scheduleReminder(plan, syncSystemCalendar: syncSystemCalendar);
       } else {
         await NotificationService.cancelPlanReminder(plan.id);
       }
@@ -434,7 +435,7 @@ class SupabaseStore extends Store {
     } else if (reminderTime != null) {
       final updated = getPlanById(planId);
       if (updated != null && _shouldScheduleReminder(updated)) {
-        _scheduleReminder(updated, syncSystemAlarm: true);
+        _scheduleReminder(updated);
       } else {
         await NotificationService.cancelPlanReminder(planId);
       }
@@ -787,7 +788,7 @@ class SupabaseStore extends Store {
     ReminderType.praise => 'praise',
   };
 
-  void _scheduleReminder(Plan plan, {bool syncSystemAlarm = false}) {
+  void _scheduleReminder(Plan plan, {bool syncSystemCalendar = false}) {
     final reminderTime = plan.reminderTime;
     if (reminderTime == null) return;
     if (!_shouldScheduleReminder(plan)) {
@@ -802,7 +803,10 @@ class SupabaseStore extends Store {
       minute: reminderTime.minute,
       scheduledDate: plan.isOnce ? plan.startDate : null,
       repeatsDaily: plan.isDaily,
-      syncSystemAlarm: syncSystemAlarm,
+      syncSystemCalendar: syncSystemCalendar,
+      calendarStartDate: plan.startDate,
+      calendarEndDate: plan.endDate,
+      calendarHasDateRange: plan.hasDateRange,
     );
   }
 
@@ -899,6 +903,9 @@ class SupabaseStore extends Store {
           minute: reminderTime.minute,
           scheduledDate: plan.isOnce ? plan.startDate : null,
           repeatsDaily: plan.isDaily,
+          calendarStartDate: plan.startDate,
+          calendarEndDate: plan.endDate,
+          calendarHasDateRange: plan.hasDateRange,
         );
       }),
     );

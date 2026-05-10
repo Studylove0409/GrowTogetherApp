@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme/app_assets.dart';
@@ -20,6 +22,7 @@ import '../../data/supabase/account_repository.dart';
 import '../../data/supabase/profile_repository.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/avatar_preview.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/sticker_asset.dart';
 
@@ -236,6 +239,42 @@ class _ProfilePageData {
   final List<CoupleInvitation> invitations;
 }
 
+class _AppVersionInfo {
+  const _AppVersionInfo({
+    required this.appVersion,
+    this.patchNumber,
+    this.updaterAvailable = false,
+    this.readFailed = false,
+  });
+
+  final String appVersion;
+  final int? patchNumber;
+  final bool updaterAvailable;
+  final bool readFailed;
+
+  String get patchLabel {
+    if (readFailed) return '读取失败';
+    if (!updaterAvailable) return '未启用';
+    return patchNumber == null ? '无补丁' : 'Patch #$patchNumber';
+  }
+
+  String get shortLabel {
+    if (patchNumber != null) return 'Patch #$patchNumber';
+    return patchLabel;
+  }
+
+  String get description {
+    if (readFailed) return '暂时无法读取远程补丁信息，请重启 App 后再查看。';
+    if (!updaterAvailable) {
+      return '当前不是 Shorebird release 构建，远程补丁读取不可用。';
+    }
+    if (patchNumber == null) {
+      return '当前安装的是基础 release，还没有应用远程补丁。';
+    }
+    return '当前已经应用 Shorebird 远程补丁 Patch #$patchNumber。';
+  }
+}
+
 class _ProfilePageTitle extends StatelessWidget {
   const _ProfilePageTitle();
 
@@ -347,7 +386,52 @@ class _ProfileInfoCard extends StatefulWidget {
 }
 
 class _ProfileInfoCardState extends State<_ProfileInfoCard> {
+  static const _appVersion = '1.0.0+1';
+
   bool _isSubmitting = false;
+  late final Future<_AppVersionInfo> _appVersionInfoFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _appVersionInfoFuture = _loadAppVersionInfo();
+  }
+
+  Future<_AppVersionInfo> _loadAppVersionInfo() async {
+    if (!kReleaseMode) {
+      return const _AppVersionInfo(
+        appVersion: _appVersion,
+        patchNumber: null,
+        updaterAvailable: false,
+      );
+    }
+
+    final updater = ShorebirdUpdater();
+    if (!updater.isAvailable) {
+      return const _AppVersionInfo(
+        appVersion: _appVersion,
+        patchNumber: null,
+        updaterAvailable: false,
+      );
+    }
+
+    try {
+      final patch = await updater.readCurrentPatch();
+      return _AppVersionInfo(
+        appVersion: _appVersion,
+        patchNumber: patch?.number,
+        updaterAvailable: true,
+      );
+    } catch (error) {
+      debugPrint('Read Shorebird patch failed: $error');
+      return const _AppVersionInfo(
+        appVersion: _appVersion,
+        patchNumber: null,
+        updaterAvailable: true,
+        readFailed: true,
+      );
+    }
+  }
 
   Future<void> _linkEmail() async {
     final email = await _showTextInputDialog(
@@ -909,7 +993,19 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
           accountLabel: accountLabel,
           accountColor: accountColor,
           isUploading: _isSubmitting,
-          onAvatarTap: _pickAndUploadAvatar,
+          onAvatarTap: () => showAvatarPreview(
+            context,
+            title: '我的头像',
+            imageUrl: widget.avatarUrl,
+          ),
+          onPartnerAvatarTap: widget.isBound
+              ? () => showAvatarPreview(
+                  context,
+                  title:
+                      '${widget.partnerName.trim().isEmpty ? 'TA' : widget.partnerName.trim()}的头像',
+                  imageUrl: widget.partnerAvatarUrl,
+                )
+              : null,
         ),
         const SizedBox(height: 24),
         _SettingsSection(
@@ -1115,7 +1211,19 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
               icon: Icons.new_releases_rounded,
               iconColor: AppColors.lavender,
               title: '当前版本',
-              trailing: const _MutedTag('1.0.0+1'),
+              subtitle: 'App 版本 $_appVersion · 查看远程补丁状态',
+              trailing: FutureBuilder<_AppVersionInfo>(
+                future: _appVersionInfoFuture,
+                initialData: const _AppVersionInfo(appVersion: _appVersion),
+                builder: (context, snapshot) {
+                  final info = snapshot.data;
+                  return _MutedTag(info?.shortLabel ?? '读取中');
+                },
+              ),
+              onTap: () => _showAppVersionDialog(
+                context,
+                versionInfoFuture: _appVersionInfoFuture,
+              ),
             ),
           ],
         ),
@@ -1294,6 +1402,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.accountColor,
     required this.isUploading,
     required this.onAvatarTap,
+    this.onPartnerAvatarTap,
   });
 
   final String name;
@@ -1306,6 +1415,7 @@ class _ProfileHeader extends StatelessWidget {
   final Color accountColor;
   final bool isUploading;
   final VoidCallback onAvatarTap;
+  final VoidCallback? onPartnerAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1344,6 +1454,7 @@ class _ProfileHeader extends StatelessWidget {
             isBound: isBound,
             isUploading: isUploading,
             onAvatarTap: onAvatarTap,
+            onPartnerAvatarTap: onPartnerAvatarTap,
           ),
           const SizedBox(width: 18),
           Expanded(
@@ -1406,6 +1517,7 @@ class _ProfileAvatarCluster extends StatelessWidget {
     required this.isBound,
     required this.isUploading,
     required this.onAvatarTap,
+    this.onPartnerAvatarTap,
   });
 
   final String? avatarUrl;
@@ -1413,6 +1525,7 @@ class _ProfileAvatarCluster extends StatelessWidget {
   final bool isBound;
   final bool isUploading;
   final VoidCallback onAvatarTap;
+  final VoidCallback? onPartnerAvatarTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1427,7 +1540,7 @@ class _ProfileAvatarCluster extends StatelessWidget {
             imageUrl: avatarUrl,
             onTap: onAvatarTap,
             isUploading: isUploading,
-            semanticLabel: '上传我的头像',
+            semanticLabel: '预览我的头像',
             borderWidth: 5,
           ),
           if (isBound)
@@ -1437,6 +1550,7 @@ class _ProfileAvatarCluster extends StatelessWidget {
               child: _CuteAvatar(
                 size: 38,
                 imageUrl: partnerAvatarUrl,
+                onTap: onPartnerAvatarTap,
                 semanticLabel: 'TA 的头像',
                 shadowOpacity: 0.12,
                 borderWidth: 3.5,
@@ -3029,6 +3143,108 @@ void _showAboutUsDialog(BuildContext context) {
       SelectableText('联系开发者：song3286791241@gmail.com'),
     ],
   );
+}
+
+void _showAppVersionDialog(
+  BuildContext context, {
+  required Future<_AppVersionInfo> versionInfoFuture,
+}) {
+  showAppCuteDialog<void>(
+    context,
+    builder: (dialogContext) => FutureBuilder<_AppVersionInfo>(
+      future: versionInfoFuture,
+      initialData: const _AppVersionInfo(
+        appVersion: _ProfileInfoCardState._appVersion,
+      ),
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        return AppCuteDialog(
+          icon: const DialogIconBadge(
+            icon: Icons.system_update_alt_rounded,
+            color: AppColors.lavender,
+          ),
+          title: '当前版本',
+          description: info?.description ?? '正在读取当前安装的版本和远程补丁信息。',
+          primaryText: '知道了',
+          onPrimary: () => Navigator.of(dialogContext).pop(),
+          onCancel: () => Navigator.of(dialogContext).pop(),
+          children: [
+            _VersionInfoCard(
+              appVersion: info?.appVersion ?? _ProfileInfoCardState._appVersion,
+              patchLabel: info?.patchLabel ?? '读取中',
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _VersionInfoCard extends StatelessWidget {
+  const _VersionInfoCard({required this.appVersion, required this.patchLabel});
+
+  final String appVersion;
+  final String patchLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.line.withValues(alpha: 0.58)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Column(
+          children: [
+            _VersionInfoRow(label: 'App 版本', value: appVersion),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Divider(
+                height: 1,
+                color: AppColors.line.withValues(alpha: 0.55),
+              ),
+            ),
+            _VersionInfoRow(label: '远程补丁', value: patchLabel),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _VersionInfoRow extends StatelessWidget {
+  const _VersionInfoRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: AppTextStyles.caption.copyWith(
+              color: AppColors.secondaryText,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        Text(
+          value,
+          style: AppTextStyles.body.copyWith(
+            color: AppColors.text,
+            fontSize: 15,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 void _showInfoDialog(
