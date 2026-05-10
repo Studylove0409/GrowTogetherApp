@@ -14,6 +14,8 @@ class MockData {
     togetherDays: 7,
     inviteCode: 'LOVE5208',
     isBound: true,
+    avatarUrl: null,
+    partnerAvatarUrl: null,
   );
 
   static final plans = [

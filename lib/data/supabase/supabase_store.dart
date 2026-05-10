@@ -41,6 +41,8 @@ class SupabaseStore extends Store {
     togetherDays: 0,
     inviteCode: '',
     isBound: false,
+    avatarUrl: null,
+    partnerAvatarUrl: null,
   );
 
   // ========================= 初始化 =========================

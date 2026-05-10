@@ -5,6 +5,8 @@ class Profile {
     required this.togetherDays,
     required this.inviteCode,
     required this.isBound,
+    this.avatarUrl,
+    this.partnerAvatarUrl,
   });
 
   final String name;
@@ -12,4 +14,6 @@ class Profile {
   final int togetherDays;
   final String inviteCode;
   final bool isBound;
+  final String? avatarUrl;
+  final String? partnerAvatarUrl;
 }

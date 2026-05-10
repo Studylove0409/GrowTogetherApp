@@ -17,6 +17,8 @@ class AppBottomNavBar extends StatelessWidget {
   static const double height = 64;
   static const double bottomGap = 20;
   static const double horizontalMargin = 24;
+  static const Color _dockBackground = Color(0xFFFFF4F8);
+  static const Color _dockBorder = Color(0xFFFFD6E6);
 
   static const _items = [
     _BottomNavItem(
@@ -58,23 +60,19 @@ class AppBottomNavBar extends StatelessWidget {
           height: height,
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
-            color: AppColors.paper,
+            color: _dockBackground,
             borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: Colors.white.withValues(alpha: 0.88),
-              width: 1.5,
-            ),
-            boxShadow: [
+            border: Border.all(color: _dockBorder, width: 1.2),
+            boxShadow: const [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.14),
-                blurRadius: 24,
-                spreadRadius: 1,
-                offset: const Offset(0, 12),
+                color: Color(0x26FF5C93),
+                blurRadius: 28,
+                offset: Offset(0, 10),
               ),
               BoxShadow(
-                color: AppColors.deepPink.withValues(alpha: 0.06),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+                color: Color(0x14000000),
+                blurRadius: 18,
+                offset: Offset(0, 8),
               ),
             ],
           ),
@@ -153,17 +151,22 @@ class _BottomNavButton extends StatelessWidget {
                         height: 34,
                         decoration: BoxDecoration(
                           color: selected
-                              ? AppColors.lightPink.withValues(alpha: 0.82)
+                              ? AppColors.lightPink.withValues(alpha: 0.95)
                               : Colors.transparent,
                           shape: BoxShape.circle,
                           boxShadow: selected
                               ? [
                                   BoxShadow(
                                     color: AppColors.primary.withValues(
-                                      alpha: 0.16,
+                                      alpha: 0.22,
                                     ),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 5),
+                                    blurRadius: 14,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.white.withValues(alpha: 0.78),
+                                    blurRadius: 5,
+                                    offset: const Offset(0, -1),
                                   ),
                                 ]
                               : const [],

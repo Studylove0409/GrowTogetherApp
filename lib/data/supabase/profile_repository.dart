@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/couple_invitation.dart';
@@ -26,6 +28,7 @@ class ProfileRepository {
         togetherDays: 0,
         inviteCode: data['invite_code'] as String? ?? '',
         isBound: false,
+        avatarUrl: await _avatarDisplayUrl(data['avatar_url']),
       );
     }
 
@@ -34,7 +37,7 @@ class ProfileRepository {
         : couple['user_a_id'] as String;
     final partnerProfile = await _supabase
         .from('profiles')
-        .select('nickname')
+        .select('nickname, avatar_url')
         .eq('user_id', partnerId)
         .maybeSingle();
 
@@ -44,7 +47,46 @@ class ProfileRepository {
       togetherDays: _daysSince(couple['created_at'] as String?),
       inviteCode: data['invite_code'] as String? ?? '',
       isBound: true,
+      avatarUrl: await _avatarDisplayUrl(data['avatar_url']),
+      partnerAvatarUrl: await _avatarDisplayUrl(partnerProfile?['avatar_url']),
     );
+  }
+
+  Future<String> uploadCurrentUserAvatar({
+    required Uint8List bytes,
+    required String fileExtension,
+    required String contentType,
+  }) async {
+    final userId = _supabase.auth.currentUser?.id;
+    if (userId == null) {
+      throw const AuthException('authentication required');
+    }
+
+    final normalizedExtension = _normalizeAvatarExtension(fileExtension);
+    final normalizedContentType = _normalizeAvatarContentType(
+      contentType,
+      normalizedExtension,
+    );
+    final path = '$userId/avatar.$normalizedExtension';
+
+    await _supabase.storage
+        .from('avatars')
+        .uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(
+            cacheControl: '3600',
+            contentType: normalizedContentType,
+            upsert: true,
+          ),
+        );
+
+    await _supabase.rpc(
+      'create_profile_for_current_user',
+      params: {'p_avatar_url': path},
+    );
+
+    return _supabase.storage.from('avatars').createSignedUrl(path, 60 * 60);
   }
 
   Future<List<CoupleInvitation>> getPendingIncomingCoupleInvitations() async {
@@ -144,5 +186,44 @@ class ProfileRepository {
     final start = DateTime(createdAt.year, createdAt.month, createdAt.day);
     final today = DateTime(now.year, now.month, now.day);
     return today.difference(start).inDays + 1;
+  }
+
+  String _normalizeAvatarExtension(String extension) {
+    final normalized = extension.trim().toLowerCase().replaceFirst('.', '');
+    if (normalized == 'jpg' || normalized == 'jpeg') return 'jpg';
+    if (normalized == 'png') return 'png';
+    if (normalized == 'webp') return 'webp';
+    return 'jpg';
+  }
+
+  String _normalizeAvatarContentType(String contentType, String extension) {
+    final normalized = contentType.trim().toLowerCase();
+    if (normalized == 'image/jpeg' ||
+        normalized == 'image/png' ||
+        normalized == 'image/webp') {
+      return normalized;
+    }
+
+    return switch (extension) {
+      'png' => 'image/png',
+      'webp' => 'image/webp',
+      _ => 'image/jpeg',
+    };
+  }
+
+  Future<String?> _avatarDisplayUrl(Object? storedValue) async {
+    final value = (storedValue as String?)?.trim();
+    if (value == null || value.isEmpty) return null;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
+
+    try {
+      return await _supabase.storage
+          .from('avatars')
+          .createSignedUrl(value, 60 * 60);
+    } on StorageException {
+      return null;
+    }
   }
 }
