@@ -10,6 +10,8 @@ import '../../data/models/plan.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/app_scaffold.dart';
+import '../../shared/widgets/plan_loading_card.dart';
+import '../../shared/widgets/plan_sync_status_banner.dart';
 import '../../shared/widgets/sticker_asset.dart';
 import '../../shared/widgets/status_pill.dart';
 import 'create_plan_page.dart';
@@ -31,6 +33,8 @@ class PlansPage extends StatelessWidget {
     final partnerPlans = _plansByOwner(plans, PlanOwner.partner);
     final togetherPlans = _plansByOwner(plans, PlanOwner.together);
     final visibleTogetherPlans = _preferredTogetherPlans(togetherPlans);
+    final isInitialPlansLoading =
+        store.isInitialPlansLoading && !store.hasHydratedPlanCache;
 
     return Stack(
       children: [
@@ -49,48 +53,60 @@ class PlansPage extends StatelessWidget {
               children: [
                 const Center(child: Text('计划', style: AppTextStyles.display)),
                 const SizedBox(height: AppSpacing.xl),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: _OverviewCard(
-                        title: '我的计划',
-                        icon: Icons.flag_rounded,
-                        accentColor: AppColors.deepPink,
-                        countColor: AppColors.deepPink,
-                        doneCount: _doneCount(myPlans),
-                        totalCount: myPlans.length,
-                        focusPlan: myPlans.isEmpty ? null : myPlans.first,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const MyPlansPage(),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: _OverviewCard(
-                        title: 'TA 的计划',
-                        icon: Icons.directions_run_rounded,
-                        accentColor: AppColors.success,
-                        countColor: AppColors.successText,
-                        doneCount: _doneCount(partnerPlans),
-                        totalCount: partnerPlans.length,
-                        focusPlan: partnerPlans.isEmpty
-                            ? null
-                            : partnerPlans.first,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => const PartnerPlansPage(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                PlanSyncStatusBanner(
+                  isRefreshing:
+                      store.isRefreshingPlans && store.hasHydratedPlanCache,
+                  errorMessage: store.planSyncErrorMessage,
                 ),
-                const SizedBox(height: AppSpacing.xl),
-                _TogetherPlansPanel(plans: visibleTogetherPlans),
+                if (store.isRefreshingPlans ||
+                    store.planSyncErrorMessage != null)
+                  const SizedBox(height: AppSpacing.md),
+                if (isInitialPlansLoading)
+                  const PlanLoadingCard(message: '正在同步计划列表...')
+                else ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _OverviewCard(
+                          title: '我的计划',
+                          icon: Icons.flag_rounded,
+                          accentColor: AppColors.deepPink,
+                          countColor: AppColors.deepPink,
+                          doneCount: _doneCount(myPlans),
+                          totalCount: myPlans.length,
+                          focusPlan: myPlans.isEmpty ? null : myPlans.first,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const MyPlansPage(),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: _OverviewCard(
+                          title: 'TA 的计划',
+                          icon: Icons.directions_run_rounded,
+                          accentColor: AppColors.success,
+                          countColor: AppColors.successText,
+                          doneCount: _doneCount(partnerPlans),
+                          totalCount: partnerPlans.length,
+                          focusPlan: partnerPlans.isEmpty
+                              ? null
+                              : partnerPlans.first,
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute<void>(
+                              builder: (_) => const PartnerPlansPage(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  _TogetherPlansPanel(plans: visibleTogetherPlans),
+                ],
               ],
             ),
           ),

@@ -5,7 +5,9 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../data/models/plan.dart';
 import '../../shared/widgets/empty_state_card.dart';
+import '../../shared/widgets/plan_loading_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
+import '../../shared/widgets/plan_sync_status_banner.dart';
 
 /// 通用计划列表页框架：AppBar + 分段筛选 + 计划卡片列表
 class PlanListScaffold extends StatefulWidget {
@@ -21,6 +23,9 @@ class PlanListScaffold extends StatefulWidget {
     this.onRefresh,
     this.onDeletePlan,
     this.onQuickCheckin,
+    this.isInitialLoading = false,
+    this.isSyncing = false,
+    this.syncErrorMessage,
     this.addButtonLabel,
     this.showAddButton = true,
     this.headerBuilder,
@@ -36,6 +41,9 @@ class PlanListScaffold extends StatefulWidget {
   final Future<void> Function()? onRefresh;
   final Future<void> Function(Plan plan)? onDeletePlan;
   final Future<void> Function(Plan plan)? onQuickCheckin;
+  final bool isInitialLoading;
+  final bool isSyncing;
+  final String? syncErrorMessage;
   final String? addButtonLabel;
   final bool showAddButton;
   final Widget Function(BuildContext)? headerBuilder;
@@ -110,6 +118,12 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
             ),
             children: [
               if (widget.headerBuilder != null) widget.headerBuilder!(context),
+              PlanSyncStatusBanner(
+                isRefreshing: widget.isSyncing,
+                errorMessage: widget.syncErrorMessage,
+              ),
+              if (widget.isSyncing || widget.syncErrorMessage != null)
+                const SizedBox(height: AppSpacing.md),
               _PlanDateFilterCard(
                 selectedDate: _selectedDate,
                 onPickDate: _pickDate,
@@ -133,7 +147,9 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
-              if (filtered.isEmpty)
+              if (widget.isInitialLoading)
+                const PlanLoadingCard(message: '正在同步计划列表...')
+              else if (filtered.isEmpty)
                 const _EmptyPlansHint()
               else
                 ...filtered.map(

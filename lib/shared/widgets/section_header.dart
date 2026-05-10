@@ -8,11 +8,13 @@ class SectionHeader extends StatelessWidget {
   const SectionHeader({
     super.key,
     required this.title,
+    this.titleTrailing,
     this.actionLabel,
     this.onAction,
   });
 
   final String title;
+  final Widget? titleTrailing;
   final String? actionLabel;
   final VoidCallback? onAction;
 
@@ -30,6 +32,15 @@ class SectionHeader extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.sm),
         Text(title, style: AppTextStyles.title),
+        if (titleTrailing != null) ...[
+          const SizedBox(width: AppSpacing.sm),
+          Flexible(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: titleTrailing!,
+            ),
+          ),
+        ],
         const Spacer(),
         if (actionLabel != null)
           TextButton(

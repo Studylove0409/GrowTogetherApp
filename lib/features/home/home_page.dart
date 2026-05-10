@@ -15,7 +15,9 @@ import '../../features/plans/together_plans_page.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/avatar_preview.dart';
+import '../../shared/widgets/cached_avatar.dart';
 import '../../shared/widgets/empty_state_card.dart';
+import '../../shared/widgets/plan_loading_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
 import '../../shared/widgets/section_header.dart';
 import 'growth_record_page.dart';
@@ -37,6 +39,8 @@ class HomePage extends StatelessWidget {
     final togetherPlans = todayPlans
         .where((p) => p.owner == PlanOwner.together)
         .toList();
+    final isInitialPlansLoading =
+        store.isInitialPlansLoading && !store.hasHydratedPlanCache;
 
     return AppScaffold(
       child: RefreshIndicator(
@@ -55,53 +59,65 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: AppSpacing.xl),
             _GrowthHeroCard(profile: profile),
             const SizedBox(height: AppSpacing.lg),
-            _HomePlanSection(
-              title: '我的今日计划',
-              plans: myPlans,
-              prioritizeActionablePlans: true,
-              emptyMessage: '还没有自己的计划哦～',
-              emptyActionLabel: '写下一个小目标',
-              onViewAll: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
-              ),
-              onPlanTap: (plan) => _openPlan(context, plan),
-              onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
-              onEmptyAction: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const CreatePlanPage()),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            _HomePlanSection(
-              title: 'TA 的今日计划',
-              plans: partnerPlans,
-              emptyMessage: 'TA 还没有计划哦～',
-              onViewAll: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const PartnerPlansPage(),
+            if (isInitialPlansLoading)
+              const _HomePlansLoadingSection()
+            else ...[
+              _HomePlanSection(
+                title: '我的今日计划',
+                plans: myPlans,
+                titleTrailing: _HomeSyncBadge(
+                  isRefreshing:
+                      store.isRefreshingPlans && store.hasHydratedPlanCache,
+                  errorMessage: store.planSyncErrorMessage,
+                  lastSyncedAt: store.lastPlansSyncedAt,
+                ),
+                prioritizeActionablePlans: true,
+                emptyMessage: '还没有自己的计划哦～',
+                emptyActionLabel: '写下一个小目标',
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
+                ),
+                onPlanTap: (plan) => _openPlan(context, plan),
+                onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
+                onEmptyAction: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const CreatePlanPage(),
+                  ),
                 ),
               ),
-              onPlanTap: (plan) => _openPlan(context, plan),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            _HomePlanSection(
-              title: '共同计划',
-              plans: togetherPlans,
-              emptyMessage: '还没有共同计划哦～',
-              emptyActionLabel: '一起定个小目标',
-              onViewAll: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) => const TogetherPlansPage(),
+              const SizedBox(height: AppSpacing.lg),
+              _HomePlanSection(
+                title: 'TA 的今日计划',
+                plans: partnerPlans,
+                emptyMessage: 'TA 还没有计划哦～',
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PartnerPlansPage(),
+                  ),
+                ),
+                onPlanTap: (plan) => _openPlan(context, plan),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              _HomePlanSection(
+                title: '共同计划',
+                plans: togetherPlans,
+                emptyMessage: '还没有共同计划哦～',
+                emptyActionLabel: '一起定个小目标',
+                onViewAll: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const TogetherPlansPage(),
+                  ),
+                ),
+                onPlanTap: (plan) => _openPlan(context, plan),
+                onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
+                onEmptyAction: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) =>
+                        const CreatePlanPage(defaultOwner: PlanOwner.together),
+                  ),
                 ),
               ),
-              onPlanTap: (plan) => _openPlan(context, plan),
-              onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
-              onEmptyAction: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(
-                  builder: (_) =>
-                      const CreatePlanPage(defaultOwner: PlanOwner.together),
-                ),
-              ),
-            ),
+            ],
           ],
         ),
       ),
@@ -111,6 +127,95 @@ class HomePage extends StatelessWidget {
 
 bool _isTodayPlan(Plan plan) {
   return plan.isScheduledOnDate(DateTime.now());
+}
+
+class _HomePlansLoadingSection extends StatelessWidget {
+  const _HomePlansLoadingSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Column(
+      children: [
+        SectionHeader(title: '我的今日计划'),
+        SizedBox(height: AppSpacing.sm),
+        PlanLoadingCard(message: '正在同步你的计划...'),
+      ],
+    );
+  }
+}
+
+class _HomeSyncBadge extends StatelessWidget {
+  const _HomeSyncBadge({
+    required this.isRefreshing,
+    required this.errorMessage,
+    required this.lastSyncedAt,
+  });
+
+  final bool isRefreshing;
+  final String? errorMessage;
+  final DateTime? lastSyncedAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final isError = errorMessage != null;
+    final label = isError
+        ? '网络不稳定，已显示上次内容'
+        : isRefreshing
+        ? '同步中'
+        : _lastSyncedLabel(lastSyncedAt);
+    if (label == null) return const SizedBox.shrink();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: isError
+            ? AppColors.reminder.withValues(alpha: 0.07)
+            : AppColors.lightPink.withValues(alpha: 0.32),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (isRefreshing) ...[
+              const SizedBox(
+                width: 8,
+                height: 8,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.4,
+                  color: AppColors.deepPink,
+                ),
+              ),
+              const SizedBox(width: 5),
+            ],
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 148),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.tiny.copyWith(
+                  color: isError
+                      ? AppColors.secondaryText
+                      : AppColors.secondaryText.withValues(alpha: 0.78),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _lastSyncedLabel(DateTime? value) {
+    if (value == null) return null;
+
+    final elapsed = DateTime.now().difference(value);
+    if (elapsed.inMinutes < 1) return '刚刚更新';
+    if (elapsed.inMinutes < 60) return '${elapsed.inMinutes} 分钟前更新';
+    return '已更新';
+  }
 }
 
 bool _needsTodayAction(Plan plan) {
@@ -139,6 +244,7 @@ class _HomePlanSection extends StatefulWidget {
     required this.title,
     required this.plans,
     required this.emptyMessage,
+    this.titleTrailing,
     this.emptyActionLabel,
     this.prioritizeActionablePlans = false,
     required this.onViewAll,
@@ -150,6 +256,7 @@ class _HomePlanSection extends StatefulWidget {
   final String title;
   final List<Plan> plans;
   final String emptyMessage;
+  final Widget? titleTrailing;
   final String? emptyActionLabel;
   final bool prioritizeActionablePlans;
   final VoidCallback onViewAll;
@@ -176,7 +283,10 @@ class _HomePlanSectionState extends State<_HomePlanSection> {
     if (widget.plans.isEmpty) {
       return Column(
         children: [
-          SectionHeader(title: widget.title),
+          SectionHeader(
+            title: widget.title,
+            titleTrailing: widget.titleTrailing,
+          ),
           const SizedBox(height: AppSpacing.sm),
           EmptyStateCard(
             message: widget.emptyMessage,
@@ -195,6 +305,7 @@ class _HomePlanSectionState extends State<_HomePlanSection> {
       children: [
         SectionHeader(
           title: widget.title,
+          titleTrailing: widget.titleTrailing,
           actionLabel: '全部 ${widget.plans.length}',
           onAction: widget.onViewAll,
         ),
@@ -398,6 +509,16 @@ class _GrowthHeroCard extends StatelessWidget {
                                 CoupleAvatarStack(
                                   currentUserAvatarUrl: profile.avatarUrl,
                                   partnerAvatarUrl: profile.partnerAvatarUrl,
+                                  currentUserAvatarPath: profile.avatarPath,
+                                  partnerAvatarPath: profile.partnerAvatarPath,
+                                  currentUserId: profile.currentUserId,
+                                  partnerUserId: profile.partnerUserId,
+                                  currentUserName: profile.name,
+                                  partnerName: profile.partnerName,
+                                  currentUserUpdatedAt:
+                                      profile.profileUpdatedAt,
+                                  partnerUpdatedAt:
+                                      profile.partnerProfileUpdatedAt,
                                   isCoupleBound: profile.isBound,
                                   size: compact ? 62 : 68,
                                   onCurrentAvatarTap: () => showAvatarPreview(
@@ -591,6 +712,14 @@ class CoupleAvatarStack extends StatelessWidget {
     super.key,
     required this.currentUserAvatarUrl,
     required this.partnerAvatarUrl,
+    this.currentUserAvatarPath,
+    this.partnerAvatarPath,
+    this.currentUserId,
+    this.partnerUserId,
+    this.currentUserName,
+    this.partnerName,
+    this.currentUserUpdatedAt,
+    this.partnerUpdatedAt,
     required this.isCoupleBound,
     this.size = 52,
     this.onCurrentAvatarTap,
@@ -599,6 +728,14 @@ class CoupleAvatarStack extends StatelessWidget {
 
   final String? currentUserAvatarUrl;
   final String? partnerAvatarUrl;
+  final String? currentUserAvatarPath;
+  final String? partnerAvatarPath;
+  final String? currentUserId;
+  final String? partnerUserId;
+  final String? currentUserName;
+  final String? partnerName;
+  final DateTime? currentUserUpdatedAt;
+  final DateTime? partnerUpdatedAt;
   final bool isCoupleBound;
   final double size;
   final VoidCallback? onCurrentAvatarTap;
@@ -622,6 +759,10 @@ class CoupleAvatarStack extends StatelessWidget {
             top: 0,
             child: SoftAvatar(
               imageUrl: currentUserAvatarUrl,
+              avatarPath: currentUserAvatarPath,
+              userId: currentUserId,
+              updatedAt: currentUserUpdatedAt,
+              label: currentUserName,
               size: primarySize,
               backgroundColor: AppColors.blush,
               iconColor: AppColors.deepPink,
@@ -634,6 +775,10 @@ class CoupleAvatarStack extends StatelessWidget {
             child: isCoupleBound
                 ? SoftAvatar(
                     imageUrl: partnerAvatarUrl,
+                    avatarPath: partnerAvatarPath,
+                    userId: partnerUserId,
+                    updatedAt: partnerUpdatedAt,
+                    label: partnerName,
                     size: partnerSize,
                     backgroundColor: AppColors.lightPink,
                     iconColor: AppColors.deepPink,
@@ -676,6 +821,10 @@ class SoftAvatar extends StatelessWidget {
   const SoftAvatar({
     super.key,
     required this.imageUrl,
+    this.avatarPath,
+    this.userId,
+    this.updatedAt,
+    this.label,
     required this.size,
     required this.backgroundColor,
     required this.iconColor,
@@ -683,6 +832,10 @@ class SoftAvatar extends StatelessWidget {
   });
 
   final String? imageUrl;
+  final String? avatarPath;
+  final String? userId;
+  final DateTime? updatedAt;
+  final String? label;
   final double size;
   final Color backgroundColor;
   final Color iconColor;
@@ -690,8 +843,6 @@ class SoftAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final url = imageUrl?.trim();
-
     final avatar = Container(
       width: size,
       height: size,
@@ -709,24 +860,19 @@ class SoftAvatar extends StatelessWidget {
         ],
       ),
       child: ClipOval(
-        child: url == null || url.isEmpty
-            ? _DefaultSoftAvatar(
-                size: size,
-                backgroundColor: backgroundColor,
-                iconColor: iconColor,
-              )
-            : Image.network(
-                url,
-                width: size,
-                height: size,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    _DefaultSoftAvatar(
-                      size: size,
-                      backgroundColor: backgroundColor,
-                      iconColor: iconColor,
-                    ),
-              ),
+        child: CachedAvatar(
+          imageUrl: imageUrl,
+          cacheKey: avatarCacheKey(
+            imageUrl: imageUrl,
+            avatarPath: avatarPath,
+            userId: userId,
+            updatedAt: updatedAt,
+          ),
+          size: size,
+          backgroundColor: backgroundColor,
+          iconColor: iconColor,
+          label: label,
+        ),
       ),
     );
 
@@ -779,26 +925,6 @@ class PartnerPlaceholderAvatar extends StatelessWidget {
           size: size * 0.42,
         ),
       ),
-    );
-  }
-}
-
-class _DefaultSoftAvatar extends StatelessWidget {
-  const _DefaultSoftAvatar({
-    required this.size,
-    required this.backgroundColor,
-    required this.iconColor,
-  });
-
-  final double size;
-  final Color backgroundColor;
-  final Color iconColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(color: backgroundColor, shape: BoxShape.circle),
-      child: Icon(Icons.face_6_rounded, color: iconColor, size: size * 0.42),
     );
   }
 }

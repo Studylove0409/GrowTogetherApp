@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:shorebird_code_push/shorebird_code_push.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart'
+    show UpdateException, UpdateStatus;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/theme/app_assets.dart';
@@ -12,6 +12,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/notification/fcm_service.dart';
+import '../../core/update/shorebird_update_service.dart';
 import '../../data/models/account_identity.dart';
 import '../../data/models/couple_invitation.dart';
 import '../../data/models/plan.dart';
@@ -252,27 +253,39 @@ class _AppVersionInfo {
   final bool updaterAvailable;
   final bool readFailed;
 
+  String get appVersionLabel => 'v$appVersion';
+
   String get patchLabel {
     if (readFailed) return '读取失败';
-    if (!updaterAvailable) return '未启用';
-    return patchNumber == null ? '无补丁' : 'Patch #$patchNumber';
+    if (!updaterAvailable) return '未安装补丁';
+    return patchNumber == null ? '未安装补丁' : 'Patch $patchNumber';
   }
 
   String get shortLabel {
-    if (patchNumber != null) return 'Patch #$patchNumber';
+    if (patchNumber != null) return 'Patch $patchNumber';
     return patchLabel;
   }
 
   String get description {
     if (readFailed) return '暂时无法读取远程补丁信息，请重启 App 后再查看。';
     if (!updaterAvailable) {
-      return '当前不是 Shorebird release 构建，远程补丁读取不可用。';
+      return '当前构建不支持 Shorebird 更新。Debug 模式或非 Shorebird release 构建下，这是正常情况。';
     }
     if (patchNumber == null) {
       return '当前安装的是基础 release，还没有应用远程补丁。';
     }
-    return '当前已经应用 Shorebird 远程补丁 Patch #$patchNumber。';
+    return '当前已经应用 Shorebird 远程补丁 Patch $patchNumber。';
   }
+}
+
+enum _ManualUpdateState {
+  idle,
+  checking,
+  downloading,
+  readyToRestart,
+  upToDate,
+  failed,
+  unavailable,
 }
 
 class _ProfilePageTitle extends StatelessWidget {
@@ -386,10 +399,13 @@ class _ProfileInfoCard extends StatefulWidget {
 }
 
 class _ProfileInfoCardState extends State<_ProfileInfoCard> {
-  static const _appVersion = '1.0.0+1';
+  static const _appVersion = '1.0.0+3';
+  static const _updateService = ShorebirdUpdateService();
 
   bool _isSubmitting = false;
-  late final Future<_AppVersionInfo> _appVersionInfoFuture;
+  _ManualUpdateState _manualUpdateState = _ManualUpdateState.idle;
+  String? _manualUpdateMessage;
+  late Future<_AppVersionInfo> _appVersionInfoFuture;
 
   @override
   void initState() {
@@ -398,29 +414,13 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
   }
 
   Future<_AppVersionInfo> _loadAppVersionInfo() async {
-    if (!kReleaseMode) {
-      return const _AppVersionInfo(
-        appVersion: _appVersion,
-        patchNumber: null,
-        updaterAvailable: false,
-      );
-    }
-
-    final updater = ShorebirdUpdater();
-    if (!updater.isAvailable) {
-      return const _AppVersionInfo(
-        appVersion: _appVersion,
-        patchNumber: null,
-        updaterAvailable: false,
-      );
-    }
-
     try {
-      final patch = await updater.readCurrentPatch();
+      final updaterAvailable = _updateService.isUpdaterAvailable;
+      final patch = await _updateService.getCurrentPatch();
       return _AppVersionInfo(
         appVersion: _appVersion,
         patchNumber: patch?.number,
-        updaterAvailable: true,
+        updaterAvailable: updaterAvailable,
       );
     } catch (error) {
       debugPrint('Read Shorebird patch failed: $error');
@@ -431,6 +431,98 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
         readFailed: true,
       );
     }
+  }
+
+  Future<void> _checkForShorebirdUpdate() async {
+    if (_manualUpdateState == _ManualUpdateState.checking ||
+        _manualUpdateState == _ManualUpdateState.downloading) {
+      return;
+    }
+
+    setState(() {
+      _manualUpdateState = _ManualUpdateState.checking;
+      _manualUpdateMessage = '正在检查...';
+    });
+
+    try {
+      final status = await _updateService.checkForUpdate();
+      if (!mounted) return;
+
+      switch (status) {
+        case UpdateStatus.upToDate:
+          setState(() {
+            _manualUpdateState = _ManualUpdateState.upToDate;
+            _manualUpdateMessage = '已是最新版本';
+            _appVersionInfoFuture = _loadAppVersionInfo();
+          });
+          _showSnack(context, '已是最新版本');
+        case UpdateStatus.outdated:
+          setState(() {
+            _manualUpdateState = _ManualUpdateState.downloading;
+            _manualUpdateMessage = '发现更新，正在下载...';
+          });
+          _showSnack(context, '发现更新，正在下载...');
+          await _updateService.downloadUpdate();
+          if (!mounted) return;
+          setState(() {
+            _manualUpdateState = _ManualUpdateState.readyToRestart;
+            _manualUpdateMessage = '更新已准备好，重启 App 后生效';
+            _appVersionInfoFuture = _loadAppVersionInfo();
+          });
+          _showSnack(context, '更新已准备好，重启 App 后生效');
+        case UpdateStatus.restartRequired:
+          setState(() {
+            _manualUpdateState = _ManualUpdateState.readyToRestart;
+            _manualUpdateMessage = '更新已下载，重启 App 后生效';
+            _appVersionInfoFuture = _loadAppVersionInfo();
+          });
+          _showSnack(context, '更新已下载，重启 App 后生效');
+        case UpdateStatus.unavailable:
+          setState(() {
+            _manualUpdateState = _ManualUpdateState.unavailable;
+            _manualUpdateMessage = '当前构建不支持 Shorebird 更新';
+            _appVersionInfoFuture = _loadAppVersionInfo();
+          });
+          _showSnack(context, '当前构建不支持 Shorebird 更新');
+      }
+    } on UpdateException catch (error) {
+      debugPrint('Shorebird update failed: $error');
+      if (!mounted) return;
+      setState(() {
+        _manualUpdateState = _ManualUpdateState.failed;
+        _manualUpdateMessage = '检查失败，请切换网络后重试';
+      });
+      _showSnack(context, '检查失败，请切换网络后重试');
+    } catch (error, stackTrace) {
+      debugPrint('Shorebird update check failed: $error');
+      debugPrintStack(stackTrace: stackTrace);
+      if (!mounted) return;
+      setState(() {
+        _manualUpdateState = _ManualUpdateState.failed;
+        _manualUpdateMessage = '检查失败，请切换网络后重试';
+      });
+      _showSnack(context, '检查失败，请切换网络后重试');
+    }
+  }
+
+  bool get _isCheckingForUpdate =>
+      _manualUpdateState == _ManualUpdateState.checking ||
+      _manualUpdateState == _ManualUpdateState.downloading;
+
+  String get _versionUpdateButtonLabel {
+    return switch (_manualUpdateState) {
+      _ManualUpdateState.checking => '正在检查...',
+      _ManualUpdateState.downloading => '正在下载...',
+      _ => '检查更新',
+    };
+  }
+
+  String _versionSubtitle(_AppVersionInfo? info) {
+    final version = info?.appVersionLabel ?? 'v$_appVersion';
+    final patch = info?.patchLabel ?? '读取中';
+    final message = _manualUpdateMessage;
+    if (message == null || message.isEmpty) return '$version · $patch';
+    return '$version · $patch\n$message';
   }
 
   Future<void> _linkEmail() async {
@@ -1207,23 +1299,35 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
               title: '关于 App',
               onTap: () => _showAboutUsDialog(context),
             ),
-            SettingsTile(
-              icon: Icons.new_releases_rounded,
-              iconColor: AppColors.lavender,
-              title: '当前版本',
-              subtitle: 'App 版本 $_appVersion · 查看远程补丁状态',
-              trailing: FutureBuilder<_AppVersionInfo>(
-                future: _appVersionInfoFuture,
-                initialData: const _AppVersionInfo(appVersion: _appVersion),
-                builder: (context, snapshot) {
-                  final info = snapshot.data;
-                  return _MutedTag(info?.shortLabel ?? '读取中');
-                },
-              ),
-              onTap: () => _showAppVersionDialog(
-                context,
-                versionInfoFuture: _appVersionInfoFuture,
-              ),
+            FutureBuilder<_AppVersionInfo>(
+              future: _appVersionInfoFuture,
+              initialData: const _AppVersionInfo(appVersion: _appVersion),
+              builder: (context, snapshot) {
+                final info = snapshot.data;
+                return SettingsTile(
+                  icon: Icons.new_releases_rounded,
+                  iconColor: AppColors.lavender,
+                  title: '当前版本',
+                  subtitle: _versionSubtitle(info),
+                  trailing: _VersionCheckButton(
+                    label: _versionUpdateButtonLabel,
+                    isBusy: _isCheckingForUpdate,
+                    onPressed: _isCheckingForUpdate
+                        ? null
+                        : _checkForShorebirdUpdate,
+                  ),
+                  onTap: () => _showAppVersionDialog(
+                    context,
+                    versionInfoFuture: _appVersionInfoFuture,
+                    statusMessage: _manualUpdateMessage,
+                    onCheckUpdate: _isCheckingForUpdate
+                        ? null
+                        : _checkForShorebirdUpdate,
+                    checkButtonLabel: _versionUpdateButtonLabel,
+                    isChecking: _isCheckingForUpdate,
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -1808,6 +1912,54 @@ class _MutedTag extends StatelessWidget {
             fontWeight: FontWeight.w900,
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _VersionCheckButton extends StatelessWidget {
+  const _VersionCheckButton({
+    required this.label,
+    required this.isBusy,
+    required this.onPressed,
+  });
+
+  final String label;
+  final bool isBusy;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextButton(
+      onPressed: onPressed,
+      style: TextButton.styleFrom(
+        foregroundColor: AppColors.deepPink,
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity.compact,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        textStyle: AppTextStyles.tiny.copyWith(
+          fontWeight: FontWeight.w900,
+          letterSpacing: 0,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isBusy) ...[
+            const SizedBox(
+              width: 10,
+              height: 10,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.6,
+                color: AppColors.deepPink,
+              ),
+            ),
+            const SizedBox(width: 6),
+          ],
+          Text(label),
+        ],
       ),
     );
   }
@@ -3148,6 +3300,10 @@ void _showAboutUsDialog(BuildContext context) {
 void _showAppVersionDialog(
   BuildContext context, {
   required Future<_AppVersionInfo> versionInfoFuture,
+  String? statusMessage,
+  VoidCallback? onCheckUpdate,
+  String checkButtonLabel = '检查更新',
+  bool isChecking = false,
 }) {
   showAppCuteDialog<void>(
     context,
@@ -3172,6 +3328,10 @@ void _showAppVersionDialog(
             _VersionInfoCard(
               appVersion: info?.appVersion ?? _ProfileInfoCardState._appVersion,
               patchLabel: info?.patchLabel ?? '读取中',
+              statusMessage: statusMessage,
+              checkButtonLabel: checkButtonLabel,
+              isChecking: isChecking,
+              onCheckUpdate: onCheckUpdate,
             ),
           ],
         );
@@ -3181,10 +3341,21 @@ void _showAppVersionDialog(
 }
 
 class _VersionInfoCard extends StatelessWidget {
-  const _VersionInfoCard({required this.appVersion, required this.patchLabel});
+  const _VersionInfoCard({
+    required this.appVersion,
+    required this.patchLabel,
+    this.statusMessage,
+    required this.checkButtonLabel,
+    required this.isChecking,
+    this.onCheckUpdate,
+  });
 
   final String appVersion;
   final String patchLabel;
+  final String? statusMessage;
+  final String checkButtonLabel;
+  final bool isChecking;
+  final VoidCallback? onCheckUpdate;
 
   @override
   Widget build(BuildContext context) {
@@ -3207,6 +3378,25 @@ class _VersionInfoCard extends StatelessWidget {
               ),
             ),
             _VersionInfoRow(label: '远程补丁', value: patchLabel),
+            if (statusMessage != null && statusMessage!.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Divider(
+                  height: 1,
+                  color: AppColors.line.withValues(alpha: 0.55),
+                ),
+              ),
+              _VersionInfoRow(label: '更新状态', value: statusMessage!),
+            ],
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: _VersionCheckButton(
+                label: checkButtonLabel,
+                isBusy: isChecking,
+                onPressed: onCheckUpdate,
+              ),
+            ),
           ],
         ),
       ),

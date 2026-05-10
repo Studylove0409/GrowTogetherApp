@@ -5,6 +5,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/notification/notification_service.dart';
 import '../../shared/utils/plan_icon_mapper.dart';
+import '../cache/plan_cache_service.dart';
+import '../cache/profile_cache_service.dart';
 import '../models/focus_session.dart';
 import '../models/plan.dart';
 import '../models/profile.dart';
@@ -27,6 +29,8 @@ class SupabaseStore extends Store {
   final _focusRepo = const FocusSessionRepository();
   final _reminderRepo = const ReminderRepository();
   final _profileRepo = const ProfileRepository();
+  final _planCache = const PlanCacheService();
+  final _profileCache = const ProfileCacheService();
 
   // ========================= 缓存 =========================
 
@@ -36,7 +40,13 @@ class SupabaseStore extends Store {
   ReminderSettings _reminderSettings = const ReminderSettings();
   final Set<String> _notifiedFocusInviteIds = {};
   final Set<String> _notifiedReminderIds = {};
+  final Set<String> _locallyDirtyPlanIds = {};
   bool _reminderNotificationsPrimed = false;
+  bool _isInitialPlansLoading = true;
+  bool _isRefreshingPlans = false;
+  bool _hasHydratedPlanCache = false;
+  DateTime? _lastPlansSyncedAt;
+  String? _planSyncErrorMessage;
   Profile _profile = const Profile(
     name: '一起进步的你',
     partnerName: '加载中...',
@@ -50,20 +60,42 @@ class SupabaseStore extends Store {
   // ========================= 初始化 =========================
 
   Future<void> _init() async {
+    await _hydrateProfileFromCache();
+    await _hydratePlansFromCache();
     await _loadReminderSettings();
     unawaited(_applyReminderSettings());
-    await Future.wait([_loadProfile(), _loadFocusSessions(), _loadReminders()]);
-    await _loadPlans();
+    final nonPlanLoads = Future.wait([
+      _loadProfile(),
+      _loadFocusSessions(),
+      _loadReminders(),
+    ]);
+    await _refreshPlansFromRemote(syncReminders: true);
+    await nonPlanLoads;
+    _plans = _plans.map(_withLocalFocusMetrics).toList();
+    await _writePlanCache();
     _subscribeRealtime();
     _startAutoRefresh();
-    unawaited(_syncPlanReminders());
     notifyListeners();
   }
 
   Future<void> _loadProfile() async {
     try {
-      _profile = await _profileRepo.getCurrentProfile();
+      _profile = _mergeProfileWithCachedAvatars(
+        await _profileRepo.getCurrentProfile(),
+      );
+      await _writeProfileCache();
     } catch (_) {}
+  }
+
+  Future<void> _hydrateProfileFromCache() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    final snapshot = await _profileCache.readProfile(userId);
+    if (snapshot == null) return;
+
+    _profile = snapshot.profile;
+    notifyListeners();
   }
 
   Future<void> _loadReminderSettings() async {
@@ -72,33 +104,203 @@ class SupabaseStore extends Store {
     } catch (_) {}
   }
 
-  Future<void> _loadPlans() async {
+  Future<void> _hydratePlansFromCache() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    final snapshot = await _planCache.readPlans(userId);
+    if (snapshot == null) return;
+
+    _plans = snapshot.plans.map(_withLocalFocusMetrics).toList();
+    _hasHydratedPlanCache = true;
+    _lastPlansSyncedAt = snapshot.cachedAt;
+    _isInitialPlansLoading = false;
+    _planSyncErrorMessage = null;
+    notifyListeners();
+  }
+
+  Future<void> _refreshPlansFromRemote({bool syncReminders = false}) async {
+    if (_isRefreshingPlans) return;
+
+    _isRefreshingPlans = true;
+    _planSyncErrorMessage = null;
+    notifyListeners();
+
     try {
-      _plans = await _planRepo.fetchAllPlans();
-      if (_plans.isNotEmpty) {
-        final planIds = _plans.map((p) => p.id).toList();
-        final client = Supabase.instance.client;
-        final checkinRows = await client
-            .from('checkins')
-            .select('*')
-            .inFilter('plan_id', planIds)
-            .order('checkin_date', ascending: false);
-
-        final allCheckins = <String, List<CheckinRecord>>{};
-        for (final row in checkinRows) {
-          final planId = row['plan_id'] as String;
-          allCheckins
-              .putIfAbsent(planId, () => [])
-              .add(_rowToCheckinRecord(row));
-        }
-
-        _plans = _plans.map((p) {
-          final records = allCheckins[p.id] ?? [];
-          return p.copyWith(checkins: records);
-        }).toList();
+      final remotePlans = await _fetchPlansFromRemote();
+      _plans = _mergeRemotePlansWithLocalDirty(remotePlans);
+      _isInitialPlansLoading = false;
+      _lastPlansSyncedAt = DateTime.now();
+      _planSyncErrorMessage = null;
+      await _writePlanCache();
+      if (syncReminders) {
+        unawaited(_syncPlanRemindersQuietly());
       }
-      _plans = _plans.map(_withLocalFocusMetrics).toList();
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('Plan remote refresh failed: $error');
+      _isInitialPlansLoading = false;
+      _planSyncErrorMessage = _plans.isEmpty
+          ? '网络异常，暂时无法同步计划'
+          : '网络异常，当前显示上次同步数据';
+    } finally {
+      _isRefreshingPlans = false;
+      notifyListeners();
+    }
+  }
+
+  Future<List<Plan>> _fetchPlansFromRemote() async {
+    var plans = await _planRepo.fetchAllPlans();
+    if (plans.isNotEmpty) {
+      final planIds = plans.map((p) => p.id).toList();
+      final client = Supabase.instance.client;
+      final checkinRows = await client
+          .from('checkins')
+          .select('*')
+          .inFilter('plan_id', planIds)
+          .order('checkin_date', ascending: false);
+
+      final allCheckins = <String, List<CheckinRecord>>{};
+      for (final row in checkinRows) {
+        final planId = row['plan_id'] as String;
+        allCheckins.putIfAbsent(planId, () => []).add(_rowToCheckinRecord(row));
+      }
+
+      plans = plans.map((p) {
+        final records = allCheckins[p.id] ?? [];
+        return p.copyWith(checkins: records);
+      }).toList();
+    }
+    return plans.map(_withLocalFocusMetrics).toList();
+  }
+
+  Future<void> _writePlanCache() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    try {
+      await _planCache.writePlans(userId, _plans);
+      _hasHydratedPlanCache = true;
+    } catch (error) {
+      debugPrint('Plan cache write skipped: $error');
+    }
+  }
+
+  Future<void> _writeProfileCache() async {
+    final userId = _currentUserId;
+    if (userId == null) return;
+
+    try {
+      await _profileCache.writeProfile(userId, _profile);
+    } catch (error) {
+      debugPrint('Profile cache write skipped: $error');
+    }
+  }
+
+  Profile _mergeProfileWithCachedAvatars(Profile next) {
+    final current = _profile;
+    return next.copyWith(
+      avatarUrl:
+          _shouldKeepCurrentAvatarUrl(
+            currentPath: current.avatarPath,
+            nextPath: next.avatarPath,
+            currentUrl: current.avatarUrl,
+            nextUrl: next.avatarUrl,
+          )
+          ? current.avatarUrl
+          : next.avatarUrl,
+      partnerAvatarUrl:
+          _shouldKeepCurrentAvatarUrl(
+            currentPath: current.partnerAvatarPath,
+            nextPath: next.partnerAvatarPath,
+            currentUrl: current.partnerAvatarUrl,
+            nextUrl: next.partnerAvatarUrl,
+          )
+          ? current.partnerAvatarUrl
+          : next.partnerAvatarUrl,
+    );
+  }
+
+  bool _shouldKeepCurrentAvatarUrl({
+    required String? currentPath,
+    required String? nextPath,
+    required String? currentUrl,
+    required String? nextUrl,
+  }) {
+    if (nextUrl != null && nextUrl.trim().isNotEmpty) return false;
+    if (currentUrl == null || currentUrl.trim().isEmpty) return false;
+    return currentPath != null && currentPath == nextPath;
+  }
+
+  String? get _currentUserId => Supabase.instance.client.auth.currentUser?.id;
+
+  List<Plan> _mergeRemotePlansWithLocalDirty(List<Plan> remotePlans) {
+    if (_locallyDirtyPlanIds.isEmpty) return remotePlans;
+
+    final localById = {for (final plan in _plans) plan.id: plan};
+    return [
+      for (final remotePlan in remotePlans)
+        if (_locallyDirtyPlanIds.contains(remotePlan.id) &&
+            localById[remotePlan.id] != null)
+          _mergeDirtyPlan(remotePlan, localById[remotePlan.id]!)
+        else
+          remotePlan,
+    ];
+  }
+
+  Plan _mergeDirtyPlan(Plan remotePlan, Plan localPlan) {
+    if (_remoteConfirmsLocalToday(remotePlan, localPlan)) {
+      _locallyDirtyPlanIds.remove(remotePlan.id);
+      return remotePlan;
+    }
+
+    final localTodayRecord = _currentUserTodayRecord(localPlan);
+    final mergedCheckins = [
+      if (localTodayRecord != null) localTodayRecord,
+      ...remotePlan.checkins.where(
+        (record) =>
+            record.actor != CheckinActor.me ||
+            !_isSameDate(record.date, DateTime.now()),
+      ),
+    ];
+
+    return remotePlan.copyWith(
+      doneToday: localPlan.doneToday,
+      completedDays: localPlan.completedDays,
+      status: localPlan.status == PlanStatus.ended
+          ? localPlan.status
+          : remotePlan.status,
+      endedAt: localPlan.status == PlanStatus.ended
+          ? localPlan.endedAt
+          : remotePlan.endedAt,
+      checkins: mergedCheckins,
+    );
+  }
+
+  bool _remoteConfirmsLocalToday(Plan remotePlan, Plan localPlan) {
+    final localRecord = _currentUserTodayRecord(localPlan);
+    if (localRecord == null) return true;
+
+    final remoteRecord = _currentUserTodayRecord(remotePlan);
+    return remoteRecord != null &&
+        remoteRecord.completed == localRecord.completed &&
+        remotePlan.doneToday == localPlan.doneToday;
+  }
+
+  CheckinRecord? _currentUserTodayRecord(Plan plan) {
+    for (final record in plan.checkins) {
+      if (record.actor == CheckinActor.me &&
+          _isSameDate(record.date, DateTime.now())) {
+        return record;
+      }
+    }
+    return plan.doneToday
+        ? CheckinRecord(
+            date: DateTime.now(),
+            completed: true,
+            mood: CheckinMood.happy,
+            note: '',
+          )
+        : null;
   }
 
   CheckinRecord _rowToCheckinRecord(Map<String, dynamic> row) {
@@ -224,7 +426,7 @@ class SupabaseStore extends Store {
           schema: 'public',
           table: 'plans',
           callback: (_) {
-            _loadPlans().then((_) => notifyListeners());
+            unawaited(_refreshPlansFromRemote(syncReminders: true));
           },
         )
         .onPostgresChanges(
@@ -232,7 +434,7 @@ class SupabaseStore extends Store {
           schema: 'public',
           table: 'checkins',
           callback: (_) {
-            _loadPlans().then((_) => notifyListeners());
+            unawaited(_refreshPlansFromRemote());
           },
         )
         .onPostgresChanges(
@@ -249,7 +451,8 @@ class SupabaseStore extends Store {
           table: 'focus_sessions',
           callback: (_) async {
             await _loadFocusSessions();
-            await _loadPlans();
+            _plans = _plans.map(_withLocalFocusMetrics).toList();
+            await _writePlanCache();
             notifyListeners();
           },
         )
@@ -287,8 +490,7 @@ class SupabaseStore extends Store {
         _loadFocusSessions(),
         _loadReminders(),
       ]);
-      await _loadPlans();
-      await _syncPlanReminders();
+      await _refreshPlansFromRemote(syncReminders: true);
       await _applyReminderSettings();
       notifyListeners();
     } finally {
@@ -309,9 +511,7 @@ class SupabaseStore extends Store {
 
   @override
   Future<void> refreshPlans() async {
-    await _loadPlans();
-    await _syncPlanReminders();
-    notifyListeners();
+    await _refreshPlansFromRemote(syncReminders: true);
   }
 
   @override
@@ -323,7 +523,8 @@ class SupabaseStore extends Store {
   @override
   Future<void> refreshFocusSessions() async {
     await _loadFocusSessions();
-    await _loadPlans();
+    _plans = _plans.map(_withLocalFocusMetrics).toList();
+    await _writePlanCache();
     notifyListeners();
   }
 
@@ -333,6 +534,21 @@ class SupabaseStore extends Store {
   }
 
   // ========================= Plan 读 =========================
+
+  @override
+  bool get isInitialPlansLoading => _isInitialPlansLoading;
+
+  @override
+  bool get isRefreshingPlans => _isRefreshingPlans;
+
+  @override
+  bool get hasHydratedPlanCache => _hasHydratedPlanCache;
+
+  @override
+  DateTime? get lastPlansSyncedAt => _lastPlansSyncedAt;
+
+  @override
+  String? get planSyncErrorMessage => _planSyncErrorMessage;
 
   @override
   List<Plan> getPlans() {
@@ -391,6 +607,7 @@ class SupabaseStore extends Store {
       iconKey: iconKey,
     );
     _plans.insert(0, plan);
+    await _writePlanCache();
     notifyListeners();
     if (plan.hasReminder) {
       if (_shouldScheduleReminder(plan)) {
@@ -427,9 +644,7 @@ class SupabaseStore extends Store {
       endDate: endDate,
       hasDateRange: hasDateRange,
     );
-    await _loadPlans();
-    await _syncPlanReminders();
-    notifyListeners();
+    await _refreshPlansFromRemote(syncReminders: true);
     if (clearReminderTime) {
       await NotificationService.cancelPlanReminder(planId);
     } else if (reminderTime != null) {
@@ -445,17 +660,14 @@ class SupabaseStore extends Store {
   @override
   Future<void> endPlan(String planId) async {
     await _planRepo.endPlan(planId);
-    await _loadPlans();
-    notifyListeners();
+    await _refreshPlansFromRemote();
     NotificationService.cancelPlanReminder(planId);
   }
 
   @override
   Future<void> deletePlan(String planId) async {
     await _planRepo.deletePlan(planId);
-    await _loadPlans();
-    await _syncPlanReminders();
-    notifyListeners();
+    await _refreshPlansFromRemote(syncReminders: true);
     NotificationService.cancelPlanReminder(planId);
   }
 
@@ -481,12 +693,14 @@ class SupabaseStore extends Store {
     final previousPlan = _plans[index];
     if (!previousPlan.canCurrentUserCheckin) return;
 
+    _locallyDirtyPlanIds.add(planId);
     _plans[index] = _planWithTodayCheckin(
       previousPlan,
       completed: completed,
       mood: mood,
       note: note,
     );
+    await _writePlanCache();
     notifyListeners();
 
     try {
@@ -497,10 +711,13 @@ class SupabaseStore extends Store {
         note: note.trim(),
       );
       await _finishOncePlanIfCompleteFromLocal(planId);
+      await _refreshPlansFromRemote();
     } catch (_) {
+      _locallyDirtyPlanIds.remove(planId);
       final rollbackIndex = _plans.indexWhere((plan) => plan.id == planId);
       if (rollbackIndex != -1) {
         _plans[rollbackIndex] = previousPlan;
+        await _writePlanCache();
         notifyListeners();
       }
       rethrow;
@@ -518,12 +735,14 @@ class SupabaseStore extends Store {
     final previousPlan = _plans[index];
     if (!previousPlan.canCurrentUserCheckin) return;
 
+    _locallyDirtyPlanIds.add(planId);
     _plans[index] = _planWithTodayCheckin(
       previousPlan,
       completed: doneToday,
       mood: CheckinMood.happy,
       note: '',
     );
+    await _writePlanCache();
     notifyListeners();
 
     try {
@@ -534,10 +753,13 @@ class SupabaseStore extends Store {
         note: '',
       );
       await _finishOncePlanIfCompleteFromLocal(planId);
+      await _refreshPlansFromRemote();
     } catch (_) {
+      _locallyDirtyPlanIds.remove(planId);
       final rollbackIndex = _plans.indexWhere((plan) => plan.id == planId);
       if (rollbackIndex != -1) {
         _plans[rollbackIndex] = previousPlan;
+        await _writePlanCache();
         notifyListeners();
       }
       rethrow;
@@ -579,7 +801,8 @@ class SupabaseStore extends Store {
   Future<void> saveFocusSession(FocusSession session) async {
     final saved = await _focusRepo.insertCompletedSession(session);
     if (saved != null) _upsertFocusSession(saved);
-    await _loadPlans();
+    _plans = _plans.map(_withLocalFocusMetrics).toList();
+    await _writePlanCache();
     notifyListeners();
   }
 
@@ -646,7 +869,8 @@ class SupabaseStore extends Store {
       scoreDelta: scoreDelta,
     );
     if (session != null) _upsertFocusSession(session);
-    await _loadPlans();
+    _plans = _plans.map(_withLocalFocusMetrics).toList();
+    await _writePlanCache();
     notifyListeners();
     return session;
   }
@@ -872,6 +1096,7 @@ class SupabaseStore extends Store {
         status: PlanStatus.ended,
         endedAt: DateTime.now(),
       );
+      await _writePlanCache();
       notifyListeners();
       await NotificationService.cancelPlanReminder(planId);
     } catch (error) {
@@ -909,6 +1134,14 @@ class SupabaseStore extends Store {
         );
       }),
     );
+  }
+
+  Future<void> _syncPlanRemindersQuietly() async {
+    try {
+      await _syncPlanReminders();
+    } catch (error) {
+      debugPrint('Plan reminder sync skipped: $error');
+    }
   }
 
   Future<void> _applyReminderSettings() async {

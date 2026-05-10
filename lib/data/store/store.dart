@@ -35,6 +35,16 @@ abstract class Store extends ChangeNotifier {
 
   // ========================= Plan 读 =========================
 
+  bool get isInitialPlansLoading => false;
+
+  bool get isRefreshingPlans => false;
+
+  bool get hasHydratedPlanCache => false;
+
+  DateTime? get lastPlansSyncedAt => null;
+
+  String? get planSyncErrorMessage => null;
+
   List<Plan> getPlans();
   List<Plan> getPlansByOwner(PlanOwner owner);
   List<Plan> getTodayFocusPlans();

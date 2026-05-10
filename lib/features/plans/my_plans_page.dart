@@ -21,6 +21,10 @@ class MyPlansPage extends StatelessWidget {
       planCountLabel: '共 ${allPlans.length} 个计划',
       owner: PlanOwner.me,
       onRefresh: context.read<Store>().refreshPlans,
+      isInitialLoading:
+          store.isInitialPlansLoading && !store.hasHydratedPlanCache,
+      isSyncing: store.isRefreshingPlans && store.hasHydratedPlanCache,
+      syncErrorMessage: store.planSyncErrorMessage,
       onDeletePlan: (plan) => context.read<Store>().deletePlan(plan.id),
       onQuickCheckin: (plan) => context.read<Store>().saveCheckin(
         planId: plan.id,

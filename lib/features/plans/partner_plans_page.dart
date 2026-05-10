@@ -21,6 +21,10 @@ class PartnerPlansPage extends StatelessWidget {
       owner: PlanOwner.partner,
       showAddButton: false,
       onRefresh: context.read<Store>().refreshPlans,
+      isInitialLoading:
+          store.isInitialPlansLoading && !store.hasHydratedPlanCache,
+      isSyncing: store.isRefreshingPlans && store.hasHydratedPlanCache,
+      syncErrorMessage: store.planSyncErrorMessage,
       onAdd: () {},
       onTapPlan: (plan) {
         Navigator.of(context).push(

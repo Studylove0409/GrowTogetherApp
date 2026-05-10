@@ -91,6 +91,43 @@ void main() {
     expect(store.refreshAllCount, 1);
   });
 
+  testWidgets('HomePage shows gentle loading before cached plans exist', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<Store>.value(
+            value: _PlansInitialLoadingStore(),
+            child: const HomePage(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('正在同步你的计划...'), findsOneWidget);
+    expect(find.text('还没有自己的计划哦～'), findsNothing);
+  });
+
+  testWidgets('HomePage keeps cached plans visible while syncing', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<Store>.value(
+            value: _PlansRefreshingWithCacheStore(),
+            child: const HomePage(),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('同步中'), findsOneWidget);
+    expect(find.text('正在同步'), findsNothing);
+    expect(find.text('缓存里的计划'), findsOneWidget);
+  });
+
   testWidgets('HomePage hides plans that start tomorrow', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -1698,6 +1735,29 @@ class _RefreshSmokeStore extends Store {
 
   @override
   Future<void> markReceivedRemindersRead() async {}
+}
+
+class _PlansInitialLoadingStore extends _RefreshSmokeStore {
+  @override
+  bool get isInitialPlansLoading => true;
+}
+
+class _PlansRefreshingWithCacheStore extends _HomeDateFilterStore {
+  @override
+  bool get hasHydratedPlanCache => true;
+
+  @override
+  bool get isRefreshingPlans => true;
+
+  @override
+  List<Plan> getPlans() => [
+    _homePlan(
+      id: 'cached-home-plan',
+      title: '缓存里的计划',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+    ),
+  ];
 }
 
 class _HomeDateFilterStore extends _RefreshSmokeStore {

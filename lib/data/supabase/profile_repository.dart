@@ -30,6 +30,9 @@ class ProfileRepository {
         inviteCode: data['invite_code'] as String? ?? '',
         isBound: false,
         avatarUrl: await _avatarDisplayUrl(data['avatar_url']),
+        currentUserId: userId,
+        avatarPath: _avatarPath(data['avatar_url']),
+        profileUpdatedAt: _dateTimeFromValue(data['updated_at']),
       );
     }
 
@@ -41,9 +44,10 @@ class ProfileRepository {
         : couple['user_a_id'] as String;
     final partnerProfile = await _supabase
         .from('profiles')
-        .select('nickname, avatar_url')
+        .select('user_id, nickname, avatar_url, updated_at')
         .eq('user_id', partnerId)
         .maybeSingle();
+    final partnerAvatarPath = _avatarPath(partnerProfile?['avatar_url']);
 
     return Profile(
       name: data['nickname'] as String? ?? '一起进步的你',
@@ -54,6 +58,15 @@ class ProfileRepository {
       avatarUrl: await _avatarDisplayUrl(data['avatar_url']),
       partnerAvatarUrl: await _avatarDisplayUrl(partnerProfile?['avatar_url']),
       anniversaryDate: anniversaryDate,
+      currentUserId: userId,
+      partnerUserId: partnerProfile?['user_id'] as String? ?? partnerId,
+      coupleSpaceId: couple['id'] as String?,
+      avatarPath: _avatarPath(data['avatar_url']),
+      partnerAvatarPath: partnerAvatarPath,
+      profileUpdatedAt: _dateTimeFromValue(data['updated_at']),
+      partnerProfileUpdatedAt: _dateTimeFromValue(
+        partnerProfile?['updated_at'],
+      ),
     );
   }
 
@@ -208,7 +221,7 @@ class ProfileRepository {
     try {
       data = await _supabase
           .from('couples')
-          .select('user_a_id, user_b_id, created_at, anniversary_date')
+          .select('id, user_a_id, user_b_id, created_at, anniversary_date')
           .eq('status', 'active')
           .or('user_a_id.eq.$userId,user_b_id.eq.$userId')
           .maybeSingle();
@@ -216,7 +229,7 @@ class ProfileRepository {
       if (!_isMissingAnniversaryDateColumn(error)) rethrow;
       data = await _supabase
           .from('couples')
-          .select('user_a_id, user_b_id, created_at')
+          .select('id, user_a_id, user_b_id, created_at')
           .eq('status', 'active')
           .or('user_a_id.eq.$userId,user_b_id.eq.$userId')
           .maybeSingle();
@@ -321,6 +334,15 @@ class ProfileRepository {
     } on StorageException {
       return null;
     }
+  }
+
+  String? _avatarPath(Object? storedValue) {
+    final value = (storedValue as String?)?.trim();
+    if (value == null || value.isEmpty) return null;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return null;
+    }
+    return value;
   }
 
   ReminderSettings _settingsFromJson(Object? raw) {
