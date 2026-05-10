@@ -47,6 +47,14 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
   DateTime _selectedDate = _todayOnly();
 
   @override
+  void didUpdateWidget(covariant PlanListScaffold oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_filterIndex >= widget.filterOptions.length) {
+      _filterIndex = 0;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final datePlans = widget.plans
         .where((plan) => plan.isVisibleOnDate(_selectedDate))
@@ -142,6 +150,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     if (!canDelete) return tile;
 
     return _SwipeDeletePlanTile(
+      key: ValueKey('swipe-delete-${plan.id}'),
       onDelete: () => _confirmDeletePlan(plan),
       child: tile,
     );
@@ -227,12 +236,42 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
   }
 
   List<Plan> _applyFilter(List<Plan> plans, int index) {
-    return switch (index) {
-      0 => plans,
-      1 => plans.where((p) => !p.isEnded && !_isDoneForFilter(p)).toList(),
-      2 => plans.where(_isDoneForFilter).toList(),
-      _ => plans,
+    return switch (_filterForIndex(index)) {
+      _PlanFilter.all => plans,
+      _PlanFilter.pending => plans.where(_isPendingForFilter).toList(),
+      _PlanFilter.unfinished => plans.where(_isUnfinishedForFilter).toList(),
+      _PlanFilter.completed => plans.where(_isDoneForFilter).toList(),
     };
+  }
+
+  _PlanFilter _filterForIndex(int index) {
+    if (index < 0 || index >= widget.filterOptions.length) {
+      return _PlanFilter.all;
+    }
+
+    return switch (widget.filterOptions[index]) {
+      '待打卡' => _PlanFilter.pending,
+      '未完成' => _PlanFilter.unfinished,
+      '已完成' => _PlanFilter.completed,
+      _ => _PlanFilter.all,
+    };
+  }
+
+  bool _isPendingForFilter(Plan plan) {
+    if (plan.isEnded && !plan.isCompletedOnceToday) return false;
+
+    return !_isDoneForFilter(plan) && !_isUnfinishedForFilter(plan);
+  }
+
+  bool _isUnfinishedForFilter(Plan plan) {
+    if (_isPastMissed(plan)) return true;
+
+    if (plan.owner == PlanOwner.together) {
+      return plan.isCurrentUserIncompleteOn(_selectedDate) ||
+          plan.isPartnerIncompleteOn(_selectedDate);
+    }
+
+    return _isIncompleteForPlanOwner(plan);
   }
 
   bool _isDoneForFilter(Plan plan) {
@@ -359,7 +398,11 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
 }
 
 class _SwipeDeletePlanTile extends StatefulWidget {
-  const _SwipeDeletePlanTile({required this.child, required this.onDelete});
+  const _SwipeDeletePlanTile({
+    super.key,
+    required this.child,
+    required this.onDelete,
+  });
 
   final Widget child;
   final VoidCallback onDelete;
@@ -374,17 +417,13 @@ class _SwipeDeletePlanTileState extends State<_SwipeDeletePlanTile> {
 
   @override
   Widget build(BuildContext context) {
-    final actionAlignment = _dragOffset >= 0
-        ? Alignment.centerLeft
-        : Alignment.centerRight;
-
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: Stack(
         children: [
           Positioned.fill(
             child: Align(
-              alignment: actionAlignment,
+              alignment: Alignment.centerRight,
               child: Semantics(
                 button: true,
                 label: '删除计划',
@@ -427,7 +466,7 @@ class _SwipeDeletePlanTileState extends State<_SwipeDeletePlanTile> {
             onHorizontalDragUpdate: (details) {
               setState(() {
                 _dragOffset = (_dragOffset + details.delta.dx)
-                    .clamp(-_actionWidth, _actionWidth)
+                    .clamp(-_actionWidth, 0)
                     .toDouble();
               });
             },
@@ -556,38 +595,47 @@ class _FilterBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (var i = 0; i < options.length; i++) ...[
-          GestureDetector(
-            onTap: () => onChanged(i),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                color: selectedIndex == i
-                    ? AppColors.lightPink.withValues(alpha: 0.64)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(999),
-              ),
-              child: Text(
-                options[i],
-                style: AppTextStyles.body.copyWith(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            GestureDetector(
+              onTap: () => onChanged(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                curve: Curves.easeOutCubic,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
                   color: selectedIndex == i
-                      ? AppColors.deepPink
-                      : AppColors.secondaryText,
-                  fontWeight: FontWeight.w900,
+                      ? AppColors.lightPink.withValues(alpha: 0.64)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  options[i],
+                  style: AppTextStyles.body.copyWith(
+                    color: selectedIndex == i
+                        ? AppColors.deepPink
+                        : AppColors.secondaryText,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
             ),
-          ),
-          if (i < options.length - 1) const SizedBox(width: 4),
+            if (i < options.length - 1) const SizedBox(width: 4),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
+
+enum _PlanFilter { all, pending, unfinished, completed }
 
 class _EmptyPlansHint extends StatelessWidget {
   const _EmptyPlansHint();

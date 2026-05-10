@@ -103,6 +103,23 @@ void main() {
     expect(find.text('明天考试'), findsNothing);
   });
 
+  testWidgets('HomePage promotes unfinished own plans before completed ones', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: _HomeProgressionStore(),
+          child: const HomePage(),
+        ),
+      ),
+    );
+
+    expect(find.text('第一项待打卡'), findsOneWidget);
+    expect(find.text('后面的待打卡'), findsOneWidget);
+    expect(find.text('中间已完成'), findsNothing);
+  });
+
   testWidgets('HomePage calendar art opens growth records', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -313,6 +330,84 @@ void main() {
     expect(find.text('选择查看日期'), findsOneWidget);
   });
 
+  testWidgets('PlanListScaffold filters unfinished plans separately', (
+    tester,
+  ) async {
+    final today = _todayOnly();
+    final pendingPlan = _testPlan(
+      startDate: today,
+      endDate: today,
+      repeatType: PlanRepeatType.once,
+    ).copyWith(id: 'pending-plan', title: '等待完成计划');
+    final unfinishedPlan =
+        _testPlan(
+          startDate: today,
+          endDate: today,
+          repeatType: PlanRepeatType.once,
+        ).copyWith(
+          id: 'unfinished-plan',
+          title: '今天未完成计划',
+          checkins: [
+            CheckinRecord(
+              date: DateTime.now(),
+              completed: false,
+              mood: CheckinMood.normal,
+              note: '今天没完成',
+            ),
+          ],
+        );
+    final completedPlan =
+        _testPlan(
+          startDate: today,
+          endDate: today,
+          repeatType: PlanRepeatType.once,
+        ).copyWith(
+          id: 'completed-plan',
+          title: '今天已完成计划',
+          completedDays: 1,
+          doneToday: true,
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
+          plans: [pendingPlan, unfinishedPlan, completedPlan],
+          planCountLabel: '共 3 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('等待完成计划'), findsOneWidget);
+    expect(find.text('今天未完成计划'), findsOneWidget);
+    expect(find.text('今天已完成计划'), findsOneWidget);
+
+    await tester.tap(find.text('未完成').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('等待完成计划'), findsNothing);
+    expect(find.text('今天未完成计划'), findsOneWidget);
+    expect(find.text('今天已完成计划'), findsNothing);
+
+    await tester.tap(find.text('待打卡'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('等待完成计划'), findsOneWidget);
+    expect(find.text('今天未完成计划'), findsNothing);
+    expect(find.text('今天已完成计划'), findsNothing);
+
+    await tester.tap(find.text('已完成'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('等待完成计划'), findsNothing);
+    expect(find.text('今天未完成计划'), findsNothing);
+    expect(find.text('今天已完成计划'), findsOneWidget);
+  });
+
   testWidgets('PlanListScaffold asks before deleting a swiped plan', (
     tester,
   ) async {
@@ -338,7 +433,7 @@ void main() {
       ),
     );
 
-    await tester.drag(find.text('测试计划'), const Offset(120, 0));
+    await tester.drag(find.text('测试计划'), const Offset(-120, 0));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('删除'));
     await tester.pumpAndSettle();
@@ -349,6 +444,64 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(deletedPlanId, plan.id);
+  });
+
+  testWidgets('PlanListScaffold resets swipe offset after deleting a plan', (
+    tester,
+  ) async {
+    final plans = [
+      _testPlan(
+        startDate: _todayOnly(),
+        endDate: _todayOnly(),
+        repeatType: PlanRepeatType.once,
+      ).copyWith(id: 'first-plan', title: '第一条计划'),
+      _testPlan(
+        startDate: _todayOnly(),
+        endDate: _todayOnly(),
+        repeatType: PlanRepeatType.once,
+      ).copyWith(id: 'second-plan', title: '第二条计划'),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) => PlanListScaffold(
+            title: '我的计划',
+            filterOptions: const ['全部', '待打卡', '已完成'],
+            plans: plans,
+            planCountLabel: '共 ${plans.length} 个计划',
+            owner: PlanOwner.me,
+            onAdd: () {},
+            onTapPlan: (_) {},
+            onDeletePlan: (item) async {
+              setState(() {
+                plans.removeWhere((plan) => plan.id == item.id);
+              });
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.drag(find.text('第一条计划'), const Offset(-120, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('删除').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, '删除'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('第一条计划'), findsNothing);
+    expect(find.text('第二条计划'), findsOneWidget);
+    final containers = tester.widgetList<AnimatedContainer>(
+      find.ancestor(
+        of: find.text('第二条计划'),
+        matching: find.byType(AnimatedContainer),
+      ),
+    );
+    final swipeContainer = containers.firstWhere(
+      (container) => container.transform != null,
+    );
+    expect(swipeContainer.transform!.storage[12], 0);
   });
 
   testWidgets('GrowTogether shell switches between the five tabs', (
@@ -1450,11 +1603,54 @@ class _HomeDateFilterStore extends _RefreshSmokeStore {
   }
 }
 
+class _HomeProgressionStore extends _RefreshSmokeStore {
+  final List<Plan> _plans = [
+    _homePlan(
+      id: 'pending-front',
+      title: '第一项待打卡',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+    ),
+    _homePlan(
+      id: 'completed-middle',
+      title: '中间已完成',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      doneToday: true,
+    ),
+    _homePlan(
+      id: 'pending-behind',
+      title: '后面的待打卡',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+    ),
+  ];
+
+  @override
+  List<Plan> getPlans() => List.unmodifiable(_plans);
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      _plans.where((plan) => plan.owner == owner).toList();
+
+  @override
+  List<Plan> getAllPlans() => List.unmodifiable(_plans);
+
+  @override
+  Plan? getPlanById(String id) {
+    for (final plan in _plans) {
+      if (plan.id == id) return plan;
+    }
+    return null;
+  }
+}
+
 Plan _homePlan({
   required String id,
   required String title,
   required DateTime startDate,
   required DateTime endDate,
+  bool doneToday = false,
 }) {
   return Plan(
     id: id,
@@ -1463,9 +1659,9 @@ Plan _homePlan({
     owner: PlanOwner.me,
     iconKey: 'book',
     minutes: 20,
-    completedDays: 0,
+    completedDays: doneToday ? 1 : 0,
     totalDays: 1,
-    doneToday: false,
+    doneToday: doneToday,
     color: Colors.pink,
     dailyTask: title,
     startDate: startDate,

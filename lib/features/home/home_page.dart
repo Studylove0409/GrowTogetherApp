@@ -55,6 +55,7 @@ class HomePage extends StatelessWidget {
             _HomePlanSection(
               title: '我的今日计划',
               plans: myPlans,
+              prioritizeActionablePlans: true,
               emptyMessage: '还没有自己的计划哦～',
               emptyActionLabel: '写下一个小目标',
               onViewAll: () => Navigator.of(context).push(
@@ -107,6 +108,16 @@ bool _isTodayPlan(Plan plan) {
   return plan.isScheduledOnDate(DateTime.now());
 }
 
+bool _needsTodayAction(Plan plan) {
+  if (plan.isOverdue) return true;
+
+  return switch (plan.owner) {
+    PlanOwner.me => !plan.doneToday,
+    PlanOwner.partner => !plan.partnerDoneToday,
+    PlanOwner.together => !plan.doneToday || !plan.partnerDoneToday,
+  };
+}
+
 // ========================= 首页计划区块 =========================
 
 class _HomePlanSection extends StatelessWidget {
@@ -115,6 +126,7 @@ class _HomePlanSection extends StatelessWidget {
     required this.plans,
     required this.emptyMessage,
     this.emptyActionLabel,
+    this.prioritizeActionablePlans = false,
     required this.onViewAll,
     required this.onPlanTap,
     this.onEmptyAction,
@@ -124,6 +136,7 @@ class _HomePlanSection extends StatelessWidget {
   final List<Plan> plans;
   final String emptyMessage;
   final String? emptyActionLabel;
+  final bool prioritizeActionablePlans;
   final VoidCallback onViewAll;
   final ValueChanged<Plan> onPlanTap;
   final VoidCallback? onEmptyAction;
@@ -144,7 +157,9 @@ class _HomePlanSection extends StatelessWidget {
       );
     }
 
-    final visible = plans.take(2).toList();
+    final visible = prioritizeActionablePlans
+        ? _prioritizedVisiblePlans(plans)
+        : plans.take(2).toList();
 
     return Column(
       children: [
@@ -168,6 +183,13 @@ class _HomePlanSection extends StatelessWidget {
       ],
     );
   }
+}
+
+List<Plan> _prioritizedVisiblePlans(List<Plan> plans) {
+  final actionable = plans.where(_needsTodayAction).toList();
+  final completed = plans.where((plan) => !_needsTodayAction(plan)).toList();
+
+  return [...actionable, ...completed].take(2).toList();
 }
 
 // ========================= 顶部头部 =========================

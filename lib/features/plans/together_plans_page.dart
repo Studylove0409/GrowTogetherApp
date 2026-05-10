@@ -21,7 +21,7 @@ class TogetherPlansPage extends StatelessWidget {
     final allPlans = store.getPlansByOwner(PlanOwner.together);
     return PlanListScaffold(
       title: '共同计划',
-      filterOptions: const ['全部', '待打卡', '已完成'],
+      filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
       plans: allPlans,
       planCountLabel: '共 ${allPlans.length} 个计划',
       owner: PlanOwner.together,

@@ -15,7 +15,7 @@ class PartnerPlansPage extends StatelessWidget {
     final allPlans = store.getPlansByOwner(PlanOwner.partner);
     return PlanListScaffold(
       title: 'TA 的计划',
-      filterOptions: const ['全部', '待打卡', '已完成'],
+      filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
       plans: allPlans,
       planCountLabel: '共 ${allPlans.length} 个计划',
       owner: PlanOwner.partner,
