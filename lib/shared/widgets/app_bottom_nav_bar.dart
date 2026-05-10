@@ -14,6 +14,10 @@ class AppBottomNavBar extends StatelessWidget {
   final ValueChanged<int> onSelected;
   final int reminderBadgeCount;
 
+  static const double height = 64;
+  static const double bottomGap = 20;
+  static const double horizontalMargin = 24;
+
   static const _items = [
     _BottomNavItem(
       label: '首页',
@@ -46,23 +50,31 @@ class AppBottomNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return RepaintBoundary(
       child: Material(
+        elevation: 0,
         color: Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
         clipBehavior: Clip.antiAlias,
-        child: Container(
-          height: 78,
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 7),
+        child: Ink(
+          height: height,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
           decoration: BoxDecoration(
             color: AppColors.paper,
-            borderRadius: BorderRadius.circular(32),
+            borderRadius: BorderRadius.circular(999),
             border: Border.all(
-              color: Colors.white.withValues(alpha: 0.92),
-              width: 2,
+              color: Colors.white.withValues(alpha: 0.88),
+              width: 1.5,
             ),
             boxShadow: [
               BoxShadow(
                 color: AppColors.primary.withValues(alpha: 0.14),
-                blurRadius: 22,
-                offset: const Offset(0, 10),
+                blurRadius: 24,
+                spreadRadius: 1,
+                offset: const Offset(0, 12),
+              ),
+              BoxShadow(
+                color: AppColors.deepPink.withValues(alpha: 0.06),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
@@ -70,74 +82,18 @@ class AppBottomNavBar extends StatelessWidget {
             builder: (context, constraints) {
               final itemWidth = constraints.maxWidth / _items.length;
 
-              return Stack(
+              return Row(
                 children: [
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOutCubic,
-                    left: itemWidth * selectedIndex,
-                    top: 0,
-                    bottom: 0,
-                    width: itemWidth,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: AppColors.lightPink.withValues(alpha: 0.78),
-                        borderRadius: BorderRadius.circular(26),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.90),
-                          width: 1.5,
-                        ),
+                  for (var index = 0; index < _items.length; index++)
+                    SizedBox(
+                      width: itemWidth,
+                      child: _BottomNavButton(
+                        item: _items[index],
+                        selected: selectedIndex == index,
+                        badgeCount: index == 3 ? reminderBadgeCount : 0,
+                        onTap: () => onSelected(index),
                       ),
                     ),
-                  ),
-                  Row(
-                    children: [
-                      for (var index = 0; index < _items.length; index++)
-                        Expanded(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            clipBehavior: Clip.none,
-                            children: [
-                              _BottomNavButton(
-                                item: _items[index],
-                                selected: selectedIndex == index,
-                                onTap: () => onSelected(index),
-                              ),
-                              if (index == 3 && reminderBadgeCount > 0)
-                                Positioned(
-                                  top: 4,
-                                  right: itemWidth * 0.22,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 5,
-                                      vertical: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.deepPink,
-                                      borderRadius: BorderRadius.circular(999),
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 16,
-                                      minHeight: 16,
-                                    ),
-                                    child: Text(
-                                      reminderBadgeCount > 99
-                                          ? '99+'
-                                          : '$reminderBadgeCount',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
                 ],
               );
             },
@@ -152,16 +108,20 @@ class _BottomNavButton extends StatelessWidget {
   const _BottomNavButton({
     required this.item,
     required this.selected,
+    required this.badgeCount,
     required this.onTap,
   });
 
   final _BottomNavItem item;
   final bool selected;
+  final int badgeCount;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.deepPink : AppColors.secondaryText;
+    final color = selected
+        ? AppColors.deepPink
+        : AppColors.secondaryText.withValues(alpha: 0.76);
 
     return Tooltip(
       message: item.label,
@@ -169,27 +129,96 @@ class _BottomNavButton extends StatelessWidget {
         button: true,
         selected: selected,
         label: item.label,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
+        child: InkWell(
           onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          splashColor: AppColors.lightPink.withValues(alpha: 0.34),
+          highlightColor: AppColors.lightPink.withValues(alpha: 0.18),
           child: SizedBox(
             height: double.infinity,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  selected ? item.selectedIcon : item.icon,
-                  size: 23,
-                  color: color,
+                AnimatedScale(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  scale: selected ? 1.08 : 1,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeOutCubic,
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppColors.lightPink.withValues(alpha: 0.82)
+                              : Colors.transparent,
+                          shape: BoxShape.circle,
+                          boxShadow: selected
+                              ? [
+                                  BoxShadow(
+                                    color: AppColors.primary.withValues(
+                                      alpha: 0.16,
+                                    ),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 5),
+                                  ),
+                                ]
+                              : const [],
+                        ),
+                        child: Icon(
+                          selected ? item.selectedIcon : item.icon,
+                          size: 22,
+                          color: color,
+                        ),
+                      ),
+                      if (badgeCount > 0)
+                        Positioned(
+                          top: -2,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.deepPink,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              badgeCount > 99 ? '99+' : '$badgeCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  item.label,
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
                   style: TextStyle(
                     color: color,
-                    fontSize: 12,
+                    fontSize: 10.5,
+                    height: 1,
                     fontWeight: selected ? FontWeight.w900 : FontWeight.w700,
                     letterSpacing: 0,
+                  ),
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
                   ),
                 ),
               ],

@@ -88,27 +88,49 @@ class _GrowTogetherShellState extends State<GrowTogetherShell>
       ),
     ];
 
+    final mediaQuery = MediaQuery.of(context);
+    final bottomSafeArea = mediaQuery.padding.bottom;
+    final dockAvoidanceInset =
+        AppBottomNavBar.height + AppBottomNavBar.bottomGap;
+    final contentMediaQuery = mediaQuery.copyWith(
+      padding: mediaQuery.padding.copyWith(
+        bottom: bottomSafeArea + dockAvoidanceInset,
+      ),
+    );
+
     return Scaffold(
+      extendBody: true,
       backgroundColor: AppColors.background,
-      body: IndexedStack(index: _selectedIndex, children: pages),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-        child: AppBottomNavBar(
-          selectedIndex: _selectedIndex,
-          onSelected: (index) {
-            if (index == _selectedIndex) return;
-            setState(() => _selectedIndex = index);
-            if (index == 2) {
-              unawaited(store.refreshFocusSessions());
-            }
-            if (index == 3) {
-              unawaited(store.refreshFocusSessions());
-              unawaited(store.refreshReminders());
-              unawaited(store.markReceivedRemindersRead());
-            }
-          },
-          reminderBadgeCount: reminderBadgeCount,
-        ),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: MediaQuery(
+              data: contentMediaQuery,
+              child: IndexedStack(index: _selectedIndex, children: pages),
+            ),
+          ),
+          Positioned(
+            left: AppBottomNavBar.horizontalMargin,
+            right: AppBottomNavBar.horizontalMargin,
+            bottom: bottomSafeArea + AppBottomNavBar.bottomGap,
+            child: AppBottomNavBar(
+              selectedIndex: _selectedIndex,
+              onSelected: (index) {
+                if (index == _selectedIndex) return;
+                setState(() => _selectedIndex = index);
+                if (index == 2) {
+                  unawaited(store.refreshFocusSessions());
+                }
+                if (index == 3) {
+                  unawaited(store.refreshFocusSessions());
+                  unawaited(store.refreshReminders());
+                  unawaited(store.markReceivedRemindersRead());
+                }
+              },
+              reminderBadgeCount: reminderBadgeCount,
+            ),
+          ),
+        ],
       ),
     );
   }
