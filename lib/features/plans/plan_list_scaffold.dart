@@ -259,6 +259,11 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           ? ('未完成', AppColors.reminder, Icons.warning_rounded)
           : plan.isOverdue && _isToday(_selectedDate)
           ? ('已逾期', AppColors.reminder, Icons.warning_rounded)
+          : plan.isCurrentUserIncompleteOn(_selectedDate)
+          ? ('我未完成', AppColors.reminder, Icons.error_outline_rounded)
+          : plan.isPartnerIncompleteOn(_selectedDate) &&
+                plan.isCurrentUserDoneOn(_selectedDate)
+          ? ('TA 未完成', AppColors.reminder, Icons.error_outline_rounded)
           : _togetherStatusUI(status);
       return PlanListTile(
         plan: plan,
@@ -280,6 +285,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
       );
     }
     final done = _isDoneForPlanOwner(plan);
+    final incomplete = _isIncompleteForPlanOwner(plan);
     final pastMissed = _isPastMissed(plan);
     return PlanListTile(
       plan: plan,
@@ -289,14 +295,20 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           ? '已逾期'
           : done
           ? '已打卡'
+          : incomplete
+          ? '未完成'
           : '待打卡',
       statusColor: pastMissed || (plan.isOverdue && _isToday(_selectedDate))
           ? AppColors.reminder
           : done
           ? AppColors.successText
+          : incomplete
+          ? AppColors.reminder
           : AppColors.deepPink,
       statusIcon: done
           ? Icons.check_circle_rounded
+          : incomplete
+          ? Icons.error_outline_rounded
           : Icons.radio_button_unchecked_rounded,
       showProgress: true,
       onTap: () => widget.onTapPlan(plan),
@@ -309,6 +321,14 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
       PlanOwner.partner => plan.isPartnerDoneOn(_selectedDate),
       PlanOwner.together =>
         plan.togetherStatusOn(_selectedDate) == TogetherStatus.bothDone,
+    };
+  }
+
+  bool _isIncompleteForPlanOwner(Plan plan) {
+    return switch (plan.owner) {
+      PlanOwner.me => plan.isCurrentUserIncompleteOn(_selectedDate),
+      PlanOwner.partner => plan.isPartnerIncompleteOn(_selectedDate),
+      PlanOwner.together => plan.isCurrentUserIncompleteOn(_selectedDate),
     };
   }
 

@@ -980,6 +980,42 @@ void main() {
     expect(find.text('提醒已经飞过去啦～'), findsOneWidget);
   });
 
+  testWidgets('PlanDetailPage shows incomplete checkin as not completed', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '未完成状态测试计划',
+      isShared: false,
+      dailyTask: '记录今天没有完成',
+      startDate: _daysFromToday(-1),
+      endDate: _daysFromToday(6),
+      reminderTime: null,
+      repeatType: PlanRepeatType.daily,
+      hasDateRange: true,
+    );
+
+    await store.saveCheckin(
+      planId: plan.id,
+      completed: false,
+      mood: CheckinMood.normal,
+      note: '今天没完成',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider<Store>.value(
+          value: store,
+          child: PlanDetailPage(planId: plan.id),
+        ),
+      ),
+    );
+
+    expect(find.text('未完成'), findsWidgets);
+    expect(find.text('待打卡'), findsNothing);
+    expect(find.text('修改打卡'), findsOneWidget);
+  });
+
   testWidgets('PlanDetailPage does not remind for a not-started plan', (
     tester,
   ) async {

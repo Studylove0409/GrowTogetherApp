@@ -505,18 +505,47 @@ class _HeartBubble extends StatelessWidget {
 String _statusLabel(Plan plan) {
   if (plan.isOverdue) return '已逾期';
   return switch (plan.owner) {
-    PlanOwner.partner => plan.partnerDoneToday ? 'TA已完成' : 'TA待打卡',
-    PlanOwner.together => plan.doneToday ? '我已打卡' : '待打卡',
-    PlanOwner.me => plan.doneToday ? '已完成' : '待打卡',
+    PlanOwner.partner =>
+      plan.partnerDoneToday
+          ? 'TA已完成'
+          : plan.hasPartnerCheckinToday
+          ? 'TA未完成'
+          : 'TA待打卡',
+    PlanOwner.together =>
+      plan.doneToday
+          ? '我已打卡'
+          : plan.hasCurrentUserCheckinToday
+          ? '我未完成'
+          : '待打卡',
+    PlanOwner.me =>
+      plan.doneToday
+          ? '已完成'
+          : plan.hasCurrentUserCheckinToday
+          ? '未完成'
+          : '待打卡',
   };
 }
 
 Color _statusColor(Plan plan) {
   if (plan.isOverdue) return AppColors.reminder;
+  if (plan.owner == PlanOwner.partner && plan.hasPartnerCheckinToday) {
+    return plan.partnerDoneToday ? AppColors.successText : AppColors.reminder;
+  }
+  if (plan.hasCurrentUserCheckinToday && !plan.isDoneForCurrentUser) {
+    return AppColors.reminder;
+  }
   return plan.isDoneForCurrentUser ? AppColors.successText : AppColors.deepPink;
 }
 
 IconData _statusIcon(Plan plan) {
+  if (plan.owner == PlanOwner.partner &&
+      plan.hasPartnerCheckinToday &&
+      !plan.partnerDoneToday) {
+    return Icons.error_outline_rounded;
+  }
+  if (plan.hasCurrentUserCheckinToday && !plan.isDoneForCurrentUser) {
+    return Icons.error_outline_rounded;
+  }
   return plan.isDoneForCurrentUser
       ? Icons.check_circle_rounded
       : Icons.radio_button_unchecked_rounded;

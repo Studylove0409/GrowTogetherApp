@@ -194,6 +194,21 @@ class Plan {
     );
   }
 
+  bool get hasCurrentUserCheckinToday =>
+      hasCurrentUserCheckinOn(DateTime.now());
+
+  bool hasCurrentUserCheckinOn(DateTime date) {
+    if (_isSameDate(date, DateTime.now()) && isDoneForCurrentUser) return true;
+    return checkins.any(
+      (record) =>
+          record.actor == CheckinActor.me && _isSameDate(record.date, date),
+    );
+  }
+
+  bool isCurrentUserIncompleteOn(DateTime date) {
+    return hasCurrentUserCheckinOn(date) && !isCurrentUserDoneOn(date);
+  }
+
   bool isPartnerDoneOn(DateTime date) {
     if (_isSameDate(date, DateTime.now())) return partnerDoneToday;
     return checkins.any(
@@ -202,6 +217,21 @@ class Plan {
           record.completed &&
           _isSameDate(record.date, date),
     );
+  }
+
+  bool get hasPartnerCheckinToday => hasPartnerCheckinOn(DateTime.now());
+
+  bool hasPartnerCheckinOn(DateTime date) {
+    if (_isSameDate(date, DateTime.now()) && partnerDoneToday) return true;
+    return checkins.any(
+      (record) =>
+          record.actor == CheckinActor.partner &&
+          _isSameDate(record.date, date),
+    );
+  }
+
+  bool isPartnerIncompleteOn(DateTime date) {
+    return hasPartnerCheckinOn(date) && !isPartnerDoneOn(date);
   }
 
   TogetherStatus togetherStatusOn(DateTime date) {

@@ -174,7 +174,7 @@ class PlanDetailPage extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: PrimaryPillButton(
-              label: '打卡',
+              label: plan.hasCurrentUserCheckinToday ? '修改打卡' : '打卡',
               icon: Icons.check_circle_rounded,
               height: 52,
               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -230,7 +230,7 @@ class PlanDetailPage extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: PrimaryButton(
-            label: '去打卡',
+            label: plan.hasCurrentUserCheckinToday ? '修改打卡' : '去打卡',
             icon: Icons.check_circle_rounded,
             onPressed: plan.canCurrentUserCheckin
                 ? () => _openCheckinPage(context, plan)
@@ -956,6 +956,8 @@ class _TodayActionCard extends StatelessWidget {
                     ? '${plan.completedDays}天'
                     : plan.isDoneForCurrentUser
                     ? '已完成'
+                    : plan.hasCurrentUserCheckinToday
+                    ? '未完成'
                     : '待完成',
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -1015,7 +1017,8 @@ class _CoupleStatusPanel extends StatelessWidget {
           Expanded(
             child: _PersonStatusTile(
               label: '我',
-              done: plan.doneToday,
+              completed: plan.doneToday,
+              checkedIn: plan.hasCurrentUserCheckinToday,
               color: AppColors.deepPink,
             ),
           ),
@@ -1023,7 +1026,8 @@ class _CoupleStatusPanel extends StatelessWidget {
           Expanded(
             child: _PersonStatusTile(
               label: 'TA',
-              done: plan.partnerDoneToday,
+              completed: plan.partnerDoneToday,
+              checkedIn: plan.hasPartnerCheckinToday,
               color: AppColors.successText,
             ),
           ),
@@ -1036,17 +1040,28 @@ class _CoupleStatusPanel extends StatelessWidget {
 class _PersonStatusTile extends StatelessWidget {
   const _PersonStatusTile({
     required this.label,
-    required this.done,
+    required this.completed,
+    required this.checkedIn,
     required this.color,
   });
 
   final String label;
-  final bool done;
+  final bool completed;
+  final bool checkedIn;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = done ? color : AppColors.secondaryText;
+    final effectiveColor = completed
+        ? color
+        : checkedIn
+        ? AppColors.reminder
+        : AppColors.secondaryText;
+    final statusText = completed
+        ? '已打卡'
+        : checkedIn
+        ? '未完成'
+        : '待打卡';
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -1060,8 +1075,10 @@ class _PersonStatusTile extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            done
+            completed
                 ? Icons.check_circle_rounded
+                : checkedIn
+                ? Icons.error_outline_rounded
                 : Icons.radio_button_unchecked_rounded,
             color: effectiveColor,
             size: 22,
@@ -1069,7 +1086,7 @@ class _PersonStatusTile extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
-              '$label${done ? '已打卡' : '待打卡'}',
+              '$label$statusText',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTextStyles.body.copyWith(
@@ -1175,6 +1192,12 @@ class _MetricTile extends StatelessWidget {
               color: AppColors.successText,
               icon: Icons.check_circle_rounded,
             )
+          : plan.hasCurrentUserCheckinToday
+          ? (
+              label: '未完成',
+              color: AppColors.reminder,
+              icon: Icons.error_outline_rounded,
+            )
           : (
               label: '待打卡',
               color: AppColors.deepPink,
@@ -1186,6 +1209,12 @@ class _MetricTile extends StatelessWidget {
               label: 'TA 已打卡',
               color: AppColors.successText,
               icon: Icons.check_circle_rounded,
+            )
+          : plan.hasPartnerCheckinToday
+          ? (
+              label: 'TA 未完成',
+              color: AppColors.reminder,
+              icon: Icons.error_outline_rounded,
             )
           : (
               label: 'TA 待打卡',
@@ -1204,9 +1233,13 @@ class _MetricTile extends StatelessWidget {
         icon: Icons.hourglass_top_rounded,
       ),
       TogetherStatus.meNotDone => (
-        label: '我待打卡',
-        color: AppColors.deepPink,
-        icon: Icons.radio_button_unchecked_rounded,
+        label: plan.hasCurrentUserCheckinToday ? '我未完成' : '我待打卡',
+        color: plan.hasCurrentUserCheckinToday
+            ? AppColors.reminder
+            : AppColors.deepPink,
+        icon: plan.hasCurrentUserCheckinToday
+            ? Icons.error_outline_rounded
+            : Icons.radio_button_unchecked_rounded,
       ),
     },
   };
