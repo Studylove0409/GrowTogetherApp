@@ -6,7 +6,6 @@ import 'package:shorebird_code_push/shorebird_code_push.dart'
     show UpdateException, UpdateStatus;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/theme/app_assets.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -24,8 +23,8 @@ import '../../data/supabase/profile_repository.dart';
 import '../../shared/widgets/app_card.dart';
 import '../../shared/widgets/app_scaffold.dart';
 import '../../shared/widgets/avatar_preview.dart';
+import '../../shared/widgets/cached_avatar.dart';
 import '../../shared/widgets/primary_button.dart';
-import '../../shared/widgets/sticker_asset.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({
@@ -110,7 +109,7 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
         _profileRepository.getCurrentProfile(),
         _accountRepository.getCurrentIdentity(),
       ]);
-      final profile = results[0] as Profile;
+      final profile = _mergeProfileWithStoreCache(results[0] as Profile);
       final account = results[1] as AccountIdentity;
       final invitations = profile.isBound
           ? const <CoupleInvitation>[]
@@ -168,6 +167,12 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
                     isBound: profile.isBound,
                     avatarUrl: profile.avatarUrl,
                     partnerAvatarUrl: profile.partnerAvatarUrl,
+                    avatarPath: profile.avatarPath,
+                    partnerAvatarPath: profile.partnerAvatarPath,
+                    currentUserId: profile.currentUserId,
+                    partnerUserId: profile.partnerUserId,
+                    profileUpdatedAt: profile.profileUpdatedAt,
+                    partnerProfileUpdatedAt: profile.partnerProfileUpdatedAt,
                     anniversaryDate: profile.anniversaryDate,
                     inviteCode: profile.inviteCode,
                     hasInviteError: hasError,
@@ -218,8 +223,59 @@ class _ProfilePageState extends State<ProfilePage> with WidgetsBindingObserver {
       inviteCode: '',
       isBound: false,
       avatarUrl: current.avatarUrl,
+      avatarPath: current.avatarPath,
+      currentUserId: current.currentUserId,
+      profileUpdatedAt: current.profileUpdatedAt,
       partnerAvatarUrl: null,
+      partnerAvatarPath: null,
+      partnerUserId: null,
+      coupleSpaceId: current.coupleSpaceId,
     );
+  }
+
+  Profile _mergeProfileWithStoreCache(Profile remote) {
+    final current = context.read<Store>().getProfile();
+    final keepCurrentAvatar = _shouldKeepCachedAvatar(
+      currentPath: current.avatarPath,
+      remotePath: remote.avatarPath,
+      currentUrl: current.avatarUrl,
+      remoteUrl: remote.avatarUrl,
+    );
+    final keepPartnerAvatar = _shouldKeepCachedAvatar(
+      currentPath: current.partnerAvatarPath,
+      remotePath: remote.partnerAvatarPath,
+      currentUrl: current.partnerAvatarUrl,
+      remoteUrl: remote.partnerAvatarUrl,
+    );
+
+    return remote.copyWith(
+      avatarUrl: keepCurrentAvatar ? current.avatarUrl : remote.avatarUrl,
+      avatarPath: keepCurrentAvatar ? current.avatarPath : remote.avatarPath,
+      profileUpdatedAt: keepCurrentAvatar
+          ? current.profileUpdatedAt
+          : remote.profileUpdatedAt,
+      partnerAvatarUrl: keepPartnerAvatar
+          ? current.partnerAvatarUrl
+          : remote.partnerAvatarUrl,
+      partnerAvatarPath: keepPartnerAvatar
+          ? current.partnerAvatarPath
+          : remote.partnerAvatarPath,
+      partnerProfileUpdatedAt: keepPartnerAvatar
+          ? current.partnerProfileUpdatedAt
+          : remote.partnerProfileUpdatedAt,
+    );
+  }
+
+  bool _shouldKeepCachedAvatar({
+    required String? currentPath,
+    required String? remotePath,
+    required String? currentUrl,
+    required String? remoteUrl,
+  }) {
+    if (remoteUrl != null && remoteUrl.trim().isNotEmpty) return false;
+    if (currentUrl == null || currentUrl.trim().isEmpty) return false;
+    if (remotePath == null || remotePath.trim().isEmpty) return true;
+    return currentPath != null && currentPath == remotePath;
   }
 
   _ProfilePageData get _fallbackProfileData => _ProfilePageData(
@@ -363,6 +419,12 @@ class _ProfileInfoCard extends StatefulWidget {
     required this.isBound,
     required this.avatarUrl,
     required this.partnerAvatarUrl,
+    required this.avatarPath,
+    required this.partnerAvatarPath,
+    required this.currentUserId,
+    required this.partnerUserId,
+    required this.profileUpdatedAt,
+    required this.partnerProfileUpdatedAt,
     required this.anniversaryDate,
     required this.inviteCode,
     required this.hasInviteError,
@@ -382,6 +444,12 @@ class _ProfileInfoCard extends StatefulWidget {
   final bool isBound;
   final String? avatarUrl;
   final String? partnerAvatarUrl;
+  final String? avatarPath;
+  final String? partnerAvatarPath;
+  final String? currentUserId;
+  final String? partnerUserId;
+  final DateTime? profileUpdatedAt;
+  final DateTime? partnerProfileUpdatedAt;
   final DateTime? anniversaryDate;
   final String inviteCode;
   final bool hasInviteError;
@@ -852,6 +920,10 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
         icon: _CuteAvatar(
           size: 72,
           imageUrl: widget.avatarUrl,
+          avatarPath: widget.avatarPath,
+          userId: widget.currentUserId,
+          updatedAt: widget.profileUpdatedAt,
+          label: widget.name,
           isUploading: _isSubmitting,
           shadowOpacity: 0.12,
           borderWidth: 4,
@@ -1082,6 +1154,12 @@ class _ProfileInfoCardState extends State<_ProfileInfoCard> {
           isBound: widget.isBound,
           avatarUrl: widget.avatarUrl,
           partnerAvatarUrl: widget.partnerAvatarUrl,
+          avatarPath: widget.avatarPath,
+          partnerAvatarPath: widget.partnerAvatarPath,
+          currentUserId: widget.currentUserId,
+          partnerUserId: widget.partnerUserId,
+          profileUpdatedAt: widget.profileUpdatedAt,
+          partnerProfileUpdatedAt: widget.partnerProfileUpdatedAt,
           accountLabel: accountLabel,
           accountColor: accountColor,
           isUploading: _isSubmitting,
@@ -1502,6 +1580,12 @@ class _ProfileHeader extends StatelessWidget {
     required this.isBound,
     required this.avatarUrl,
     required this.partnerAvatarUrl,
+    required this.avatarPath,
+    required this.partnerAvatarPath,
+    required this.currentUserId,
+    required this.partnerUserId,
+    required this.profileUpdatedAt,
+    required this.partnerProfileUpdatedAt,
     required this.accountLabel,
     required this.accountColor,
     required this.isUploading,
@@ -1515,6 +1599,12 @@ class _ProfileHeader extends StatelessWidget {
   final bool isBound;
   final String? avatarUrl;
   final String? partnerAvatarUrl;
+  final String? avatarPath;
+  final String? partnerAvatarPath;
+  final String? currentUserId;
+  final String? partnerUserId;
+  final DateTime? profileUpdatedAt;
+  final DateTime? partnerProfileUpdatedAt;
   final String accountLabel;
   final Color accountColor;
   final bool isUploading;
@@ -1555,6 +1645,14 @@ class _ProfileHeader extends StatelessWidget {
           _ProfileAvatarCluster(
             avatarUrl: avatarUrl,
             partnerAvatarUrl: partnerAvatarUrl,
+            avatarPath: avatarPath,
+            partnerAvatarPath: partnerAvatarPath,
+            currentUserId: currentUserId,
+            partnerUserId: partnerUserId,
+            currentUserName: name,
+            partnerName: partnerName,
+            profileUpdatedAt: profileUpdatedAt,
+            partnerProfileUpdatedAt: partnerProfileUpdatedAt,
             isBound: isBound,
             isUploading: isUploading,
             onAvatarTap: onAvatarTap,
@@ -1618,6 +1716,14 @@ class _ProfileAvatarCluster extends StatelessWidget {
   const _ProfileAvatarCluster({
     required this.avatarUrl,
     required this.partnerAvatarUrl,
+    required this.avatarPath,
+    required this.partnerAvatarPath,
+    required this.currentUserId,
+    required this.partnerUserId,
+    required this.currentUserName,
+    required this.partnerName,
+    required this.profileUpdatedAt,
+    required this.partnerProfileUpdatedAt,
     required this.isBound,
     required this.isUploading,
     required this.onAvatarTap,
@@ -1626,6 +1732,14 @@ class _ProfileAvatarCluster extends StatelessWidget {
 
   final String? avatarUrl;
   final String? partnerAvatarUrl;
+  final String? avatarPath;
+  final String? partnerAvatarPath;
+  final String? currentUserId;
+  final String? partnerUserId;
+  final String currentUserName;
+  final String partnerName;
+  final DateTime? profileUpdatedAt;
+  final DateTime? partnerProfileUpdatedAt;
   final bool isBound;
   final bool isUploading;
   final VoidCallback onAvatarTap;
@@ -1642,6 +1756,10 @@ class _ProfileAvatarCluster extends StatelessWidget {
           _CuteAvatar(
             size: 76,
             imageUrl: avatarUrl,
+            avatarPath: avatarPath,
+            userId: currentUserId,
+            updatedAt: profileUpdatedAt,
+            label: currentUserName,
             onTap: onAvatarTap,
             isUploading: isUploading,
             semanticLabel: '预览我的头像',
@@ -1654,6 +1772,10 @@ class _ProfileAvatarCluster extends StatelessWidget {
               child: _CuteAvatar(
                 size: 38,
                 imageUrl: partnerAvatarUrl,
+                avatarPath: partnerAvatarPath,
+                userId: partnerUserId,
+                updatedAt: partnerProfileUpdatedAt,
+                label: partnerName,
                 onTap: onPartnerAvatarTap,
                 semanticLabel: 'TA 的头像',
                 shadowOpacity: 0.12,
@@ -2382,6 +2504,10 @@ class _CuteAvatar extends StatelessWidget {
   const _CuteAvatar({
     this.size = 78,
     this.imageUrl,
+    this.avatarPath,
+    this.userId,
+    this.updatedAt,
+    this.label,
     this.onTap,
     this.isUploading = false,
     this.semanticLabel,
@@ -2391,6 +2517,10 @@ class _CuteAvatar extends StatelessWidget {
 
   final double size;
   final String? imageUrl;
+  final String? avatarPath;
+  final String? userId;
+  final DateTime? updatedAt;
+  final String? label;
   final VoidCallback? onTap;
   final bool isUploading;
   final String? semanticLabel;
@@ -2422,7 +2552,19 @@ class _CuteAvatar extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _AvatarImage(imageUrl: imageUrl, size: size),
+              CachedAvatar(
+                imageUrl: imageUrl,
+                cacheKey: avatarCacheKey(
+                  imageUrl: imageUrl,
+                  avatarPath: avatarPath,
+                  userId: userId,
+                  updatedAt: updatedAt,
+                ),
+                size: size,
+                backgroundColor: AppColors.lightPink,
+                iconColor: AppColors.deepPink,
+                label: label,
+              ),
               if (isUploading)
                 ColoredBox(
                   color: Colors.white.withValues(alpha: 0.58),
@@ -2452,44 +2594,6 @@ class _CuteAvatar extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: isUploading ? null : onTap,
         child: avatar,
-      ),
-    );
-  }
-}
-
-class _AvatarImage extends StatelessWidget {
-  const _AvatarImage({required this.imageUrl, required this.size});
-
-  final String? imageUrl;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl?.trim();
-    if (url == null || url.isEmpty) {
-      return StickerAsset(
-        assetPath: AppAssets.bearAvatar,
-        placeholderIcon: Icons.face_6_rounded,
-        width: size,
-        height: size,
-        borderRadius: 999,
-        backgroundColor: AppColors.lightPink,
-      );
-    }
-
-    return Image.network(
-      url,
-      width: size,
-      height: size,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      errorBuilder: (context, error, stackTrace) => StickerAsset(
-        assetPath: AppAssets.bearAvatar,
-        placeholderIcon: Icons.face_6_rounded,
-        width: size,
-        height: size,
-        borderRadius: 999,
-        backgroundColor: AppColors.lightPink,
       ),
     );
   }

@@ -84,14 +84,30 @@ class _PrimaryPillButtonState extends State<PrimaryPillButton> {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 140),
                   child: widget.isLoading
-                      ? const SizedBox(
+                      ? Row(
                           key: ValueKey('loading'),
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            color: Colors.white,
-                          ),
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.4,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              widget.label,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ],
                         )
                       : Row(
                           key: const ValueKey('label'),

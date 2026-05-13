@@ -25,7 +25,7 @@ String? avatarCacheKey({
   return null;
 }
 
-class CachedAvatar extends StatelessWidget {
+class CachedAvatar extends StatefulWidget {
   const CachedAvatar({
     super.key,
     required this.imageUrl,
@@ -36,6 +36,7 @@ class CachedAvatar extends StatelessWidget {
     this.label,
     this.icon = Icons.face_6_rounded,
     this.fadeDuration = const Duration(milliseconds: 220),
+    this.clearAvatar = false,
   });
 
   final String? imageUrl;
@@ -46,16 +47,59 @@ class CachedAvatar extends StatelessWidget {
   final String? label;
   final IconData icon;
   final Duration fadeDuration;
+  final bool clearAvatar;
+
+  @override
+  State<CachedAvatar> createState() => _CachedAvatarState();
+}
+
+class _CachedAvatarState extends State<CachedAvatar> {
+  String? _lastGoodImageUrl;
+  String? _lastGoodCacheKey;
+
+  @override
+  void initState() {
+    super.initState();
+    _rememberCurrentAvatar();
+  }
+
+  @override
+  void didUpdateWidget(covariant CachedAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.clearAvatar) {
+      _lastGoodImageUrl = null;
+      _lastGoodCacheKey = null;
+      return;
+    }
+    _rememberCurrentAvatar();
+  }
+
+  void _rememberCurrentAvatar() {
+    final url = widget.imageUrl?.trim();
+    if (url == null || url.isEmpty) return;
+    _lastGoodImageUrl = url;
+    _lastGoodCacheKey = widget.cacheKey;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final url = imageUrl?.trim();
+    final currentUrl = widget.imageUrl?.trim();
+    final url = widget.clearAvatar
+        ? null
+        : (currentUrl == null || currentUrl.isEmpty
+              ? _lastGoodImageUrl
+              : currentUrl);
+    final cacheKey = widget.clearAvatar
+        ? null
+        : (currentUrl == null || currentUrl.isEmpty
+              ? _lastGoodCacheKey
+              : widget.cacheKey);
     final fallback = _SoftAvatarFallback(
-      size: size,
-      backgroundColor: backgroundColor,
-      iconColor: iconColor,
-      label: label,
-      icon: icon,
+      size: widget.size,
+      backgroundColor: widget.backgroundColor,
+      iconColor: widget.iconColor,
+      label: widget.label,
+      icon: widget.icon,
     );
 
     if (url == null || url.isEmpty) return fallback;
@@ -63,10 +107,10 @@ class CachedAvatar extends StatelessWidget {
     return CachedNetworkImage(
       imageUrl: url,
       cacheKey: cacheKey,
-      width: size,
-      height: size,
+      width: widget.size,
+      height: widget.size,
       fit: BoxFit.cover,
-      fadeInDuration: fadeDuration,
+      fadeInDuration: widget.fadeDuration,
       fadeOutDuration: Duration.zero,
       placeholderFadeInDuration: Duration.zero,
       placeholder: (_, _) => fallback,
@@ -93,34 +137,38 @@ class _SoftAvatarFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final initial = _initialOf(label);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [
-            backgroundColor.withValues(alpha: 0.92),
-            AppColors.lavender.withValues(alpha: 0.24),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [
+              backgroundColor.withValues(alpha: 0.96),
+              AppColors.lavender.withValues(alpha: 0.34),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
-      ),
-      child: Center(
-        child: initial == null
-            ? Icon(
-                icon,
-                color: iconColor.withValues(alpha: 0.82),
-                size: size * 0.42,
-              )
-            : Text(
-                initial,
-                style: TextStyle(
-                  color: iconColor.withValues(alpha: 0.88),
-                  fontSize: size * 0.34,
-                  fontWeight: FontWeight.w900,
-                  height: 1,
+        child: Center(
+          child: initial == null
+              ? Icon(
+                  icon,
+                  color: iconColor.withValues(alpha: 0.82),
+                  size: size * 0.42,
+                )
+              : Text(
+                  initial,
+                  style: TextStyle(
+                    color: iconColor.withValues(alpha: 0.88),
+                    fontSize: size * 0.34,
+                    fontWeight: FontWeight.w900,
+                    height: 1,
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }

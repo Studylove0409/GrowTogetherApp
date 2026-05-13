@@ -753,6 +753,7 @@ class CoupleAvatarStack extends StatelessWidget {
     final stackHeight = size * 0.94;
     final primarySize = size * 0.72;
     final partnerSize = size * 0.72;
+    _debugHomeAvatars();
 
     return SizedBox(
       width: stackWidth,
@@ -849,14 +850,30 @@ class SoftAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasImage = imageUrl?.trim().isNotEmpty == true;
     final avatar = Container(
       width: size,
       height: size,
       padding: EdgeInsets.all(size * 0.04),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: hasImage
+            ? null
+            : LinearGradient(
+                colors: [
+                  backgroundColor.withValues(alpha: 0.96),
+                  AppColors.lavender.withValues(alpha: 0.30),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+        color: hasImage ? AppColors.surface : null,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 1.4),
+        border: Border.all(
+          color: hasImage
+              ? Colors.white
+              : AppColors.line.withValues(alpha: 0.72),
+          width: 1.4,
+        ),
         boxShadow: [
           BoxShadow(
             color: AppColors.primary.withValues(alpha: 0.16),
@@ -893,6 +910,41 @@ class SoftAvatar extends StatelessWidget {
         child: avatar,
       ),
     );
+  }
+}
+
+extension _CoupleAvatarStackDebug on CoupleAvatarStack {
+  void _debugHomeAvatars() {
+    assert(() {
+      debugPrint(
+        'Home avatar debug: '
+        'cachedCurrentAvatarUrl=${_avatarDebugValue(currentUserAvatarUrl)}, '
+        'cachedPartnerAvatarUrl=${_avatarDebugValue(partnerAvatarUrl)}, '
+        'remoteCurrentAvatarUrl=n/a, '
+        'remotePartnerAvatarUrl=n/a, '
+        'finalCurrentAvatarUrl=${_avatarDebugValue(currentUserAvatarUrl)}, '
+        'finalPartnerAvatarUrl=${_avatarDebugValue(partnerAvatarUrl)}, '
+        'currentAvatarSource=${_avatarSource(currentUserAvatarUrl, currentUserAvatarPath)}, '
+        'partnerAvatarSource=${_avatarSource(partnerAvatarUrl, partnerAvatarPath)}, '
+        'currentPath=${currentUserAvatarPath ?? 'null'}, '
+        'partnerPath=${partnerAvatarPath ?? 'null'}',
+      );
+      return true;
+    }());
+  }
+
+  String _avatarSource(String? url, String? path) {
+    if (url?.trim().isNotEmpty == true) return 'cache_or_remote';
+    if (path?.trim().isNotEmpty == true) return 'path_without_signed_url';
+    return 'fallback';
+  }
+
+  String _avatarDebugValue(String? url) {
+    final value = url?.trim();
+    if (value == null || value.isEmpty) return 'null';
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme) return '<present>';
+    return '${uri.scheme}://${uri.host}${uri.path}<query-redacted>';
   }
 }
 

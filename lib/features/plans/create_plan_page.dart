@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -26,6 +28,8 @@ class CreatePlanPage extends StatefulWidget {
 }
 
 class _CreatePlanPageState extends State<CreatePlanPage> {
+  static const _saveTimeout = Duration(seconds: 10);
+
   late PlanOwner _owner;
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -38,6 +42,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   bool _syncSystemCalendar = false;
   PlanRepeatType _repeatType = PlanRepeatType.once;
   bool _saving = false;
+  bool _saveSucceeded = false;
 
   @override
   void initState() {
@@ -198,8 +203,8 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
             AppSpacing.md,
           ),
           child: PrimaryButton(
-            label: widget.existingPlan != null ? '保存修改' : '保存计划',
-            icon: Icons.save_rounded,
+            label: _saveButtonLabel,
+            icon: _saveSucceeded ? Icons.check_rounded : Icons.save_rounded,
             isLoading: _saving,
             onPressed: _saving ? null : () => _savePlan(),
           ),
@@ -273,16 +278,34 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   Future<void> _savePlan() async {
     if (_saving) return;
 
+    final flowStopwatch = Stopwatch()..start();
+    final saveStartedAt = DateTime.now();
+    _logCreatePlan(
+      'save tap',
+      Duration.zero,
+      'startedAt=${saveStartedAt.toIso8601String()}',
+    );
+
+    final validateStopwatch = Stopwatch()..start();
     final name = _nameController.text.trim();
     final description = _descriptionController.text.trim();
 
     if (name.isEmpty) {
+      validateStopwatch.stop();
+      _logCreatePlan(
+        'validate',
+        validateStopwatch.elapsed,
+        'failed=empty_title',
+      );
+      _logCreatePlan('total', flowStopwatch.elapsed, 'failed=validation');
       _showError('请输入计划名称');
       return;
     }
 
     final existing = widget.existingPlan;
     final store = context.read<Store>();
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     final today = _todayOnly();
     final effectiveHasDateRange =
         _repeatType == PlanRepeatType.daily && _dateRangeEnabled;
@@ -307,13 +330,28 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
         ? _dateOnly(existing.endDate)
         : today;
     final reminderTime = _reminderEnabled ? _reminderTime : null;
+    validateStopwatch.stop();
+    _logCreatePlan('validate', validateStopwatch.elapsed);
 
-    setState(() => _saving = true);
+    final occurrenceStopwatch = Stopwatch()..start();
+    occurrenceStopwatch.stop();
+    _logCreatePlan(
+      'daily occurrences',
+      occurrenceStopwatch.elapsed,
+      _repeatType == PlanRepeatType.daily
+          ? 'generated=false, savedAsRepeatRule=true'
+          : 'generated=false, repeatType=once',
+    );
+
+    setState(() {
+      _saving = true;
+      _saveSucceeded = false;
+    });
     try {
       var calendarSyncRequested = false;
-      SystemCalendarSyncResult? calendarSyncResult;
 
       if (existing != null) {
+        final updateStopwatch = Stopwatch()..start();
         await store.updatePlan(
           planId: existing.id,
           title: name,
@@ -326,49 +364,134 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           endDate: endDate,
           hasDateRange: effectiveHasDateRange,
         );
+        updateStopwatch.stop();
+        _logCreatePlan('update plan main record', updateStopwatch.elapsed);
       } else {
-        final createdPlan = await store.createPlan(
-          title: name,
-          isShared: _owner == PlanOwner.together,
-          dailyTask: description.isEmpty ? name : description,
-          startDate: startDate,
-          endDate: endDate,
-          reminderTime: reminderTime,
-          repeatType: _repeatType,
-          hasDateRange: effectiveHasDateRange,
-          iconKey: _selectedIconKey,
-        );
+        final createStopwatch = Stopwatch()..start();
+        final createdPlan = await store
+            .createPlan(
+              title: name,
+              isShared: _owner == PlanOwner.together,
+              dailyTask: description.isEmpty ? name : description,
+              startDate: startDate,
+              endDate: endDate,
+              reminderTime: reminderTime,
+              repeatType: _repeatType,
+              hasDateRange: effectiveHasDateRange,
+              iconKey: _selectedIconKey,
+            )
+            .timeout(_saveTimeout);
+        createStopwatch.stop();
+        _logCreatePlan('create plan main record', createStopwatch.elapsed);
+
         calendarSyncRequested = _reminderEnabled && _syncSystemCalendar;
         if (calendarSyncRequested && reminderTime != null) {
-          calendarSyncResult =
-              await NotificationService.syncPlanReminderToSystemCalendar(
-                planTitle: createdPlan.title,
-                hour: reminderTime.hour,
-                minute: reminderTime.minute,
-                startDate: createdPlan.startDate,
-                endDate: createdPlan.endDate,
-                repeatsDaily: createdPlan.isDaily,
-                hasDateRange: createdPlan.hasDateRange,
-              );
+          unawaited(
+            _syncSystemCalendarReminderInBackground(
+              messenger: messenger,
+              plan: createdPlan,
+              reminderTime: reminderTime,
+            ),
+          );
+        } else {
+          _logCreatePlan(
+            'schedule reminder',
+            Duration.zero,
+            'systemCalendar=false',
+          );
         }
       }
 
       if (!mounted) return;
-      final message = existing != null
-          ? '计划已更新'
-          : calendarSyncRequested
-          ? calendarSyncResult?.userMessage ?? '计划已保存，但没有提醒时间，未写入系统日历'
-          : '计划已保存';
-      ScaffoldMessenger.of(context).showSnackBar(
+      setState(() {
+        _saving = false;
+        _saveSucceeded = true;
+      });
+      final message = existing != null ? '计划已更新' : '计划已保存';
+      messenger.showSnackBar(
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
-      Navigator.of(context).pop();
+      _logCreatePlan(
+        'total',
+        flowStopwatch.elapsed,
+        calendarSyncRequested ? 'backgroundSystemCalendar=true' : null,
+      );
+      navigator.pop();
+    } on TimeoutException catch (error) {
+      if (!mounted) return;
+      debugPrint('Save plan timed out: $error');
+      setState(() => _saving = false);
+      _logCreatePlan('total', flowStopwatch.elapsed, 'failed=timeout');
+      _showError('网络较慢，请稍后重试');
     } catch (error) {
       if (!mounted) return;
       debugPrint('Save plan failed: $error');
       setState(() => _saving = false);
+      _logCreatePlan('total', flowStopwatch.elapsed, 'failed=$error');
       _showError('保存失败，请稍后再试');
     }
+  }
+
+  Future<void> _syncSystemCalendarReminderInBackground({
+    required ScaffoldMessengerState messenger,
+    required Plan plan,
+    required TimeOfDay reminderTime,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      final result = await NotificationService.syncPlanReminderToSystemCalendar(
+        planTitle: plan.title,
+        hour: reminderTime.hour,
+        minute: reminderTime.minute,
+        startDate: plan.startDate,
+        endDate: plan.endDate,
+        repeatsDaily: plan.isDaily,
+        hasDateRange: plan.hasDateRange,
+      );
+      stopwatch.stop();
+      _logCreatePlan(
+        'schedule reminder',
+        stopwatch.elapsed,
+        'systemCalendar=true, success=${result.success}',
+      );
+      if (!result.success && messenger.mounted) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(result.userMessage),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (error) {
+      stopwatch.stop();
+      _logCreatePlan(
+        'schedule reminder',
+        stopwatch.elapsed,
+        'systemCalendar=true, failed=$error',
+      );
+      if (messenger.mounted) {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('计划已保存，但提醒同步失败，可稍后重试'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  String get _saveButtonLabel {
+    if (_saveSucceeded) return '保存成功';
+    if (_saving) return '保存中...';
+    return widget.existingPlan != null ? '保存修改' : '保存计划';
+  }
+
+  void _logCreatePlan(String stage, Duration duration, [String? detail]) {
+    assert(() {
+      final suffix = detail == null || detail.isEmpty ? '' : ' ($detail)';
+      debugPrint('[CreatePlan] $stage: ${duration.inMilliseconds}ms$suffix');
+      return true;
+    }());
   }
 
   DateTime _todayOnly() {

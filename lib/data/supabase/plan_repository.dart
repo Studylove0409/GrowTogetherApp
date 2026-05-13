@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -6,6 +8,8 @@ import '../models/plan.dart';
 
 class PlanRepository {
   const PlanRepository({SupabaseClient? client}) : _client = client;
+
+  static const _requestTimeout = Duration(seconds: 8);
 
   final SupabaseClient? _client;
 
@@ -85,16 +89,24 @@ class PlanRepository {
     bool hasDateRange = true,
     String iconKey = PlanIconMapper.defaultKey,
   }) async {
-    final coupleId = await _activeCoupleId();
-    if (coupleId == null) {
+    final lookupStopwatch = Stopwatch()..start();
+    final coupleContext = await _activeCoupleContext();
+    lookupStopwatch.stop();
+    _logCreatePlan('active couple lookup', lookupStopwatch.elapsed);
+
+    if (coupleContext == null) {
       throw const PostgrestException(message: 'no active couple relationship');
+    }
+    final currentUserId = _currentUserId;
+    if (currentUserId == null) {
+      throw const PostgrestException(message: 'no current user');
     }
 
     final effectiveHasDateRange =
         repeatType == PlanRepeatType.daily && hasDateRange;
     final payload = {
-      'couple_id': coupleId,
-      'creator_id': _currentUserId,
+      'couple_id': coupleContext.coupleId,
+      'creator_id': currentUserId,
       'plan_type': isShared ? 'shared' : 'personal',
       'repeat_type': _fromRepeatType(repeatType),
       'title': title,
@@ -113,8 +125,8 @@ class PlanRepository {
       result,
       todayCheckinMap: {},
       completedCountMap: {},
-      currentUserId: _currentUserId!,
-      partnerId: await _partnerId(coupleId) ?? '',
+      currentUserId: currentUserId,
+      partnerId: coupleContext.partnerId,
     );
     if (result.containsKey('has_date_range') &&
         result.containsKey('repeat_type')) {
@@ -342,6 +354,29 @@ class PlanRepository {
 
   String? get _currentUserId => _supabase.auth.currentUser?.id;
 
+  Future<_ActiveCoupleContext?> _activeCoupleContext() async {
+    final currentUserId = _currentUserId;
+    if (currentUserId == null) return null;
+
+    final data = await _withSupabaseTimeout(
+      _supabase
+          .from('couples')
+          .select('id, user_a_id, user_b_id')
+          .eq('status', 'active')
+          .or('user_a_id.eq.$currentUserId,user_b_id.eq.$currentUserId')
+          .maybeSingle(),
+      'active couple lookup',
+    );
+    if (data == null) return null;
+
+    final userA = data['user_a_id'] as String;
+    final userB = data['user_b_id'] as String;
+    return _ActiveCoupleContext(
+      coupleId: data['id'] as String,
+      partnerId: userA == currentUserId ? userB : userA,
+    );
+  }
+
   Future<String?> _activeCoupleId() async {
     final data = await _supabase
         .from('couples')
@@ -426,18 +461,57 @@ class PlanRepository {
   Future<Map<String, dynamic>> _insertPlanWithScheduleFallback(
     Map<String, dynamic> payload,
   ) async {
+    final insertStopwatch = Stopwatch()..start();
     try {
-      return await _supabase.from('plans').insert(payload).select().single();
+      final result = await _withSupabaseTimeout(
+        _supabase.from('plans').insert(payload).select().single(),
+        'insert plan',
+      );
+      insertStopwatch.stop();
+      _logCreatePlan('supabase insert/upsert', insertStopwatch.elapsed);
+      return result;
     } on PostgrestException catch (error) {
       if (!_isMissingOptionalPlanColumn(error)) rethrow;
 
+      insertStopwatch.stop();
+      _logCreatePlan(
+        'supabase insert/upsert',
+        insertStopwatch.elapsed,
+        'retryWithoutOptionalColumns=true',
+      );
       final fallbackPayload = _withoutOptionalPlanColumns(payload);
-      return await _supabase
-          .from('plans')
-          .insert(fallbackPayload)
-          .select()
-          .single();
+      final fallbackStopwatch = Stopwatch()..start();
+      final result = await _withSupabaseTimeout(
+        _supabase.from('plans').insert(fallbackPayload).select().single(),
+        'insert plan fallback',
+      );
+      fallbackStopwatch.stop();
+      _logCreatePlan(
+        'supabase insert/upsert fallback',
+        fallbackStopwatch.elapsed,
+      );
+      return result;
     }
+  }
+
+  Future<T> _withSupabaseTimeout<T>(Future<T> future, String operation) {
+    return future.timeout(
+      _requestTimeout,
+      onTimeout: () {
+        throw TimeoutException(
+          'Supabase $operation timed out',
+          _requestTimeout,
+        );
+      },
+    );
+  }
+
+  void _logCreatePlan(String stage, Duration duration, [String? detail]) {
+    assert(() {
+      final suffix = detail == null || detail.isEmpty ? '' : ' ($detail)';
+      debugPrint('[CreatePlan] $stage: ${duration.inMilliseconds}ms$suffix');
+      return true;
+    }());
   }
 
   bool _isMissingOptionalPlanColumn(PostgrestException error) {
@@ -478,4 +552,11 @@ class PlanRepository {
 class _UserCheckinStatus {
   bool currentUserCompleted = false;
   bool partnerCompleted = false;
+}
+
+class _ActiveCoupleContext {
+  const _ActiveCoupleContext({required this.coupleId, required this.partnerId});
+
+  final String coupleId;
+  final String partnerId;
 }

@@ -8,6 +8,7 @@ import 'core/notification/fcm_service.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'data/mock/mock_store.dart';
+import 'data/models/profile.dart';
 import 'data/store/store.dart';
 import 'data/supabase/supabase_store.dart';
 import 'features/focus/focus_page.dart';
@@ -18,7 +19,9 @@ import 'features/reminders/reminders_page.dart';
 import 'shared/widgets/app_bottom_nav_bar.dart';
 
 class GrowTogetherApp extends StatelessWidget {
-  const GrowTogetherApp({super.key});
+  const GrowTogetherApp({super.key, this.initialProfile});
+
+  final Profile? initialProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +41,7 @@ class GrowTogetherApp extends StatelessWidget {
     }
 
     return ChangeNotifierProvider<Store>(
-      create: (_) => SupabaseStore(),
+      create: (_) => SupabaseStore(initialProfile: initialProfile),
       child: app,
     );
   }

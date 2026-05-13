@@ -21,7 +21,10 @@ import 'profile_repository.dart';
 import 'reminder_repository.dart';
 
 class SupabaseStore extends Store {
-  SupabaseStore() {
+  SupabaseStore({Profile? initialProfile}) {
+    if (initialProfile != null) {
+      _profile = initialProfile;
+    }
     _init();
   }
 
@@ -42,6 +45,7 @@ class SupabaseStore extends Store {
   final Set<String> _notifiedFocusInviteIds = {};
   final Set<String> _notifiedReminderIds = {};
   final Set<String> _locallyDirtyPlanIds = {};
+  final Set<String> _locallyCreatedPlanIds = {};
   bool _reminderNotificationsPrimed = false;
   bool _isInitialPlansLoading = true;
   bool _isRefreshingPlans = false;
@@ -199,29 +203,46 @@ class SupabaseStore extends Store {
 
   Profile _mergeProfileWithCachedAvatars(Profile next) {
     final current = _profile;
-    return next.copyWith(
-      avatarUrl:
-          _shouldKeepCurrentAvatarUrl(
-            currentPath: current.avatarPath,
-            nextPath: next.avatarPath,
-            currentUrl: current.avatarUrl,
-            nextUrl: next.avatarUrl,
-          )
-          ? current.avatarUrl
-          : next.avatarUrl,
-      partnerAvatarUrl:
-          _shouldKeepCurrentAvatarUrl(
-            currentPath: current.partnerAvatarPath,
-            nextPath: next.partnerAvatarPath,
-            currentUrl: current.partnerAvatarUrl,
-            nextUrl: next.partnerAvatarUrl,
-          )
+    final keepCurrentAvatar = _shouldKeepCurrentAvatar(
+      currentPath: current.avatarPath,
+      nextPath: next.avatarPath,
+      currentUrl: current.avatarUrl,
+      nextUrl: next.avatarUrl,
+    );
+    final keepPartnerAvatar = _shouldKeepCurrentAvatar(
+      currentPath: current.partnerAvatarPath,
+      nextPath: next.partnerAvatarPath,
+      currentUrl: current.partnerAvatarUrl,
+      nextUrl: next.partnerAvatarUrl,
+    );
+
+    final merged = next.copyWith(
+      avatarUrl: keepCurrentAvatar ? current.avatarUrl : next.avatarUrl,
+      avatarPath: keepCurrentAvatar ? current.avatarPath : next.avatarPath,
+      profileUpdatedAt: keepCurrentAvatar
+          ? current.profileUpdatedAt
+          : next.profileUpdatedAt,
+      partnerAvatarUrl: keepPartnerAvatar
           ? current.partnerAvatarUrl
           : next.partnerAvatarUrl,
+      partnerAvatarPath: keepPartnerAvatar
+          ? current.partnerAvatarPath
+          : next.partnerAvatarPath,
+      partnerProfileUpdatedAt: keepPartnerAvatar
+          ? current.partnerProfileUpdatedAt
+          : next.partnerProfileUpdatedAt,
     );
+    _debugProfileAvatarMerge(
+      cached: current,
+      remote: next,
+      merged: merged,
+      keptCurrentAvatar: keepCurrentAvatar,
+      keptPartnerAvatar: keepPartnerAvatar,
+    );
+    return merged;
   }
 
-  bool _shouldKeepCurrentAvatarUrl({
+  bool _shouldKeepCurrentAvatar({
     required String? currentPath,
     required String? nextPath,
     required String? currentUrl,
@@ -229,16 +250,72 @@ class SupabaseStore extends Store {
   }) {
     if (nextUrl != null && nextUrl.trim().isNotEmpty) return false;
     if (currentUrl == null || currentUrl.trim().isEmpty) return false;
+    if (nextPath == null || nextPath.trim().isEmpty) return true;
     return currentPath != null && currentPath == nextPath;
+  }
+
+  void _debugProfileAvatarMerge({
+    required Profile cached,
+    required Profile remote,
+    required Profile merged,
+    required bool keptCurrentAvatar,
+    required bool keptPartnerAvatar,
+  }) {
+    assert(() {
+      debugPrint(
+        'Home avatar debug: '
+        'cachedCurrentAvatarUrl=${_avatarDebugValue(cached.avatarUrl)}, '
+        'cachedPartnerAvatarUrl=${_avatarDebugValue(cached.partnerAvatarUrl)}, '
+        'remoteCurrentAvatarUrl=${_avatarDebugValue(remote.avatarUrl)}, '
+        'remotePartnerAvatarUrl=${_avatarDebugValue(remote.partnerAvatarUrl)}, '
+        'finalCurrentAvatarUrl=${_avatarDebugValue(merged.avatarUrl)}, '
+        'finalPartnerAvatarUrl=${_avatarDebugValue(merged.partnerAvatarUrl)}, '
+        'currentAvatarSource=${_avatarMergeSource(keptCurrentAvatar, remote.avatarUrl, merged.avatarUrl)}, '
+        'partnerAvatarSource=${_avatarMergeSource(keptPartnerAvatar, remote.partnerAvatarUrl, merged.partnerAvatarUrl)}, '
+        'currentPath=${merged.avatarPath ?? 'null'}, '
+        'partnerPath=${merged.partnerAvatarPath ?? 'null'}',
+      );
+      return true;
+    }());
+  }
+
+  String _avatarMergeSource(
+    bool keptCached,
+    String? remoteUrl,
+    String? finalUrl,
+  ) {
+    if (keptCached) return 'cache';
+    if (remoteUrl?.trim().isNotEmpty == true) return 'remote';
+    if (finalUrl?.trim().isNotEmpty == true) return 'lastGood';
+    return 'fallback';
+  }
+
+  String _avatarDebugValue(String? url) {
+    final value = url?.trim();
+    if (value == null || value.isEmpty) return 'null';
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme) return '<present>';
+    return '${uri.scheme}://${uri.host}${uri.path}<query-redacted>';
   }
 
   String? get _currentUserId => Supabase.instance.client.auth.currentUser?.id;
 
   List<Plan> _mergeRemotePlansWithLocalDirty(List<Plan> remotePlans) {
-    if (_locallyDirtyPlanIds.isEmpty) return remotePlans;
+    if (_locallyDirtyPlanIds.isEmpty && _locallyCreatedPlanIds.isEmpty) {
+      return remotePlans;
+    }
 
     final localById = {for (final plan in _plans) plan.id: plan};
+    final remoteIds = remotePlans.map((plan) => plan.id).toSet();
+    _locallyCreatedPlanIds.removeWhere(remoteIds.contains);
+
+    final pendingCreatedPlans = [
+      for (final planId in _locallyCreatedPlanIds)
+        if (localById[planId] != null) localById[planId]!,
+    ];
+
     return [
+      ...pendingCreatedPlans,
       for (final remotePlan in remotePlans)
         if (_locallyDirtyPlanIds.contains(remotePlan.id) &&
             localById[remotePlan.id] != null)
@@ -599,6 +676,7 @@ class SupabaseStore extends Store {
     String iconKey = PlanIconMapper.defaultKey,
     bool syncSystemCalendar = false,
   }) async {
+    final createStopwatch = Stopwatch()..start();
     final plan = await _planRepo.createPlan(
       isShared: isShared,
       title: title,
@@ -610,17 +688,73 @@ class SupabaseStore extends Store {
       hasDateRange: hasDateRange,
       iconKey: iconKey,
     );
+    createStopwatch.stop();
+    _logCreatePlan('insert plan', createStopwatch.elapsed);
+
+    final localUpdateStopwatch = Stopwatch()..start();
+    _locallyCreatedPlanIds.add(plan.id);
     _plans.insert(0, plan);
-    await _writePlanCache();
     notifyListeners();
+    localUpdateStopwatch.stop();
+    _logCreatePlan('local store update', localUpdateStopwatch.elapsed);
+
+    unawaited(_writePlanCacheAfterCreate());
+    unawaited(_refreshPlansAfterCreate());
+
     if (plan.hasReminder) {
-      if (_shouldScheduleReminder(plan)) {
-        _scheduleReminder(plan, syncSystemCalendar: syncSystemCalendar);
-      } else {
-        await NotificationService.cancelPlanReminder(plan.id);
-      }
+      unawaited(
+        _syncCreatedPlanReminder(plan, syncSystemCalendar: syncSystemCalendar),
+      );
+    } else {
+      _logCreatePlan('schedule reminder', Duration.zero, 'skipped=no_reminder');
     }
     return plan;
+  }
+
+  Future<void> _writePlanCacheAfterCreate() async {
+    final stopwatch = Stopwatch()..start();
+    await _writePlanCache();
+    stopwatch.stop();
+    _logCreatePlan('local cache write', stopwatch.elapsed, 'background=true');
+  }
+
+  Future<void> _refreshPlansAfterCreate() async {
+    final stopwatch = Stopwatch()..start();
+    await _refreshPlansFromRemote(syncReminders: true);
+    stopwatch.stop();
+    _logCreatePlan('refresh plans', stopwatch.elapsed, 'background=true');
+  }
+
+  Future<void> _syncCreatedPlanReminder(
+    Plan plan, {
+    required bool syncSystemCalendar,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    if (_shouldScheduleReminder(plan)) {
+      final reminderTime = plan.reminderTime;
+      if (reminderTime != null) {
+        await NotificationService.schedulePlanReminder(
+          planId: plan.id,
+          planTitle: plan.title,
+          hour: reminderTime.hour,
+          minute: reminderTime.minute,
+          scheduledDate: plan.isOnce ? plan.startDate : null,
+          repeatsDaily: plan.isDaily,
+          syncSystemCalendar: syncSystemCalendar,
+          calendarStartDate: plan.startDate,
+          calendarEndDate: plan.endDate,
+          calendarHasDateRange: plan.hasDateRange,
+        );
+      }
+    } else {
+      await NotificationService.cancelPlanReminder(plan.id);
+    }
+    stopwatch.stop();
+    _logCreatePlan(
+      'schedule reminder',
+      stopwatch.elapsed,
+      'background=true, systemCalendar=$syncSystemCalendar',
+    );
   }
 
   @override
@@ -1025,17 +1159,19 @@ class SupabaseStore extends Store {
       return;
     }
 
-    NotificationService.schedulePlanReminder(
-      planId: plan.id,
-      planTitle: plan.title,
-      hour: reminderTime.hour,
-      minute: reminderTime.minute,
-      scheduledDate: plan.isOnce ? plan.startDate : null,
-      repeatsDaily: plan.isDaily,
-      syncSystemCalendar: syncSystemCalendar,
-      calendarStartDate: plan.startDate,
-      calendarEndDate: plan.endDate,
-      calendarHasDateRange: plan.hasDateRange,
+    unawaited(
+      NotificationService.schedulePlanReminder(
+        planId: plan.id,
+        planTitle: plan.title,
+        hour: reminderTime.hour,
+        minute: reminderTime.minute,
+        scheduledDate: plan.isOnce ? plan.startDate : null,
+        repeatsDaily: plan.isDaily,
+        syncSystemCalendar: syncSystemCalendar,
+        calendarStartDate: plan.startDate,
+        calendarEndDate: plan.endDate,
+        calendarHasDateRange: plan.hasDateRange,
+      ),
     );
   }
 
@@ -1159,6 +1295,14 @@ class SupabaseStore extends Store {
     } else {
       await NotificationService.cancelDailyAppReminder();
     }
+  }
+
+  void _logCreatePlan(String stage, Duration duration, [String? detail]) {
+    assert(() {
+      final suffix = detail == null || detail.isEmpty ? '' : ' ($detail)';
+      debugPrint('[CreatePlan] $stage: ${duration.inMilliseconds}ms$suffix');
+      return true;
+    }());
   }
 
   @override
