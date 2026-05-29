@@ -1823,6 +1823,7 @@ class _ReminderBadgeStore extends Store {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {}
 
   @override
@@ -1931,6 +1932,7 @@ class _RefreshSmokeStore extends Store {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {}
 
   @override
@@ -2141,6 +2143,7 @@ class _HomeQuickCheckinStore extends _RefreshSmokeStore {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {
     final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index == -1) return;
@@ -2394,6 +2397,7 @@ class _BlockedPromptReminderStore extends Store {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {}
 
   @override
@@ -2523,6 +2527,7 @@ class _ReminderDateFilterStore extends Store {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {}
 
   @override

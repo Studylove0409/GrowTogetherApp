@@ -824,39 +824,62 @@ class SupabaseStore extends Store {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {
     final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index == -1) return;
 
     final previousPlan = _plans[index];
-    if (!previousPlan.canCurrentUserCheckin) return;
 
-    _locallyDirtyPlanIds.add(planId);
-    _plans[index] = _planWithTodayCheckin(
-      previousPlan,
-      completed: completed,
-      mood: mood,
-      note: note,
-    );
-    await _writePlanCache();
-    notifyListeners();
+    // 根据日期选择权限判断方式
+    final targetDate = date;
+    final isToday = targetDate == null || _isSameDate(targetDate, DateTime.now());
+    final canCheckin = isToday
+        ? previousPlan.canCurrentUserCheckin
+        : previousPlan.canCurrentUserCheckinOn(targetDate);
+    if (!canCheckin) return;
 
-    try {
-      await _checkinRepo.upsertTodayCheckin(
-        planId: planId,
+    // 今天：乐观更新本地缓存；非今天：直接走网络
+    if (isToday) {
+      _locallyDirtyPlanIds.add(planId);
+      _plans[index] = _planWithTodayCheckin(
+        previousPlan,
         completed: completed,
         mood: mood,
-        note: note.trim(),
+        note: note,
       );
+      await _writePlanCache();
+      notifyListeners();
+    }
+
+    try {
+      if (isToday) {
+        await _checkinRepo.upsertTodayCheckin(
+          planId: planId,
+          completed: completed,
+          mood: mood,
+          note: note.trim(),
+        );
+      } else {
+        await _checkinRepo.upsertCheckinForDate(
+          planId: planId,
+          date: targetDate,
+          completed: completed,
+          mood: mood,
+          note: note.trim(),
+        );
+      }
       await _finishOncePlanIfCompleteFromLocal(planId);
       await _refreshPlansFromRemote();
     } catch (_) {
-      _locallyDirtyPlanIds.remove(planId);
-      final rollbackIndex = _plans.indexWhere((plan) => plan.id == planId);
-      if (rollbackIndex != -1) {
-        _plans[rollbackIndex] = previousPlan;
-        await _writePlanCache();
-        notifyListeners();
+      if (isToday) {
+        _locallyDirtyPlanIds.remove(planId);
+        final rollbackIndex = _plans.indexWhere((plan) => plan.id == planId);
+        if (rollbackIndex != -1) {
+          _plans[rollbackIndex] = previousPlan;
+          await _writePlanCache();
+          notifyListeners();
+        }
       }
       rethrow;
     }

@@ -92,6 +92,7 @@ abstract class Store extends ChangeNotifier {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   });
 
   Future<void> updatePlanStatus(String planId, {required bool doneToday});

@@ -238,7 +238,9 @@ class MockStore extends Store {
     required bool completed,
     required CheckinMood mood,
     required String note,
+    DateTime? date,
   }) async {
+    // MockStore 只操作今天状态，忽略 date 参数
     final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index == -1) return;
 
