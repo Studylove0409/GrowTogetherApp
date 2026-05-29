@@ -45,10 +45,13 @@ class TogetherPlansPage extends StatelessWidget {
           ),
         );
       },
-      onTapPlan: (plan) {
+      onTapPlan: (plan, selectedDate) {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => PlanDetailPage(planId: plan.id),
+            builder: (_) => PlanDetailPage(
+              planId: plan.id,
+              targetDate: selectedDate,
+            ),
           ),
         );
       },

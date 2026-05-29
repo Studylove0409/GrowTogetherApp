@@ -38,7 +38,7 @@ class PlanListScaffold extends StatefulWidget {
   final String planCountLabel;
   final PlanOwner owner;
   final VoidCallback onAdd;
-  final ValueChanged<Plan> onTapPlan;
+  final void Function(Plan plan, DateTime selectedDate) onTapPlan;
   final Future<void> Function()? onRefresh;
   final Future<void> Function(Plan plan)? onDeletePlan;
   final Future<void> Function(Plan plan)? onQuickCheckin;
@@ -351,7 +351,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           statusColor: AppColors.secondaryText,
           statusIcon: Icons.event_available_rounded,
           showProgress: true,
-          onTap: () => widget.onTapPlan(plan),
+          onTap: () => widget.onTapPlan(plan, _selectedDate),
         );
       }
       final status = plan.togetherStatusOn(_selectedDate);
@@ -373,7 +373,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         statusColor: color,
         statusIcon: icon,
         showProgress: true,
-        onTap: () => widget.onTapPlan(plan),
+        onTap: () => widget.onTapPlan(plan, _selectedDate),
         onStatusTap: quickStatusTap,
         statusTooltip: '完成打卡：${plan.title}',
         statusSemanticsLabel: '完成${plan.title}打卡',
@@ -386,7 +386,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         statusColor: AppColors.secondaryText,
         statusIcon: Icons.event_available_rounded,
         showProgress: true,
-        onTap: () => widget.onTapPlan(plan),
+        onTap: () => widget.onTapPlan(plan, _selectedDate),
       );
     }
     final done = _isDoneForPlanOwner(plan) || optimisticDone;
@@ -416,7 +416,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           ? Icons.error_outline_rounded
           : Icons.radio_button_unchecked_rounded,
       showProgress: true,
-      onTap: () => widget.onTapPlan(plan),
+      onTap: () => widget.onTapPlan(plan, _selectedDate),
       onStatusTap: quickStatusTap,
       statusTooltip: '完成打卡：${plan.title}',
       statusSemanticsLabel: '完成${plan.title}打卡',
@@ -427,9 +427,9 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     if (widget.onQuickCheckin == null) return null;
     if (_quickCheckingPlanIds.contains(plan.id)) return null;
     if (_optimisticDonePlanIds.contains(plan.id)) return null;
-    if (!_isToday(_selectedDate)) return null;
-    if (!plan.canCurrentUserCheckin) return null;
-    if (plan.hasCurrentUserCheckinToday) return null;
+    if (!_isToday(_selectedDate)) return null;          // 快速打卡今日限定
+    if (!plan.canCurrentUserCheckinOn(_selectedDate)) return null;
+    if (plan.hasCurrentUserCheckinOn(_selectedDate)) return null;
     return () => _quickCheckin(plan);
   }
 

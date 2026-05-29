@@ -26,10 +26,13 @@ class PartnerPlansPage extends StatelessWidget {
       isSyncing: store.isRefreshingPlans && store.hasHydratedPlanCache,
       syncErrorMessage: store.planSyncErrorMessage,
       onAdd: () {},
-      onTapPlan: (plan) {
+      onTapPlan: (plan, selectedDate) {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => PlanDetailPage(planId: plan.id),
+            builder: (_) => PlanDetailPage(
+              planId: plan.id,
+              targetDate: selectedDate,
+            ),
           ),
         );
       },

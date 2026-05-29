@@ -488,7 +488,7 @@ void main() {
           planCountLabel: '共 2 个计划',
           owner: PlanOwner.me,
           onAdd: () {},
-          onTapPlan: (_) {},
+          onTapPlan: (_, __) {},
         ),
       ),
     );
@@ -550,7 +550,7 @@ void main() {
           planCountLabel: '共 3 个计划',
           owner: PlanOwner.me,
           onAdd: () {},
-          onTapPlan: (_) {},
+          onTapPlan: (_, __) {},
         ),
       ),
     );
@@ -601,7 +601,7 @@ void main() {
           planCountLabel: '共 1 个计划',
           owner: PlanOwner.me,
           onAdd: () {},
-          onTapPlan: (_) => openedPlanCount++,
+          onTapPlan: (_, __) => openedPlanCount++,
           onQuickCheckin: (_) async => quickCheckinCount++,
         ),
       ),
@@ -673,7 +673,7 @@ void main() {
             planCountLabel: '共 4 个计划',
             owner: PlanOwner.me,
             onAdd: () {},
-            onTapPlan: (_) {},
+            onTapPlan: (_, __) {},
             onQuickCheckin: (_) async {},
           ),
         ),
@@ -705,7 +705,7 @@ void main() {
           planCountLabel: '共 1 个计划',
           owner: PlanOwner.me,
           onAdd: () {},
-          onTapPlan: (_) {},
+          onTapPlan: (_, __) {},
           onDeletePlan: (item) async => deletedPlanId = item.id,
         ),
       ),
@@ -750,7 +750,7 @@ void main() {
             planCountLabel: '共 ${plans.length} 个计划',
             owner: PlanOwner.me,
             onAdd: () {},
-            onTapPlan: (_) {},
+            onTapPlan: (_, __) {},
             onDeletePlan: (item) async {
               setState(() {
                 plans.removeWhere((plan) => plan.id == item.id);
