@@ -14,9 +14,10 @@ import '../../shared/widgets/app_icon_tile.dart';
 import '../../shared/widgets/primary_button.dart';
 
 class CheckinPage extends StatefulWidget {
-  const CheckinPage({super.key, required this.planId});
+  const CheckinPage({super.key, required this.planId, this.targetDate});
 
   final String planId;
+  final DateTime? targetDate;
 
   @override
   State<CheckinPage> createState() => _CheckinPageState();
@@ -29,6 +30,18 @@ class _CheckinPageState extends State<CheckinPage> {
   bool _saving = false;
   bool _showSuccess = false;
 
+  DateTime get _effectiveDate {
+    final t = widget.targetDate;
+    if (t == null) return DateTime.now();
+    return DateTime(t.year, t.month, t.day);
+  }
+
+  bool get _isEffectiveToday {
+    final d = _effectiveDate;
+    final now = DateTime.now();
+    return d.year == now.year && d.month == now.month && d.day == now.day;
+  }
+
   @override
   void dispose() {
     _noteController.dispose();
@@ -39,10 +52,16 @@ class _CheckinPageState extends State<CheckinPage> {
   Widget build(BuildContext context) {
     final store = context.read<Store>();
     final plan = store.getPlanById(widget.planId);
-    final canCheckin = plan?.canCurrentUserCheckin ?? false;
+    final canCheckin = plan?.canCurrentUserCheckinOn(_effectiveDate) ?? false;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('每日打卡')),
+      appBar: AppBar(
+        title: Text(
+          _isEffectiveToday
+              ? '每日打卡'
+              : '${_effectiveDate.month}月${_effectiveDate.day}日打卡',
+        ),
+      ),
       body: Stack(
         children: [
           SafeArea(
@@ -205,6 +224,7 @@ class _CheckinPageState extends State<CheckinPage> {
       completed: _completed,
       mood: _mood,
       note: _noteController.text,
+      date: widget.targetDate,
     );
 
     HapticFeedback.mediumImpact();
@@ -247,11 +267,14 @@ class _CheckinPageState extends State<CheckinPage> {
   }
 
   String _cannotCheckinText(Plan? plan) {
-    if (plan == null) return '这个计划今天不在可打卡时间内啦';
+    if (plan == null) return '这个计划在这一天不在可打卡时间内啦';
     if (plan.owner == PlanOwner.partner) return 'TA 的计划只能查看，不能代替 TA 打卡。';
     if (plan.isEnded) return '这个计划已经结束啦，不需要再打卡。';
-    if (plan.isNotStartedYet) return '这个计划还没开始，到了开始日期再打卡。';
-    return '这个计划今天不在可打卡时间内啦';
+    final d = _effectiveDate;
+    if (!plan.isScheduledOnDate(d)) {
+      return '这个计划在 ${d.month}月${d.day}日 不在可打卡时间内啦';
+    }
+    return '这个计划在这一天不在可打卡时间内啦';
   }
 
   String _moodLabel(CheckinMood mood) {
