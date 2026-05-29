@@ -18,9 +18,39 @@ import 'checkin_record_page.dart';
 import 'create_plan_page.dart';
 
 class PlanDetailPage extends StatelessWidget {
-  const PlanDetailPage({super.key, required this.planId});
+  const PlanDetailPage({super.key, required this.planId, this.targetDate});
 
   final String planId;
+  final DateTime? targetDate;
+
+  DateTime get _effectiveDate {
+    if (targetDate == null) return DateTime.now();
+    return DateTime(targetDate!.year, targetDate!.month, targetDate!.day);
+  }
+
+  Widget _buildAppBarTitle() {
+    final effective = _effectiveDate;
+    final isToday = _isSameDateStatic(effective, DateTime.now());
+    if (isToday) return const Text('计划详情', style: AppTextStyles.section);
+
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final d = DateTime(effective.year, effective.month, effective.day);
+    final tag = d.isBefore(today) ? '补打卡' : '提前打卡';
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('计划详情', style: AppTextStyles.section),
+        Text(
+          '${effective.month}月${effective.day}日 · $tag',
+          style: AppTextStyles.caption.copyWith(color: AppColors.deepPink),
+        ),
+      ],
+    );
+  }
+
+  static bool _isSameDateStatic(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +67,7 @@ class PlanDetailPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('计划详情', style: AppTextStyles.section),
+        title: _buildAppBarTitle(),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_rounded, size: 20),
           onPressed: () => Navigator.of(context).pop(),
@@ -96,6 +126,14 @@ class PlanDetailPage extends StatelessWidget {
   }
 
   Widget _buildBottomButton(BuildContext context, Plan plan) {
+    final effective = _effectiveDate;
+    final isEffectiveToday = _isSameDateStatic(effective, DateTime.now());
+
+    // 非今日：使用简化的日期打卡按钮
+    if (!isEffectiveToday) {
+      return _buildDateSpecificButton(context, plan, effective);
+    }
+
     if (plan.isEnded && !plan.isCompletedOnceToday) {
       return const SizedBox.shrink();
     }
@@ -244,6 +282,46 @@ class PlanDetailPage extends StatelessWidget {
     );
   }
 
+  Widget _buildDateSpecificButton(BuildContext context, Plan plan, DateTime date) {
+    if (plan.owner == PlanOwner.partner) {
+      return const _MutedActionPill(
+        label: 'TA 的计划',
+        icon: Icons.visibility_rounded,
+      );
+    }
+
+    if (plan.isEnded) {
+      return const _MutedActionPill(
+        label: '已结束',
+        icon: Icons.event_available_rounded,
+      );
+    }
+
+    if (!plan.isScheduledOnDate(date)) {
+      return const _MutedActionPill(
+        label: '该日不在计划期内',
+        icon: Icons.event_busy_rounded,
+      );
+    }
+
+    if (plan.hasCurrentUserCheckinOn(date)) {
+      return const _CompletedActionPill(
+        label: '已打卡',
+        icon: Icons.check_circle_rounded,
+      );
+    }
+
+    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final d = DateTime(date.year, date.month, date.day);
+    final isPast = d.isBefore(today);
+
+    return PrimaryButton(
+      label: isPast ? '补打卡' : '提前打卡',
+      icon: Icons.check_circle_rounded,
+      onPressed: () => _openCheckinPage(context, plan, date),
+    );
+  }
+
   Widget _buildNotStartedBottomButton(BuildContext context, Plan plan) {
     const status = _MutedActionPill(label: '未开始', icon: Icons.event_rounded);
 
@@ -272,9 +350,11 @@ class PlanDetailPage extends StatelessWidget {
     );
   }
 
-  void _openCheckinPage(BuildContext context, Plan plan) {
+  void _openCheckinPage(BuildContext context, Plan plan, [DateTime? date]) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => CheckinPage(planId: plan.id)),
+      MaterialPageRoute<void>(
+        builder: (_) => CheckinPage(planId: plan.id, targetDate: date),
+      ),
     );
   }
 
