@@ -1666,6 +1666,72 @@ void main() {
     expect(find.text('正在专注：专注测试计划'), findsOneWidget);
     expect(find.text('模式：一起专注'), findsOneWidget);
   });
+
+  group('Plan.canCurrentUserCheckinOn', () {
+    final today = _todayOnly();
+    final yesterday = today.subtract(const Duration(days: 1));
+    final tomorrow = today.add(const Duration(days: 1));
+
+    test('returns true for today on a daily plan', () {
+      final plan = _testPlan(
+        startDate: today.subtract(const Duration(days: 3)),
+        endDate: today.add(const Duration(days: 10)),
+        repeatType: PlanRepeatType.daily,
+      );
+      expect(plan.canCurrentUserCheckinOn(today), isTrue);
+    });
+
+    test('returns true for yesterday on a daily plan', () {
+      final plan = _testPlan(
+        startDate: yesterday.subtract(const Duration(days: 3)),
+        endDate: today.add(const Duration(days: 10)),
+        repeatType: PlanRepeatType.daily,
+      );
+      expect(plan.canCurrentUserCheckinOn(yesterday), isTrue);
+    });
+
+    test('returns true for tomorrow on a daily plan', () {
+      final plan = _testPlan(
+        startDate: today,
+        endDate: today.add(const Duration(days: 10)),
+        repeatType: PlanRepeatType.daily,
+      );
+      expect(plan.canCurrentUserCheckinOn(tomorrow), isTrue);
+    });
+
+    test('returns false when date is outside plan range', () {
+      final plan = _testPlan(
+        startDate: today,
+        endDate: today.add(const Duration(days: 5)),
+        repeatType: PlanRepeatType.daily,
+      );
+      expect(
+        plan.canCurrentUserCheckinOn(today.add(const Duration(days: 10))),
+        isFalse,
+      );
+    });
+
+    test('returns false for partner plan', () {
+      final plan = Plan(
+        id: 'p',
+        title: 'T',
+        subtitle: 'S',
+        owner: PlanOwner.partner,
+        iconKey: PlanIconMapper.defaultKey,
+        minutes: 20,
+        completedDays: 0,
+        totalDays: 7,
+        doneToday: false,
+        color: Colors.pink,
+        dailyTask: 'T',
+        startDate: today,
+        endDate: today.add(const Duration(days: 6)),
+        reminderTime: null,
+        repeatType: PlanRepeatType.daily,
+      );
+      expect(plan.canCurrentUserCheckinOn(today), isFalse);
+    });
+  });
 }
 
 class _ReminderBadgeStore extends Store {

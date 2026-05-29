@@ -173,6 +173,9 @@ class Plan {
   bool get canCurrentUserCheckin =>
       owner != PlanOwner.partner && isAvailableToday;
 
+  bool canCurrentUserCheckinOn(DateTime date) =>
+      owner != PlanOwner.partner && isScheduledOnDate(date) && !isEnded;
+
   bool get canCurrentUserEdit => owner != PlanOwner.partner && !isEnded;
 
   bool get isTogetherDoneToday => doneToday && partnerDoneToday;
