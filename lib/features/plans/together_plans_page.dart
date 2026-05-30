@@ -21,7 +21,7 @@ class TogetherPlansPage extends StatelessWidget {
     final allPlans = store.getPlansByOwner(PlanOwner.together);
     return PlanListScaffold(
       title: '共同计划',
-      filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
+      filterOptions: const ['全部', '待打卡', '已完成'],
       plans: allPlans,
       planCountLabel: '共 ${allPlans.length} 个计划',
       owner: PlanOwner.together,
@@ -31,12 +31,14 @@ class TogetherPlansPage extends StatelessWidget {
       isSyncing: store.isRefreshingPlans && store.hasHydratedPlanCache,
       syncErrorMessage: store.planSyncErrorMessage,
       onDeletePlan: (plan) => context.read<Store>().deletePlan(plan.id),
-      onQuickCheckin: (plan) => context.read<Store>().saveCheckin(
-        planId: plan.id,
-        completed: true,
-        mood: CheckinMood.happy,
-        note: '',
-      ),
+      onQuickCheckin: (plan, selectedDate, completed) =>
+          context.read<Store>().saveCheckin(
+            planId: plan.id,
+            completed: completed,
+            mood: CheckinMood.happy,
+            note: '',
+            date: selectedDate,
+          ),
       onAdd: () {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -48,10 +50,8 @@ class TogetherPlansPage extends StatelessWidget {
       onTapPlan: (plan, selectedDate) {
         Navigator.of(context).push(
           MaterialPageRoute<void>(
-            builder: (_) => PlanDetailPage(
-              planId: plan.id,
-              targetDate: selectedDate,
-            ),
+            builder: (_) =>
+                PlanDetailPage(planId: plan.id, targetDate: selectedDate),
           ),
         );
       },

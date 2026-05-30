@@ -10,6 +10,9 @@ import '../../shared/widgets/plan_loading_card.dart';
 import '../../shared/widgets/plan_list_tile.dart';
 import '../../shared/widgets/plan_sync_status_banner.dart';
 
+typedef PlanQuickCheckinCallback =
+    Future<void> Function(Plan plan, DateTime selectedDate, bool completed);
+
 /// 通用计划列表页框架：AppBar + 分段筛选 + 计划卡片列表
 class PlanListScaffold extends StatefulWidget {
   const PlanListScaffold({
@@ -41,7 +44,7 @@ class PlanListScaffold extends StatefulWidget {
   final void Function(Plan plan, DateTime selectedDate) onTapPlan;
   final Future<void> Function()? onRefresh;
   final Future<void> Function(Plan plan)? onDeletePlan;
-  final Future<void> Function(Plan plan)? onQuickCheckin;
+  final PlanQuickCheckinCallback? onQuickCheckin;
   final bool isInitialLoading;
   final bool isSyncing;
   final String? syncErrorMessage;
@@ -56,8 +59,9 @@ class PlanListScaffold extends StatefulWidget {
 class _PlanListScaffoldState extends State<PlanListScaffold> {
   int _filterIndex = 0;
   DateTime _selectedDate = _todayOnly();
-  final Set<String> _quickCheckingPlanIds = <String>{};
-  final Set<String> _optimisticDonePlanIds = <String>{};
+  final Set<String> _quickCheckingOccurrenceKeys = <String>{};
+  final Map<String, bool> _optimisticCompletedByOccurrenceKey =
+      <String, bool>{};
 
   @override
   void didUpdateWidget(covariant PlanListScaffold oldWidget) {
@@ -66,7 +70,12 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
       _filterIndex = 0;
     }
     final visiblePlanIds = widget.plans.map((plan) => plan.id).toSet();
-    _optimisticDonePlanIds.removeWhere((id) => !visiblePlanIds.contains(id));
+    _quickCheckingOccurrenceKeys.removeWhere(
+      (key) => !visiblePlanIds.contains(_planIdFromOccurrenceKey(key)),
+    );
+    _optimisticCompletedByOccurrenceKey.removeWhere(
+      (key, _) => !visiblePlanIds.contains(_planIdFromOccurrenceKey(key)),
+    );
   }
 
   @override
@@ -245,28 +254,33 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     }
   }
 
-  Future<void> _quickCheckin(Plan plan) async {
+  Future<void> _quickCheckin(Plan plan, {required bool completed}) async {
     final quickCheckin = widget.onQuickCheckin;
-    if (quickCheckin == null || _quickCheckingPlanIds.contains(plan.id)) {
+    final selectedDate = _dateOnly(_selectedDate);
+    final occurrenceKey = _occurrenceKeyFor(plan.id, selectedDate);
+    if (quickCheckin == null ||
+        _quickCheckingOccurrenceKeys.contains(occurrenceKey)) {
       return;
     }
 
     setState(() {
-      _quickCheckingPlanIds.add(plan.id);
-      _optimisticDonePlanIds.add(plan.id);
+      _quickCheckingOccurrenceKeys.add(occurrenceKey);
+      _optimisticCompletedByOccurrenceKey[occurrenceKey] = completed;
     });
     try {
-      await quickCheckin(plan);
+      await quickCheckin(plan, selectedDate, completed);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已完成「${plan.title}」打卡'),
+          content: Text(
+            completed ? '已完成「${plan.title}」打卡' : '已取消「${plan.title}」打卡',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _optimisticDonePlanIds.remove(plan.id));
+      setState(() => _optimisticCompletedByOccurrenceKey.remove(occurrenceKey));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('打卡失败，请稍后再试'),
@@ -275,7 +289,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
       );
     } finally {
       if (mounted) {
-        setState(() => _quickCheckingPlanIds.remove(plan.id));
+        setState(() => _quickCheckingOccurrenceKeys.remove(occurrenceKey));
       }
     }
   }
@@ -298,7 +312,6 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
     return switch (_filterForIndex(index)) {
       _PlanFilter.all => plans,
       _PlanFilter.pending => plans.where(_isPendingForFilter).toList(),
-      _PlanFilter.unfinished => plans.where(_isUnfinishedForFilter).toList(),
       _PlanFilter.completed => plans.where(_isDoneForFilter).toList(),
     };
   }
@@ -310,7 +323,6 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
 
     return switch (widget.filterOptions[index]) {
       '待打卡' => _PlanFilter.pending,
-      '未完成' => _PlanFilter.unfinished,
       '已完成' => _PlanFilter.completed,
       _ => _PlanFilter.all,
     };
@@ -319,18 +331,7 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
   bool _isPendingForFilter(Plan plan) {
     if (plan.isEnded && !plan.isCompletedOnceToday) return false;
 
-    return !_isDoneForFilter(plan) && !_isUnfinishedForFilter(plan);
-  }
-
-  bool _isUnfinishedForFilter(Plan plan) {
-    if (_isPastMissed(plan)) return true;
-
-    if (plan.owner == PlanOwner.together) {
-      return plan.isCurrentUserIncompleteOn(_selectedDate) ||
-          plan.isPartnerIncompleteOn(_selectedDate);
-    }
-
-    return _isIncompleteForPlanOwner(plan);
+    return !_isDoneForFilter(plan);
   }
 
   bool _isDoneForFilter(Plan plan) {
@@ -342,7 +343,8 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
 
   Widget _buildPlanTile(Plan plan) {
     final quickStatusTap = _quickStatusTapFor(plan);
-    final optimisticDone = _optimisticDonePlanIds.contains(plan.id);
+    final optimisticCompleted =
+        _optimisticCompletedByOccurrenceKey[_occurrenceKey(plan)];
     if (plan.owner == PlanOwner.together) {
       if (plan.isEnded && !plan.isCompletedOnceToday) {
         return PlanListTile(
@@ -354,19 +356,13 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
           onTap: () => widget.onTapPlan(plan, _selectedDate),
         );
       }
-      final status = plan.togetherStatusOn(_selectedDate);
-      final (label, color, icon) = _isPastMissed(plan)
-          ? ('未完成', AppColors.reminder, Icons.warning_rounded)
-          : plan.isOverdue && _isToday(_selectedDate)
+      final status = _togetherStatusForList(plan);
+      final (label, color, icon) = plan.isOverdue && _isToday(_selectedDate)
           ? ('已逾期', AppColors.reminder, Icons.warning_rounded)
-          : optimisticDone
+          : optimisticCompleted == true
           ? ('我已打卡', AppColors.successText, Icons.check_circle_rounded)
-          : plan.isCurrentUserIncompleteOn(_selectedDate)
-          ? ('我未完成', AppColors.reminder, Icons.error_outline_rounded)
-          : plan.isPartnerIncompleteOn(_selectedDate) &&
-                plan.isCurrentUserDoneOn(_selectedDate)
-          ? ('TA 未完成', AppColors.reminder, Icons.error_outline_rounded)
           : _togetherStatusUI(status);
+      final completing = !_isCurrentUserDoneForList(plan);
       return PlanListTile(
         plan: plan,
         statusLabel: label,
@@ -375,8 +371,8 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         showProgress: true,
         onTap: () => widget.onTapPlan(plan, _selectedDate),
         onStatusTap: quickStatusTap,
-        statusTooltip: '完成打卡：${plan.title}',
-        statusSemanticsLabel: '完成${plan.title}打卡',
+        statusTooltip: '${completing ? '完成' : '取消'}打卡：${plan.title}',
+        statusSemanticsLabel: '${completing ? '完成' : '取消'}${plan.title}打卡',
       );
     }
     if (plan.isEnded && !plan.isCompletedOnceToday) {
@@ -389,70 +385,78 @@ class _PlanListScaffoldState extends State<PlanListScaffold> {
         onTap: () => widget.onTapPlan(plan, _selectedDate),
       );
     }
-    final done = _isDoneForPlanOwner(plan) || optimisticDone;
-    final incomplete = _isIncompleteForPlanOwner(plan);
-    final pastMissed = _isPastMissed(plan);
+    final done = _isDoneForPlanOwner(plan);
+    final completing = !done;
     return PlanListTile(
       plan: plan,
-      statusLabel: pastMissed
-          ? '未完成'
-          : plan.isOverdue && _isToday(_selectedDate)
+      statusLabel: plan.isOverdue && _isToday(_selectedDate)
           ? '已逾期'
           : done
           ? '已打卡'
-          : incomplete
-          ? '未完成'
           : '待打卡',
-      statusColor: pastMissed || (plan.isOverdue && _isToday(_selectedDate))
+      statusColor: plan.isOverdue && _isToday(_selectedDate)
           ? AppColors.reminder
           : done
           ? AppColors.successText
-          : incomplete
-          ? AppColors.reminder
           : AppColors.deepPink,
       statusIcon: done
           ? Icons.check_circle_rounded
-          : incomplete
-          ? Icons.error_outline_rounded
           : Icons.radio_button_unchecked_rounded,
       showProgress: true,
       onTap: () => widget.onTapPlan(plan, _selectedDate),
       onStatusTap: quickStatusTap,
-      statusTooltip: '完成打卡：${plan.title}',
-      statusSemanticsLabel: '完成${plan.title}打卡',
+      statusTooltip: '${completing ? '完成' : '取消'}打卡：${plan.title}',
+      statusSemanticsLabel: '${completing ? '完成' : '取消'}${plan.title}打卡',
     );
   }
 
   VoidCallback? _quickStatusTapFor(Plan plan) {
     if (widget.onQuickCheckin == null) return null;
-    if (_quickCheckingPlanIds.contains(plan.id)) return null;
-    if (_optimisticDonePlanIds.contains(plan.id)) return null;
-    if (!_isToday(_selectedDate)) return null;          // 快速打卡今日限定
-    if (!plan.canCurrentUserCheckinOn(_selectedDate)) return null;
-    if (plan.hasCurrentUserCheckinOn(_selectedDate)) return null;
-    return () => _quickCheckin(plan);
+    final occurrenceKey = _occurrenceKey(plan);
+    if (_quickCheckingOccurrenceKeys.contains(occurrenceKey)) return null;
+    if (plan.owner == PlanOwner.partner) return null;
+    final canWrite =
+        plan.canCurrentUserCheckinOn(_selectedDate) ||
+        plan.hasCurrentUserCheckinOn(_selectedDate) ||
+        _optimisticCompletedByOccurrenceKey.containsKey(occurrenceKey);
+    if (!canWrite) return null;
+    final completed = !_isCurrentUserDoneForList(plan);
+    return () => _quickCheckin(plan, completed: completed);
+  }
+
+  String _occurrenceKey(Plan plan) => _occurrenceKeyFor(plan.id, _selectedDate);
+
+  String _occurrenceKeyFor(String planId, DateTime date) {
+    final day = _dateOnly(date);
+    return '$planId|${day.year}-${day.month}-${day.day}';
+  }
+
+  String _planIdFromOccurrenceKey(String key) {
+    return key.split('|').first;
   }
 
   bool _isDoneForPlanOwner(Plan plan) {
     return switch (plan.owner) {
-      PlanOwner.me => plan.isCurrentUserDoneOn(_selectedDate),
+      PlanOwner.me => _isCurrentUserDoneForList(plan),
       PlanOwner.partner => plan.isPartnerDoneOn(_selectedDate),
       PlanOwner.together =>
-        plan.togetherStatusOn(_selectedDate) == TogetherStatus.bothDone,
+        _togetherStatusForList(plan) == TogetherStatus.bothDone,
     };
   }
 
-  bool _isIncompleteForPlanOwner(Plan plan) {
-    return switch (plan.owner) {
-      PlanOwner.me => plan.isCurrentUserIncompleteOn(_selectedDate),
-      PlanOwner.partner => plan.isPartnerIncompleteOn(_selectedDate),
-      PlanOwner.together => plan.isCurrentUserIncompleteOn(_selectedDate),
-    };
+  bool _isCurrentUserDoneForList(Plan plan) {
+    final optimistic =
+        _optimisticCompletedByOccurrenceKey[_occurrenceKey(plan)];
+    if (optimistic != null) return optimistic;
+    return plan.isCurrentUserDoneOn(_selectedDate);
   }
 
-  bool _isPastMissed(Plan plan) {
-    return _dateOnly(_selectedDate).isBefore(_todayOnly()) &&
-        !_isDoneForPlanOwner(plan);
+  TogetherStatus _togetherStatusForList(Plan plan) {
+    final currentDone = _isCurrentUserDoneForList(plan);
+    final partnerDone = plan.isPartnerDoneOn(_selectedDate);
+    if (currentDone && partnerDone) return TogetherStatus.bothDone;
+    if (currentDone) return TogetherStatus.onlyMeDone;
+    return TogetherStatus.meNotDone;
   }
 
   (String, Color, IconData) _togetherStatusUI(TogetherStatus status) {
@@ -714,7 +718,7 @@ class _FilterBar extends StatelessWidget {
   }
 }
 
-enum _PlanFilter { all, pending, unfinished, completed }
+enum _PlanFilter { all, pending, completed }
 
 class _EmptyPlansHint extends StatelessWidget {
   const _EmptyPlansHint();

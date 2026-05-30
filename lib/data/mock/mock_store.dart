@@ -240,40 +240,51 @@ class MockStore extends Store {
     required String note,
     DateTime? date,
   }) async {
-    // MockStore 只操作今天状态，忽略 date 参数
     final index = _plans.indexWhere((plan) => plan.id == planId);
     if (index == -1) return;
 
     final plan = _plans[index];
-    if (!plan.canCurrentUserCheckin) return;
+    final targetDate = PlanOccurrenceService.dateOnly(date ?? DateTime.now());
+    final hasExistingCheckin =
+        plan.owner != PlanOwner.partner &&
+        plan.hasCurrentUserCheckinOn(targetDate);
+    if (!plan.canCurrentUserCheckinOn(targetDate) && !hasExistingCheckin) {
+      return;
+    }
 
-    final today = DateTime.now();
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    final checkins = [
-      CheckinRecord(
-        date: todayOnly,
-        completed: completed,
-        mood: mood,
-        note: note.trim(),
-        actor: CheckinActor.me,
-      ),
-      ...plan.checkins.where(
-        (record) =>
-            record.actor != CheckinActor.me ||
-            !_isSameDate(record.date, todayOnly),
-      ),
-    ];
+    final isToday = _isSameDate(targetDate, DateTime.now());
+    final existingCheckins = plan.checkins.where(
+      (record) =>
+          record.actor != CheckinActor.me ||
+          !_isSameDate(record.date, targetDate),
+    );
+    final checkins = completed
+        ? [
+            CheckinRecord(
+              date: targetDate,
+              completed: true,
+              mood: mood,
+              note: note.trim(),
+              actor: CheckinActor.me,
+            ),
+            ...existingCheckins,
+          ]
+        : existingCheckins.toList();
 
-    final wasDoneToday = plan.doneToday;
-    final completedDays = completed && !wasDoneToday
+    final wasDoneOnDate = plan.isCurrentUserDoneOn(targetDate);
+    final completedDays = completed && !wasDoneOnDate
         ? plan.completedDays + 1
-        : !completed && wasDoneToday
+        : !completed && wasDoneOnDate
         ? (plan.completedDays - 1).clamp(0, plan.totalDays)
         : plan.completedDays;
+    final shouldReopenCompletedOnce =
+        !completed && plan.isOnce && plan.status == PlanStatus.ended;
 
     _plans[index] = plan.copyWith(
-      doneToday: completed,
+      doneToday: isToday ? completed : plan.doneToday,
       completedDays: completedDays,
+      status: shouldReopenCompletedOnce ? PlanStatus.active : null,
+      clearEndedAt: shouldReopenCompletedOnce,
       checkins: checkins,
     );
     _finishOncePlanIfComplete(index);
@@ -285,14 +296,12 @@ class MockStore extends Store {
     String planId, {
     required bool doneToday,
   }) async {
-    final index = _plans.indexWhere((plan) => plan.id == planId);
-    if (index == -1) return;
-
-    final plan = _plans[index];
-    if (!plan.canCurrentUserCheckin) return;
-    _plans[index] = plan.copyWith(doneToday: doneToday);
-    _finishOncePlanIfComplete(index);
-    notifyListeners();
+    await saveCheckin(
+      planId: planId,
+      completed: doneToday,
+      mood: CheckinMood.happy,
+      note: '',
+    );
   }
 
   // ========================= Focus =========================

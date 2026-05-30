@@ -833,10 +833,17 @@ class SupabaseStore extends Store {
 
     // 根据日期选择权限判断方式
     final targetDate = date;
-    final isToday = targetDate == null || _isSameDate(targetDate, DateTime.now());
+    final isToday =
+        targetDate == null || _isSameDate(targetDate, DateTime.now());
+    final hasExistingCheckin =
+        previousPlan.owner != PlanOwner.partner &&
+        (targetDate == null
+            ? previousPlan.hasCurrentUserCheckinToday
+            : previousPlan.hasCurrentUserCheckinOn(targetDate));
     final canCheckin = isToday
-        ? previousPlan.canCurrentUserCheckin
-        : previousPlan.canCurrentUserCheckinOn(targetDate);
+        ? previousPlan.canCurrentUserCheckin || hasExistingCheckin
+        : previousPlan.canCurrentUserCheckinOn(targetDate) ||
+              hasExistingCheckin;
     if (!canCheckin) return;
 
     // 今天：乐观更新本地缓存；非今天：直接走网络
@@ -894,7 +901,12 @@ class SupabaseStore extends Store {
     if (index == -1) return;
 
     final previousPlan = _plans[index];
-    if (!previousPlan.canCurrentUserCheckin) return;
+    final hasExistingCheckin =
+        previousPlan.owner != PlanOwner.partner &&
+        previousPlan.hasCurrentUserCheckinToday;
+    if (!previousPlan.canCurrentUserCheckin && !hasExistingCheckin) {
+      return;
+    }
 
     _locallyDirtyPlanIds.add(planId);
     _plans[index] = _planWithTodayCheckin(
@@ -1212,20 +1224,23 @@ class SupabaseStore extends Store {
   }) {
     final today = DateTime.now();
     final todayOnly = DateTime(today.year, today.month, today.day);
-    final checkins = [
-      CheckinRecord(
-        date: todayOnly,
-        completed: completed,
-        mood: mood,
-        note: note.trim(),
-        actor: CheckinActor.me,
-      ),
-      ...plan.checkins.where(
-        (record) =>
-            record.actor != CheckinActor.me ||
-            !_isSameDate(record.date, todayOnly),
-      ),
-    ];
+    final existingCheckins = plan.checkins.where(
+      (record) =>
+          record.actor != CheckinActor.me ||
+          !_isSameDate(record.date, todayOnly),
+    );
+    final checkins = completed
+        ? [
+            CheckinRecord(
+              date: todayOnly,
+              completed: true,
+              mood: mood,
+              note: note.trim(),
+              actor: CheckinActor.me,
+            ),
+            ...existingCheckins,
+          ]
+        : existingCheckins.toList();
 
     final wasDoneToday = plan.doneToday;
     final completedDays = completed && !wasDoneToday
@@ -1234,9 +1249,14 @@ class SupabaseStore extends Store {
         ? (plan.completedDays - 1).clamp(0, plan.totalDays).toInt()
         : plan.completedDays;
 
+    final shouldReopenCompletedOnce =
+        !completed && plan.isOnce && plan.status == PlanStatus.ended;
+
     return plan.copyWith(
       doneToday: completed,
       completedDays: completedDays,
+      status: shouldReopenCompletedOnce ? PlanStatus.active : null,
+      clearEndedAt: shouldReopenCompletedOnce,
       checkins: checkins,
     );
   }

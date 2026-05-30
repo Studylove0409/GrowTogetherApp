@@ -25,7 +25,6 @@ class CheckinPage extends StatefulWidget {
 
 class _CheckinPageState extends State<CheckinPage> {
   final _noteController = TextEditingController();
-  bool _completed = true;
   CheckinMood _mood = CheckinMood.happy;
   bool _saving = false;
   bool _showSuccess = false;
@@ -52,7 +51,7 @@ class _CheckinPageState extends State<CheckinPage> {
   Widget build(BuildContext context) {
     final store = context.read<Store>();
     final plan = store.getPlanById(widget.planId);
-    final canCheckin = plan?.canCurrentUserCheckinOn(_effectiveDate) ?? false;
+    final canCheckin = _canModifyCheckin(plan);
 
     return Scaffold(
       appBar: AppBar(
@@ -117,28 +116,32 @@ class _CheckinPageState extends State<CheckinPage> {
                         ),
                       ],
                       const SizedBox(height: AppSpacing.md),
-                      SegmentedButton<bool>(
-                        segments: const [
-                          ButtonSegment(
-                            value: true,
-                            label: Text('完成'),
-                            icon: Icon(Icons.check_rounded),
-                          ),
-                          ButtonSegment(
-                            value: false,
-                            label: Text('未完成'),
-                            icon: Icon(Icons.close_rounded),
-                          ),
-                        ],
-                        selected: {_completed},
-                        onSelectionChanged: canCheckin && !_saving
-                            ? (value) =>
-                                  setState(() => _completed = value.first)
-                            : null,
-                        style: SegmentedButton.styleFrom(
-                          backgroundColor: AppColors.lightPink,
-                          selectedBackgroundColor: Colors.white,
-                          selectedForegroundColor: AppColors.deepPink,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.lightPink,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.check_rounded,
+                              color: AppColors.deepPink,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '完成打卡',
+                              style: AppTextStyles.body.copyWith(
+                                color: AppColors.deepPink,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -189,7 +192,7 @@ class _CheckinPageState extends State<CheckinPage> {
           ),
           if (_showSuccess)
             _CheckinSuccessOverlay(
-              completed: _completed,
+              completed: true,
               planTitle: plan?.title ?? '今日计划',
             ),
         ],
@@ -221,7 +224,7 @@ class _CheckinPageState extends State<CheckinPage> {
     final store = context.read<Store>();
     final saveFuture = store.saveCheckin(
       planId: widget.planId,
-      completed: _completed,
+      completed: true,
       mood: _mood,
       note: _noteController.text,
       date: widget.targetDate,
@@ -264,6 +267,13 @@ class _CheckinPageState extends State<CheckinPage> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  bool _canModifyCheckin(Plan? plan) {
+    if (plan == null || plan.owner == PlanOwner.partner) return false;
+    if (plan.canCurrentUserCheckinOn(_effectiveDate)) return true;
+    return plan.isScheduledOnDate(_effectiveDate) &&
+        plan.hasCurrentUserCheckinOn(_effectiveDate);
   }
 
   String _cannotCheckinText(Plan? plan) {

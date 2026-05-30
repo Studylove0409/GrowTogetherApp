@@ -55,6 +55,19 @@ DateTime _daysFromToday(int days) {
   return _todayOnly().add(Duration(days: days));
 }
 
+Future<void> _pickPlanListDate(WidgetTester tester, DateTime date) async {
+  await tester.tap(find.byIcon(Icons.expand_more_rounded));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('${date.day}').last);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('确定'));
+  await tester.pumpAndSettle();
+}
+
+bool _isSameTestDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
+}
+
 void main() {
   testWidgets('GrowTogether shell shows the home page', (tester) async {
     await tester.pumpWidget(const GrowTogetherApp());
@@ -200,6 +213,35 @@ void main() {
 
     expect(store.getPlanById('home-quick-checkin')?.doneToday, isTrue);
     expect(find.text('已完成「首页一键打卡」打卡'), findsOneWidget);
+  });
+
+  testWidgets('HomePage cancels completed today plan from status pill', (
+    tester,
+  ) async {
+    final store = _HomeQuickCheckinStore();
+    await store.saveCheckin(
+      planId: 'home-quick-checkin',
+      completed: true,
+      mood: CheckinMood.happy,
+      note: '',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ChangeNotifierProvider<Store>.value(
+            value: store,
+            child: const HomePage(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('取消打卡：首页一键打卡'));
+    await tester.pumpAndSettle();
+
+    expect(store.getPlanById('home-quick-checkin')?.doneToday, isFalse);
+    expect(find.text('已取消「首页一键打卡」打卡'), findsOneWidget);
   });
 
   testWidgets('HomePage calendar art opens growth records', (tester) async {
@@ -419,6 +461,42 @@ void main() {
     expect(store.getPlans().map((item) => item.id), contains(plan.id));
   });
 
+  test('MockStore can cancel a completed once plan', () async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '完成后还能取消',
+      isShared: false,
+      dailyTask: '取消后恢复待打卡',
+      startDate: _todayOnly(),
+      endDate: _todayOnly(),
+      reminderTime: null,
+      repeatType: PlanRepeatType.once,
+      hasDateRange: false,
+    );
+
+    await store.saveCheckin(
+      planId: plan.id,
+      completed: true,
+      mood: CheckinMood.happy,
+      note: '完成',
+    );
+
+    expect(store.getPlanById(plan.id)!.status, PlanStatus.ended);
+
+    await store.saveCheckin(
+      planId: plan.id,
+      completed: false,
+      mood: CheckinMood.normal,
+      note: '取消完成',
+    );
+
+    final updated = store.getPlanById(plan.id)!;
+    expect(updated.status, PlanStatus.active);
+    expect(updated.doneToday, isFalse);
+    expect(updated.hasCurrentUserCheckinOn(_todayOnly()), isFalse);
+    expect(store.getPlans().map((item) => item.id), contains(plan.id));
+  });
+
   test('MockStore keeps manually ended plan visible in owner list', () async {
     final store = MockStore.instance;
     final plan = await store.createPlan(
@@ -503,7 +581,7 @@ void main() {
     expect(find.text('选择查看日期'), findsOneWidget);
   });
 
-  testWidgets('PlanListScaffold filters unfinished plans separately', (
+  testWidgets('PlanListScaffold treats incomplete records as pending', (
     tester,
   ) async {
     final today = _todayOnly();
@@ -545,7 +623,7 @@ void main() {
       MaterialApp(
         home: PlanListScaffold(
           title: '我的计划',
-          filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
+          filterOptions: const ['全部', '待打卡', '已完成'],
           plans: [pendingPlan, unfinishedPlan, completedPlan],
           planCountLabel: '共 3 个计划',
           owner: PlanOwner.me,
@@ -559,18 +637,11 @@ void main() {
     expect(find.text('今天未完成计划'), findsOneWidget);
     expect(find.text('今天已完成计划'), findsOneWidget);
 
-    await tester.tap(find.text('未完成').first);
-    await tester.pumpAndSettle();
-
-    expect(find.text('等待完成计划'), findsNothing);
-    expect(find.text('今天未完成计划'), findsOneWidget);
-    expect(find.text('今天已完成计划'), findsNothing);
-
-    await tester.tap(find.text('待打卡'));
+    await tester.tap(find.text('待打卡').first);
     await tester.pumpAndSettle();
 
     expect(find.text('等待完成计划'), findsOneWidget);
-    expect(find.text('今天未完成计划'), findsNothing);
+    expect(find.text('今天未完成计划'), findsOneWidget);
     expect(find.text('今天已完成计划'), findsNothing);
 
     await tester.tap(find.text('已完成'));
@@ -585,6 +656,7 @@ void main() {
     tester,
   ) async {
     var quickCheckinCount = 0;
+    bool? quickCompleted;
     var openedPlanCount = 0;
     final plan = _testPlan(
       startDate: _todayOnly(),
@@ -602,7 +674,10 @@ void main() {
           owner: PlanOwner.me,
           onAdd: () {},
           onTapPlan: (_, __) => openedPlanCount++,
-          onQuickCheckin: (_) async => quickCheckinCount++,
+          onQuickCheckin: (_, __, completed) async {
+            quickCheckinCount++;
+            quickCompleted = completed;
+          },
         ),
       ),
     );
@@ -611,6 +686,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(quickCheckinCount, 1);
+    expect(quickCompleted, isTrue);
     expect(openedPlanCount, 0);
     expect(find.text('已完成「等待完成计划」打卡'), findsOneWidget);
 
@@ -619,6 +695,132 @@ void main() {
 
     expect(quickCheckinCount, 1);
     expect(openedPlanCount, 1);
+  });
+
+  testWidgets('PlanListScaffold cancels completed plan from status pill', (
+    tester,
+  ) async {
+    bool? quickCompleted;
+    DateTime? checkedDate;
+    final today = _todayOnly();
+    final plan =
+        _testPlan(
+          startDate: today,
+          endDate: today,
+          repeatType: PlanRepeatType.daily,
+        ).copyWith(
+          id: 'cancel-quick-plan',
+          title: '已经完成计划',
+          doneToday: true,
+          completedDays: 1,
+        );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: [plan],
+          planCountLabel: '共 1 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_, __) {},
+          onQuickCheckin: (_, selectedDate, completed) async {
+            checkedDate = selectedDate;
+            quickCompleted = completed;
+          },
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('取消打卡：已经完成计划'));
+    await tester.pumpAndSettle();
+
+    expect(_isSameTestDate(checkedDate!, today), isTrue);
+    expect(quickCompleted, isFalse);
+    expect(find.text('已取消「已经完成计划」打卡'), findsOneWidget);
+  });
+
+  testWidgets('PlanListScaffold quick-checks a future selected date', (
+    tester,
+  ) async {
+    DateTime? checkedDate;
+    bool? quickCompleted;
+    var openedPlanCount = 0;
+    final today = _todayOnly();
+    final tomorrow = today.add(const Duration(days: 1));
+    final plan = _testPlan(
+      startDate: today,
+      endDate: today.add(const Duration(days: 6)),
+      repeatType: PlanRepeatType.daily,
+    ).copyWith(id: 'future-quick-plan', title: '未来直接打卡');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: [plan],
+          planCountLabel: '共 1 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_, __) => openedPlanCount++,
+          onQuickCheckin: (_, selectedDate, completed) async {
+            checkedDate = selectedDate;
+            quickCompleted = completed;
+          },
+        ),
+      ),
+    );
+
+    await _pickPlanListDate(tester, tomorrow);
+    await tester.tap(find.byTooltip('完成打卡：未来直接打卡'));
+    await tester.pumpAndSettle();
+
+    expect(_isSameTestDate(checkedDate!, tomorrow), isTrue);
+    expect(quickCompleted, isTrue);
+    expect(openedPlanCount, 0);
+    expect(find.text('已完成「未来直接打卡」打卡'), findsOneWidget);
+  });
+
+  testWidgets('PlanListScaffold quick-checks a past selected date', (
+    tester,
+  ) async {
+    DateTime? checkedDate;
+    bool? quickCompleted;
+    final today = _todayOnly();
+    final yesterday = today.subtract(const Duration(days: 1));
+    final plan = _testPlan(
+      startDate: yesterday,
+      endDate: today.add(const Duration(days: 6)),
+      repeatType: PlanRepeatType.daily,
+    ).copyWith(id: 'past-quick-plan', title: '过去直接补打卡');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PlanListScaffold(
+          title: '我的计划',
+          filterOptions: const ['全部', '待打卡', '已完成'],
+          plans: [plan],
+          planCountLabel: '共 1 个计划',
+          owner: PlanOwner.me,
+          onAdd: () {},
+          onTapPlan: (_, __) {},
+          onQuickCheckin: (_, selectedDate, completed) async {
+            checkedDate = selectedDate;
+            quickCompleted = completed;
+          },
+        ),
+      ),
+    );
+
+    await _pickPlanListDate(tester, yesterday);
+    await tester.tap(find.byTooltip('完成打卡：过去直接补打卡'));
+    await tester.pumpAndSettle();
+
+    expect(_isSameTestDate(checkedDate!, yesterday), isTrue);
+    expect(quickCompleted, isTrue);
+    expect(find.text('已完成「过去直接补打卡」打卡'), findsOneWidget);
   });
 
   testWidgets(
@@ -668,20 +870,20 @@ void main() {
         MaterialApp(
           home: PlanListScaffold(
             title: '我的计划',
-            filterOptions: const ['全部', '待打卡', '未完成', '已完成'],
+            filterOptions: const ['全部', '待打卡', '已完成'],
             plans: [pendingPlan, completedPlan, unfinishedPlan, partnerPlan],
             planCountLabel: '共 4 个计划',
             owner: PlanOwner.me,
             onAdd: () {},
             onTapPlan: (_, __) {},
-            onQuickCheckin: (_) async {},
+            onQuickCheckin: (_, __, ___) async {},
           ),
         ),
       );
 
       expect(find.byTooltip('完成打卡：可直接打卡'), findsOneWidget);
-      expect(find.byTooltip('完成打卡：已经打卡'), findsNothing);
-      expect(find.byTooltip('完成打卡：今天未完成'), findsNothing);
+      expect(find.byTooltip('取消打卡：已经打卡'), findsOneWidget);
+      expect(find.byTooltip('完成打卡：今天未完成'), findsOneWidget);
       expect(find.byTooltip('完成打卡：TA 的计划'), findsNothing);
     },
   );
@@ -1423,11 +1625,9 @@ void main() {
     final initialReminderCount = store.getReminders().length;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: ChangeNotifierProvider<Store>.value(
-          value: store,
-          child: PlanDetailPage(planId: plan.id),
-        ),
+      ChangeNotifierProvider<Store>.value(
+        value: store,
+        child: MaterialApp(home: PlanDetailPage(planId: plan.id)),
       ),
     );
 
@@ -1453,14 +1653,14 @@ void main() {
     expect(find.text('提醒已经飞过去啦～'), findsOneWidget);
   });
 
-  testWidgets('PlanDetailPage shows incomplete checkin as not completed', (
+  testWidgets('PlanDetailPage shows cancelled checkin as pending', (
     tester,
   ) async {
     final store = MockStore.instance;
     final plan = await store.createPlan(
-      title: '未完成状态测试计划',
+      title: '取消状态测试计划',
       isShared: false,
-      dailyTask: '记录今天没有完成',
+      dailyTask: '取消后回到待打卡',
       startDate: _daysFromToday(-1),
       endDate: _daysFromToday(6),
       reminderTime: null,
@@ -1472,22 +1672,106 @@ void main() {
       planId: plan.id,
       completed: false,
       mood: CheckinMood.normal,
-      note: '今天没完成',
+      note: '取消完成',
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: ChangeNotifierProvider<Store>.value(
-          value: store,
-          child: PlanDetailPage(planId: plan.id),
-        ),
+      ChangeNotifierProvider<Store>.value(
+        value: store,
+        child: MaterialApp(home: PlanDetailPage(planId: plan.id)),
       ),
     );
 
-    expect(find.text('未完成'), findsWidgets);
-    expect(find.text('待打卡'), findsNothing);
-    expect(find.text('修改打卡'), findsOneWidget);
+    expect(find.text('未完成'), findsNothing);
+    expect(find.text('待打卡'), findsWidgets);
+    expect(find.text('去打卡'), findsOneWidget);
   });
+
+  testWidgets('PlanDetailPage lets completed plan cancel checkin', (
+    tester,
+  ) async {
+    final store = MockStore.instance;
+    final plan = await store.createPlan(
+      title: '已完成可取消测试',
+      isShared: false,
+      dailyTask: '完成后还能取消',
+      startDate: _daysFromToday(-1),
+      endDate: _daysFromToday(6),
+      reminderTime: null,
+      repeatType: PlanRepeatType.daily,
+      hasDateRange: true,
+    );
+
+    await store.saveCheckin(
+      planId: plan.id,
+      completed: true,
+      mood: CheckinMood.happy,
+      note: '完成',
+    );
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<Store>.value(
+        value: store,
+        child: MaterialApp(home: PlanDetailPage(planId: plan.id)),
+      ),
+    );
+
+    expect(find.text('取消打卡'), findsOneWidget);
+
+    await tester.tap(find.text('取消打卡'));
+    await tester.pumpAndSettle();
+
+    expect(store.getPlanById(plan.id)!.doneToday, isFalse);
+    expect(store.getPlanById(plan.id)!.hasCurrentUserCheckinToday, isFalse);
+    expect(find.text('已取消「已完成可取消测试」打卡'), findsOneWidget);
+  });
+
+  testWidgets(
+    'PlanDetailPage uses target date status instead of today status',
+    (tester) async {
+      final today = _todayOnly();
+      final tomorrow = today.add(const Duration(days: 1));
+      final plan = Plan(
+        id: 'target-date-plan',
+        title: '目标日期计划',
+        subtitle: '今天已打卡，明天未打卡',
+        owner: PlanOwner.me,
+        iconKey: 'book',
+        minutes: 20,
+        completedDays: 1,
+        totalDays: 7,
+        doneToday: true,
+        color: Colors.pink,
+        dailyTask: '按目标日期显示状态',
+        startDate: today.subtract(const Duration(days: 1)),
+        endDate: today.add(const Duration(days: 5)),
+        reminderTime: null,
+        repeatType: PlanRepeatType.daily,
+        hasDateRange: true,
+        checkins: [
+          CheckinRecord(
+            date: today,
+            completed: true,
+            mood: CheckinMood.happy,
+            note: '今天完成',
+          ),
+        ],
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChangeNotifierProvider<Store>.value(
+            value: _SinglePlanStore(plan),
+            child: PlanDetailPage(planId: plan.id, targetDate: tomorrow),
+          ),
+        ),
+      );
+
+      expect(find.text('已打卡'), findsNothing);
+      expect(find.text('待打卡'), findsWidgets);
+      expect(find.text('提前打卡'), findsOneWidget);
+    },
+  );
 
   testWidgets('PlanDetailPage does not remind for a not-started plan', (
     tester,
@@ -1956,6 +2240,28 @@ class _RefreshSmokeStore extends Store {
 
   @override
   Future<void> markReceivedRemindersRead() async {}
+}
+
+class _SinglePlanStore extends _RefreshSmokeStore {
+  _SinglePlanStore(this.plan);
+
+  final Plan plan;
+
+  @override
+  List<Plan> getPlans() => [plan];
+
+  @override
+  List<Plan> getPlansByOwner(PlanOwner owner) =>
+      plan.owner == owner ? [plan] : [];
+
+  @override
+  List<Plan> getTodayFocusPlans() => [plan];
+
+  @override
+  List<Plan> getAllPlans() => [plan];
+
+  @override
+  Plan? getPlanById(String id) => id == plan.id ? plan : null;
 }
 
 class _PlansInitialLoadingStore extends _RefreshSmokeStore {

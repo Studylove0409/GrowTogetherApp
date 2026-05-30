@@ -360,7 +360,7 @@ class _DayRecordTile extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  '${isMe ? '你' : 'TA'} · ${entry.record.completed ? '已完成' : '未完成'}',
+                  '${isMe ? '你' : 'TA'} · ${entry.record.completed ? '已完成' : '待打卡'}',
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.secondaryText,
                     fontWeight: FontWeight.w700,

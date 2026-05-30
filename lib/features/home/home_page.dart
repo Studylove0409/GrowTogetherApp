@@ -88,7 +88,8 @@ class HomePage extends StatelessWidget {
                   MaterialPageRoute<void>(builder: (_) => const MyPlansPage()),
                 ),
                 onPlanTap: (plan) => _openPlan(context, plan),
-                onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
+                onQuickCheckin: (plan, completed) =>
+                    _saveQuickCheckin(context, plan, completed: completed),
                 onEmptyAction: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => const CreatePlanPage(),
@@ -119,7 +120,8 @@ class HomePage extends StatelessWidget {
                   ),
                 ),
                 onPlanTap: (plan) => _openPlan(context, plan),
-                onQuickCheckin: (plan) => _saveQuickCheckin(context, plan),
+                onQuickCheckin: (plan, completed) =>
+                    _saveQuickCheckin(context, plan, completed: completed),
                 onEmptyAction: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) =>
@@ -234,10 +236,14 @@ bool _needsTodayAction(Plan plan) {
   };
 }
 
-Future<void> _saveQuickCheckin(BuildContext context, Plan plan) {
+Future<void> _saveQuickCheckin(
+  BuildContext context,
+  Plan plan, {
+  required bool completed,
+}) {
   return context.read<Store>().saveCheckin(
     planId: plan.id,
-    completed: true,
+    completed: completed,
     mood: CheckinMood.happy,
     note: '',
   );
@@ -268,20 +274,22 @@ class _HomePlanSection extends StatefulWidget {
   final VoidCallback onViewAll;
   final ValueChanged<Plan> onPlanTap;
   final VoidCallback? onEmptyAction;
-  final Future<void> Function(Plan plan)? onQuickCheckin;
+  final Future<void> Function(Plan plan, bool completed)? onQuickCheckin;
 
   @override
   State<_HomePlanSection> createState() => _HomePlanSectionState();
 }
 
 class _HomePlanSectionState extends State<_HomePlanSection> {
-  final Set<String> _optimisticDonePlanIds = <String>{};
+  final Map<String, bool> _optimisticCompletedByPlanId = <String, bool>{};
 
   @override
   void didUpdateWidget(covariant _HomePlanSection oldWidget) {
     super.didUpdateWidget(oldWidget);
     final visiblePlanIds = widget.plans.map((plan) => plan.id).toSet();
-    _optimisticDonePlanIds.removeWhere((id) => !visiblePlanIds.contains(id));
+    _optimisticCompletedByPlanId.removeWhere(
+      (id, _) => !visiblePlanIds.contains(id),
+    );
   }
 
   @override
@@ -317,27 +325,38 @@ class _HomePlanSectionState extends State<_HomePlanSection> {
         ),
         const SizedBox(height: AppSpacing.md),
         for (final plan in visible) ...[
-          PlanListTile(
-            plan: plan,
-            statusLabel: _statusLabel(
-              plan,
-              optimisticDone: _optimisticDonePlanIds.contains(plan.id),
-            ),
-            statusColor: _statusColor(
-              plan,
-              optimisticDone: _optimisticDonePlanIds.contains(plan.id),
-            ),
-            statusIcon: _statusIcon(
-              plan,
-              optimisticDone: _optimisticDonePlanIds.contains(plan.id),
-            ),
-            showReminderTime: false,
-            onTap: () => widget.onPlanTap(plan),
-            onStatusTap: _canQuickCheckin(plan)
-                ? () => _quickCheckin(plan)
-                : null,
-            statusTooltip: '完成打卡：${plan.title}',
-            statusSemanticsLabel: '完成${plan.title}打卡',
+          Builder(
+            builder: (context) {
+              final optimisticCompleted = _optimisticCompletedByPlanId[plan.id];
+              final completed = _isCurrentUserDone(
+                plan,
+                optimisticCompleted: optimisticCompleted,
+              );
+              final completing = !completed;
+              return PlanListTile(
+                plan: plan,
+                statusLabel: _statusLabel(
+                  plan,
+                  optimisticCompleted: optimisticCompleted,
+                ),
+                statusColor: _statusColor(
+                  plan,
+                  optimisticCompleted: optimisticCompleted,
+                ),
+                statusIcon: _statusIcon(
+                  plan,
+                  optimisticCompleted: optimisticCompleted,
+                ),
+                showReminderTime: false,
+                onTap: () => widget.onPlanTap(plan),
+                onStatusTap: _canQuickCheckin(plan)
+                    ? () => _quickCheckin(plan, completed: completing)
+                    : null,
+                statusTooltip: '${completing ? '完成' : '取消'}打卡：${plan.title}',
+                statusSemanticsLabel:
+                    '${completing ? '完成' : '取消'}${plan.title}打卡',
+              );
+            },
           ),
           const SizedBox(height: AppSpacing.sm),
         ],
@@ -347,28 +366,30 @@ class _HomePlanSectionState extends State<_HomePlanSection> {
 
   bool _canQuickCheckin(Plan plan) {
     return widget.onQuickCheckin != null &&
-        !_optimisticDonePlanIds.contains(plan.id) &&
-        plan.canCurrentUserCheckin &&
-        !plan.hasCurrentUserCheckinToday;
+        !_optimisticCompletedByPlanId.containsKey(plan.id) &&
+        plan.owner != PlanOwner.partner &&
+        (plan.canCurrentUserCheckin || plan.hasCurrentUserCheckinToday);
   }
 
-  Future<void> _quickCheckin(Plan plan) async {
+  Future<void> _quickCheckin(Plan plan, {required bool completed}) async {
     final quickCheckin = widget.onQuickCheckin;
     if (quickCheckin == null) return;
 
-    setState(() => _optimisticDonePlanIds.add(plan.id));
+    setState(() => _optimisticCompletedByPlanId[plan.id] = completed);
     try {
-      await quickCheckin(plan);
+      await quickCheckin(plan, completed);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('已完成「${plan.title}」打卡'),
+          content: Text(
+            completed ? '已完成「${plan.title}」打卡' : '已取消「${plan.title}」打卡',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
     } catch (_) {
       if (!mounted) return;
-      setState(() => _optimisticDonePlanIds.remove(plan.id));
+      setState(() => _optimisticCompletedByPlanId.remove(plan.id));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('打卡失败，请稍后再试'),
@@ -1039,58 +1060,45 @@ class _HeartBubble extends StatelessWidget {
 
 // ========================= 辅助函数 =========================
 
-String _statusLabel(Plan plan, {bool optimisticDone = false}) {
-  if (optimisticDone) {
-    return plan.owner == PlanOwner.together ? '我已打卡' : '已完成';
+String _statusLabel(Plan plan, {bool? optimisticCompleted}) {
+  if (optimisticCompleted != null) {
+    if (optimisticCompleted) {
+      return plan.owner == PlanOwner.together ? '我已打卡' : '已完成';
+    }
+    return '待打卡';
   }
   if (plan.isOverdue) return '已逾期';
   return switch (plan.owner) {
-    PlanOwner.partner =>
-      plan.partnerDoneToday
-          ? 'TA已完成'
-          : plan.hasPartnerCheckinToday
-          ? 'TA未完成'
-          : 'TA待打卡',
-    PlanOwner.together =>
-      plan.doneToday
-          ? '我已打卡'
-          : plan.hasCurrentUserCheckinToday
-          ? '我未完成'
-          : '待打卡',
-    PlanOwner.me =>
-      plan.doneToday
-          ? '已完成'
-          : plan.hasCurrentUserCheckinToday
-          ? '未完成'
-          : '待打卡',
+    PlanOwner.partner => plan.partnerDoneToday ? 'TA已完成' : 'TA待打卡',
+    PlanOwner.together => plan.doneToday ? '我已打卡' : '待打卡',
+    PlanOwner.me => plan.doneToday ? '已完成' : '待打卡',
   };
 }
 
-Color _statusColor(Plan plan, {bool optimisticDone = false}) {
-  if (optimisticDone) return AppColors.successText;
-  if (plan.isOverdue) return AppColors.reminder;
-  if (plan.owner == PlanOwner.partner && plan.hasPartnerCheckinToday) {
-    return plan.partnerDoneToday ? AppColors.successText : AppColors.reminder;
+Color _statusColor(Plan plan, {bool? optimisticCompleted}) {
+  if (optimisticCompleted != null) {
+    return optimisticCompleted ? AppColors.successText : AppColors.deepPink;
   }
-  if (plan.hasCurrentUserCheckinToday && !plan.isDoneForCurrentUser) {
-    return AppColors.reminder;
+  if (plan.isOverdue) return AppColors.reminder;
+  if (plan.owner == PlanOwner.partner && plan.partnerDoneToday) {
+    return AppColors.successText;
   }
   return plan.isDoneForCurrentUser ? AppColors.successText : AppColors.deepPink;
 }
 
-IconData _statusIcon(Plan plan, {bool optimisticDone = false}) {
-  if (optimisticDone) return Icons.check_circle_rounded;
-  if (plan.owner == PlanOwner.partner &&
-      plan.hasPartnerCheckinToday &&
-      !plan.partnerDoneToday) {
-    return Icons.error_outline_rounded;
-  }
-  if (plan.hasCurrentUserCheckinToday && !plan.isDoneForCurrentUser) {
-    return Icons.error_outline_rounded;
+IconData _statusIcon(Plan plan, {bool? optimisticCompleted}) {
+  if (optimisticCompleted != null) {
+    return optimisticCompleted
+        ? Icons.check_circle_rounded
+        : Icons.radio_button_unchecked_rounded;
   }
   return plan.isDoneForCurrentUser
       ? Icons.check_circle_rounded
       : Icons.radio_button_unchecked_rounded;
+}
+
+bool _isCurrentUserDone(Plan plan, {bool? optimisticCompleted}) {
+  return optimisticCompleted ?? plan.isDoneForCurrentUser;
 }
 
 void _openPlan(BuildContext context, Plan plan) {

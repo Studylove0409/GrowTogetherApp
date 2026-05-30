@@ -37,6 +37,23 @@ flutter test test/widget_test.dart
 The app uses anonymous auth with Supabase — no email/password login. The `SUPABASE_ANON_KEY` dart-define is required; without it the app falls back to `MockStore`.
 Release APKs must be built with `scripts/build_release_android.sh` so the Supabase dart-defines are always included.
 
+### Shorebird OTA updates
+
+The app uses Shorebird for over-the-air Dart patches. App ID is in `shorebird.yaml`.
+
+```bash
+# Create a new Shorebird release (first install on device)
+SUPABASE_ANON_KEY=sb_publishable_... scripts/shorebird_release_android.sh
+
+# Push a Dart/UI patch to existing installed releases
+SUPABASE_ANON_KEY=sb_publishable_... scripts/shorebird_patch_android.sh
+
+# Patch a specific release version
+RELEASE_VERSION=1.0.0+1 SUPABASE_ANON_KEY=sb_publishable_... scripts/shorebird_patch_android.sh
+```
+
+Native code changes require a new Shorebird release; Dart-only changes can be patched.
+
 ## Architecture
 
 ### Store abstraction
@@ -50,9 +67,11 @@ The store is injected at the root via `Provider<Store>.value` in `app.dart`. The
 
 ### Data layer
 
-- `data/models/` — Plain Dart models: `Plan`, `Reminder`, `Profile`, `CheckinRecord`, `CoupleInvitation`.
+- `data/models/` — Plain Dart models: `Plan`, `Reminder`, `Profile`, `CheckinRecord`, `CoupleInvitation`, `FocusSession`, `ReminderSettings`.
 - `data/supabase/*_repository.dart` — One repository per domain entity. Each repository wraps Supabase queries, and accepts an optional `SupabaseClient` for testability.
 - `data/supabase/supabase_store.dart` — Orchestrates repositories, maintains local caches (`_plans`, `_reminders`, `_profile`), and wires up realtime subscriptions.
+- `data/cache/plan_cache_service.dart` / `profile_cache_service.dart` — SharedPreferences-backed caches that persist plan/profile data across cold starts for faster first paint. `SupabaseStore` hydrates from this cache on launch before the network response arrives.
+- `data/services/plan_occurrence_service.dart` — Derives which plan occurrences are active on a given day, accounting for `repeatType` and `hasDateRange`.
 
 ### UI layer
 
@@ -73,6 +92,18 @@ The store is injected at the root via `Provider<Store>.value` in `app.dart`. The
 1. **Create plan**: `CreatePlanPage` → `Store.createPlan()` → Supabase `plan_repository.createPlan()` → `profiles` RPC → realtime → local cache refresh.
 2. **Send reminder**: `PlanDetailPage._showRemindSheet` → `Store.sendReminder()` → `reminder_repository.sendReminder()` → `send_reminder` RPC → INSERT into `reminders` → trigger calls Edge Function → FCM push.
 3. **Realtime sync**: `SupabaseStore._subscribeRealtime()` listens to Postgres changes on `plans`, `checkins`, `reminders` tables and auto-refreshes local caches.
+4. **Cold start cache**: on launch `SupabaseStore` reads `PlanCacheService` / `ProfileCacheService` synchronously; `Store.hasHydratedPlanCache` turns `true` before the network fetch completes, letting the home screen paint immediately.
+5. **Focus session**: `FocusPage` → `Store.createCoupleFocusInvite()` / `saveFocusSession()` → `focus_session_repository` → `create_focus_invite` / `create_completed_focus_session` RPC. Couple focus uses a shared `started_at` + `total_paused_seconds` so both clients render the same countdown.
+
+## Domain vocabulary
+
+`CONTEXT.md` at the repo root is the authoritative glossary. Always use its terms (e.g., **Couple Relationship** not "couple account", **Ended Plan** not "deleted plan", **Checkin** not "punch"). Read it before adding features or touching the domain model. Relevant architectural decisions are recorded in `docs/adr/`.
+
+Key derivations that are **not** stored in the database:
+- `PlanOwner` enum (`me` / `partner` / `together`) — computed at repository layer from `plan_type + creator_id` vs current user.
+- `Reminder.sentByMe` — derived from `fromUserId` vs current user.
+- Growth records — calculated from `plans + checkins` on the fly; no `growth_records` table.
+- `checkin_date` uses the **Asia/Shanghai** calendar day, not UTC.
 
 ## Tests
 

@@ -16,12 +16,20 @@ class CheckinRepository {
     required CheckinMood mood,
     required String note,
   }) async {
-    await _supabase.rpc('upsert_today_checkin', params: {
-      'p_plan_id': planId,
-      'p_status': completed ? 'completed' : 'uncompleted',
-      'p_mood': _fromMood(mood),
-      'p_note': note.isEmpty ? null : note,
-    });
+    if (!completed) {
+      await cancelTodayCheckin(planId: planId);
+      return;
+    }
+
+    await _supabase.rpc(
+      'upsert_today_checkin',
+      params: {
+        'p_plan_id': planId,
+        'p_status': 'completed',
+        'p_mood': _fromMood(mood),
+        'p_note': note.isEmpty ? null : note,
+      },
+    );
   }
 
   /// 为任意日期（过去或未来）提交打卡，调用 upsert_checkin_for_date RPC。
@@ -37,13 +45,39 @@ class CheckinRepository {
         '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
-    await _supabase.rpc('upsert_checkin_for_date', params: {
-      'p_plan_id': planId,
-      'p_date': dateStr,
-      'p_status': completed ? 'completed' : 'uncompleted',
-      'p_mood': _fromMood(mood),
-      'p_note': note.isEmpty ? null : note,
-    });
+    if (!completed) {
+      await cancelCheckinForDate(planId: planId, date: date);
+      return;
+    }
+
+    await _supabase.rpc(
+      'upsert_checkin_for_date',
+      params: {
+        'p_plan_id': planId,
+        'p_date': dateStr,
+        'p_status': 'completed',
+        'p_mood': _fromMood(mood),
+        'p_note': note.isEmpty ? null : note,
+      },
+    );
+  }
+
+  Future<void> cancelTodayCheckin({required String planId}) async {
+    await _supabase.rpc('cancel_today_checkin', params: {'p_plan_id': planId});
+  }
+
+  Future<void> cancelCheckinForDate({
+    required String planId,
+    required DateTime date,
+  }) async {
+    final dateStr =
+        '${date.year.toString().padLeft(4, '0')}-'
+        '${date.month.toString().padLeft(2, '0')}-'
+        '${date.day.toString().padLeft(2, '0')}';
+    await _supabase.rpc(
+      'cancel_checkin_for_date',
+      params: {'p_plan_id': planId, 'p_date': dateStr},
+    );
   }
 
   String _fromMood(CheckinMood mood) => switch (mood) {

@@ -33,7 +33,11 @@ class PlanDetailPage extends StatelessWidget {
     final isToday = _isSameDateStatic(effective, DateTime.now());
     if (isToday) return const Text('计划详情', style: AppTextStyles.section);
 
-    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    final today = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
     final d = DateTime(effective.year, effective.month, effective.day);
     final tag = d.isBefore(today) ? '补打卡' : '提前打卡';
 
@@ -57,6 +61,7 @@ class PlanDetailPage extends StatelessWidget {
     final store = context.watch<Store>();
     final plan = store.getPlanById(planId);
     final profile = store.getProfile();
+    final effectiveDate = _effectiveDate;
     if (plan == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('计划详情')),
@@ -87,9 +92,13 @@ class PlanDetailPage extends StatelessWidget {
               32,
             ),
             children: [
-              _PlanOverviewCard(plan: plan),
+              _PlanOverviewCard(plan: plan, date: effectiveDate),
               const SizedBox(height: AppSpacing.md),
-              _TodayActionCard(plan: plan, profile: profile),
+              _TodayActionCard(
+                plan: plan,
+                profile: profile,
+                date: effectiveDate,
+              ),
               const SizedBox(height: AppSpacing.md),
               _RecentCheckinsCard(
                 plan: plan,
@@ -139,9 +148,10 @@ class PlanDetailPage extends StatelessWidget {
     }
 
     if (plan.isCompletedOnceToday) {
-      return const _CompletedActionPill(
-        label: '已完成',
-        icon: Icons.check_circle_rounded,
+      return PrimaryButton(
+        label: '取消打卡',
+        icon: Icons.undo_rounded,
+        onPressed: () => _cancelCheckin(context, plan),
       );
     }
 
@@ -169,10 +179,13 @@ class PlanDetailPage extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
-            const Expanded(
-              child: _CompletedActionPill(
-                label: '双方已完成',
-                icon: Icons.verified_rounded,
+            Expanded(
+              child: PrimaryPillButton(
+                label: '取消打卡',
+                icon: Icons.undo_rounded,
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                onPressed: () => _cancelCheckin(context, plan),
               ),
             ),
           ],
@@ -183,20 +196,22 @@ class PlanDetailPage extends StatelessWidget {
         return Row(
           children: [
             Expanded(
-              child: _PlanActionButton(
-                label: '编辑',
-                icon: Icons.edit_rounded,
-                onPressed: () => _openEditPage(context, plan),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
               child: PrimaryPillButton(
                 label: '提醒 TA',
                 icon: Icons.notifications_rounded,
                 height: 52,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 onPressed: () => _showRemindSheet(context, plan),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: PrimaryPillButton(
+                label: '取消打卡',
+                icon: Icons.undo_rounded,
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                onPressed: () => _cancelCheckin(context, plan),
               ),
             ),
           ],
@@ -215,12 +230,14 @@ class PlanDetailPage extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: PrimaryPillButton(
-              label: plan.hasCurrentUserCheckinToday ? '修改打卡' : '打卡',
+              label: plan.doneToday ? '取消打卡' : '打卡',
               icon: Icons.check_circle_rounded,
               height: 52,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               onPressed: plan.canCurrentUserCheckin
-                  ? () => _openCheckinPage(context, plan)
+                  ? plan.doneToday
+                        ? () => _cancelCheckin(context, plan)
+                        : () => _openCheckinPage(context, plan)
                   : () => _showCannotCheckinMessage(context, plan),
             ),
           ),
@@ -239,10 +256,11 @@ class PlanDetailPage extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          const Expanded(
-            child: _CompletedActionPill(
-              label: '今日已完成',
-              icon: Icons.check_circle_rounded,
+          Expanded(
+            child: PrimaryButton(
+              label: '取消打卡',
+              icon: Icons.undo_rounded,
+              onPressed: () => _cancelCheckin(context, plan),
             ),
           ),
         ],
@@ -271,10 +289,12 @@ class PlanDetailPage extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: PrimaryButton(
-            label: plan.hasCurrentUserCheckinToday ? '修改打卡' : '去打卡',
+            label: plan.isDoneForCurrentUser ? '取消打卡' : '去打卡',
             icon: Icons.check_circle_rounded,
             onPressed: plan.canCurrentUserCheckin
-                ? () => _openCheckinPage(context, plan)
+                ? plan.isDoneForCurrentUser
+                      ? () => _cancelCheckin(context, plan)
+                      : () => _openCheckinPage(context, plan)
                 : () => _showCannotCheckinMessage(context, plan),
           ),
         ),
@@ -282,18 +302,15 @@ class PlanDetailPage extends StatelessWidget {
     );
   }
 
-  Widget _buildDateSpecificButton(BuildContext context, Plan plan, DateTime date) {
+  Widget _buildDateSpecificButton(
+    BuildContext context,
+    Plan plan,
+    DateTime date,
+  ) {
     if (plan.owner == PlanOwner.partner) {
       return const _MutedActionPill(
         label: 'TA 的计划',
         icon: Icons.visibility_rounded,
-      );
-    }
-
-    if (plan.isEnded) {
-      return const _MutedActionPill(
-        label: '已结束',
-        icon: Icons.event_available_rounded,
       );
     }
 
@@ -304,14 +321,26 @@ class PlanDetailPage extends StatelessWidget {
       );
     }
 
-    if (plan.hasCurrentUserCheckinOn(date)) {
-      return const _CompletedActionPill(
-        label: '已打卡',
-        icon: Icons.check_circle_rounded,
+    if (plan.isCurrentUserDoneOn(date)) {
+      return PrimaryButton(
+        label: '取消打卡',
+        icon: Icons.undo_rounded,
+        onPressed: () => _cancelCheckin(context, plan, date),
       );
     }
 
-    final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+    if (plan.isEnded) {
+      return const _MutedActionPill(
+        label: '已结束',
+        icon: Icons.event_available_rounded,
+      );
+    }
+
+    final today = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
     final d = DateTime(date.year, date.month, date.day);
     final isPast = d.isBefore(today);
 
@@ -356,6 +385,37 @@ class PlanDetailPage extends StatelessWidget {
         builder: (_) => CheckinPage(planId: plan.id, targetDate: date),
       ),
     );
+  }
+
+  Future<void> _cancelCheckin(
+    BuildContext context,
+    Plan plan, [
+    DateTime? date,
+  ]) async {
+    try {
+      await context.read<Store>().saveCheckin(
+        planId: plan.id,
+        completed: false,
+        mood: CheckinMood.happy,
+        note: '',
+        date: date,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('已取消「${plan.title}」打卡'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('取消打卡失败，请稍后再试'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _showCannotCheckinMessage(BuildContext context, Plan plan) {
@@ -693,47 +753,6 @@ class _RemindTypeTile extends StatelessWidget {
   }
 }
 
-class _CompletedActionPill extends StatelessWidget {
-  const _CompletedActionPill({required this.label, required this.icon});
-
-  final String label;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 52,
-      decoration: BoxDecoration(
-        color: AppColors.success.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: AppColors.success.withValues(alpha: 0.34),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 22, color: AppColors.successText),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppColors.successText,
-                fontSize: 15,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _MutedActionPill extends StatelessWidget {
   const _MutedActionPill({required this.label, required this.icon});
 
@@ -775,13 +794,14 @@ class _MutedActionPill extends StatelessWidget {
 }
 
 class _PlanOverviewCard extends StatelessWidget {
-  const _PlanOverviewCard({required this.plan});
+  const _PlanOverviewCard({required this.plan, required this.date});
 
   final Plan plan;
+  final DateTime date;
 
   @override
   Widget build(BuildContext context) {
-    final status = _planStatusUi(plan);
+    final status = _planStatusUi(plan, date);
 
     return Container(
       width: double.infinity,
@@ -994,14 +1014,21 @@ class _InlineMeta extends StatelessWidget {
 }
 
 class _TodayActionCard extends StatelessWidget {
-  const _TodayActionCard({required this.plan, required this.profile});
+  const _TodayActionCard({
+    required this.plan,
+    required this.profile,
+    required this.date,
+  });
 
   final Plan plan;
   final Profile profile;
+  final DateTime date;
 
   @override
   Widget build(BuildContext context) {
-    final status = _planStatusUi(plan);
+    final status = _planStatusUi(plan, date);
+    final title = _isToday(date) ? '今日行动' : '${date.month}月${date.day}日行动';
+    final currentDone = plan.isCurrentUserDoneOn(date);
 
     return AppCard(
       borderRadius: 28,
@@ -1015,7 +1042,7 @@ class _TodayActionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  '今日行动',
+                  title,
                   style: AppTextStyles.section.copyWith(fontSize: 22),
                 ),
               ),
@@ -1029,7 +1056,7 @@ class _TodayActionCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.md),
           if (plan.owner == PlanOwner.together) ...[
-            _CoupleStatusPanel(plan: plan, profile: profile),
+            _CoupleStatusPanel(plan: plan, profile: profile, date: date),
             const SizedBox(height: AppSpacing.md),
           ],
           Row(
@@ -1038,10 +1065,8 @@ class _TodayActionCard extends StatelessWidget {
                 label: plan.isDaily ? '已坚持' : '完成情况',
                 value: plan.isDaily
                     ? '${plan.completedDays}天'
-                    : plan.isDoneForCurrentUser
+                    : currentDone
                     ? '已完成'
-                    : plan.hasCurrentUserCheckinToday
-                    ? '未完成'
                     : '待完成',
               ),
               const SizedBox(width: AppSpacing.sm),
@@ -1084,10 +1109,15 @@ class _TodayActionCard extends StatelessWidget {
 }
 
 class _CoupleStatusPanel extends StatelessWidget {
-  const _CoupleStatusPanel({required this.plan, required this.profile});
+  const _CoupleStatusPanel({
+    required this.plan,
+    required this.profile,
+    required this.date,
+  });
 
   final Plan plan;
   final Profile profile;
+  final DateTime date;
 
   @override
   Widget build(BuildContext context) {
@@ -1109,8 +1139,7 @@ class _CoupleStatusPanel extends StatelessWidget {
                 title: '我的头像',
                 imageUrl: profile.avatarUrl,
               ),
-              completed: plan.doneToday,
-              checkedIn: plan.hasCurrentUserCheckinToday,
+              completed: plan.isCurrentUserDoneOn(date),
               color: AppColors.deepPink,
             ),
           ),
@@ -1128,8 +1157,7 @@ class _CoupleStatusPanel extends StatelessWidget {
                     '${profile.partnerName.trim().isEmpty ? 'TA' : profile.partnerName.trim()}的头像',
                 imageUrl: profile.partnerAvatarUrl,
               ),
-              completed: plan.partnerDoneToday,
-              checkedIn: plan.hasPartnerCheckinToday,
+              completed: plan.isPartnerDoneOn(date),
               color: AppColors.successText,
             ),
           ),
@@ -1146,7 +1174,6 @@ class _PersonStatusTile extends StatelessWidget {
     required this.fallbackIcon,
     required this.onAvatarTap,
     required this.completed,
-    required this.checkedIn,
     required this.color,
   });
 
@@ -1155,21 +1182,12 @@ class _PersonStatusTile extends StatelessWidget {
   final IconData fallbackIcon;
   final VoidCallback onAvatarTap;
   final bool completed;
-  final bool checkedIn;
   final Color color;
 
   @override
   Widget build(BuildContext context) {
-    final effectiveColor = completed
-        ? color
-        : checkedIn
-        ? AppColors.reminder
-        : AppColors.secondaryText;
-    final statusText = completed
-        ? '已打卡'
-        : checkedIn
-        ? '未完成'
-        : '待打卡';
+    final effectiveColor = completed ? color : AppColors.secondaryText;
+    final statusText = completed ? '已打卡' : '待打卡';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
@@ -1218,8 +1236,6 @@ class _PersonStatusTile extends StatelessWidget {
           Icon(
             completed
                 ? Icons.check_circle_rounded
-                : checkedIn
-                ? Icons.error_outline_rounded
                 : Icons.radio_button_unchecked_rounded,
             color: effectiveColor,
             size: 18,
@@ -1349,7 +1365,52 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-({String label, Color color, IconData icon}) _planStatusUi(Plan plan) {
+({String label, Color color, IconData icon}) _planStatusUi(
+  Plan plan,
+  DateTime date,
+) {
+  final day = _dateOnly(date);
+  if (_isToday(day)) return _todayPlanStatusUi(plan);
+
+  if (!plan.isScheduledOnDate(day)) {
+    final start = _dateOnly(plan.startDate);
+    final end = _dateOnly(plan.endDate);
+    if (day.isBefore(start)) {
+      return (
+        label: '未开始',
+        color: AppColors.secondaryText,
+        icon: Icons.event_rounded,
+      );
+    }
+    if (plan.hasDateRange && day.isAfter(end)) {
+      return (
+        label: '已结束',
+        color: AppColors.secondaryText,
+        icon: Icons.event_available_rounded,
+      );
+    }
+    return (
+      label: '不在计划期内',
+      color: AppColors.secondaryText,
+      icon: Icons.event_busy_rounded,
+    );
+  }
+
+  final endedAt = plan.endedAt;
+  if (plan.status == PlanStatus.ended &&
+      endedAt != null &&
+      day.isAfter(_dateOnly(endedAt))) {
+    return (
+      label: '已结束',
+      color: AppColors.secondaryText,
+      icon: Icons.event_available_rounded,
+    );
+  }
+
+  return _datePlanStatusUi(plan, day);
+}
+
+({String label, Color color, IconData icon}) _todayPlanStatusUi(Plan plan) {
   if (plan.isCompletedOnceToday) {
     return (
       label: '已完成',
@@ -1390,12 +1451,6 @@ class _MetricTile extends StatelessWidget {
               color: AppColors.successText,
               icon: Icons.check_circle_rounded,
             )
-          : plan.hasCurrentUserCheckinToday
-          ? (
-              label: '未完成',
-              color: AppColors.reminder,
-              icon: Icons.error_outline_rounded,
-            )
           : (
               label: '待打卡',
               color: AppColors.deepPink,
@@ -1407,12 +1462,6 @@ class _MetricTile extends StatelessWidget {
               label: 'TA 已打卡',
               color: AppColors.successText,
               icon: Icons.check_circle_rounded,
-            )
-          : plan.hasPartnerCheckinToday
-          ? (
-              label: 'TA 未完成',
-              color: AppColors.reminder,
-              icon: Icons.error_outline_rounded,
             )
           : (
               label: 'TA 待打卡',
@@ -1431,16 +1480,69 @@ class _MetricTile extends StatelessWidget {
         icon: Icons.hourglass_top_rounded,
       ),
       TogetherStatus.meNotDone => (
-        label: plan.hasCurrentUserCheckinToday ? '我未完成' : '我待打卡',
-        color: plan.hasCurrentUserCheckinToday
-            ? AppColors.reminder
-            : AppColors.deepPink,
-        icon: plan.hasCurrentUserCheckinToday
-            ? Icons.error_outline_rounded
-            : Icons.radio_button_unchecked_rounded,
+        label: '我待打卡',
+        color: AppColors.deepPink,
+        icon: Icons.radio_button_unchecked_rounded,
       ),
     },
   };
+}
+
+({String label, Color color, IconData icon}) _datePlanStatusUi(
+  Plan plan,
+  DateTime date,
+) {
+  return switch (plan.owner) {
+    PlanOwner.me =>
+      plan.isCurrentUserDoneOn(date)
+          ? (
+              label: '已打卡',
+              color: AppColors.successText,
+              icon: Icons.check_circle_rounded,
+            )
+          : (
+              label: '待打卡',
+              color: AppColors.deepPink,
+              icon: Icons.radio_button_unchecked_rounded,
+            ),
+    PlanOwner.partner =>
+      plan.isPartnerDoneOn(date)
+          ? (
+              label: 'TA 已打卡',
+              color: AppColors.successText,
+              icon: Icons.check_circle_rounded,
+            )
+          : (
+              label: 'TA 待打卡',
+              color: AppColors.deepPink,
+              icon: Icons.radio_button_unchecked_rounded,
+            ),
+    PlanOwner.together => switch (plan.togetherStatusOn(date)) {
+      TogetherStatus.bothDone => (
+        label: '双方已完成',
+        color: AppColors.successText,
+        icon: Icons.verified_rounded,
+      ),
+      TogetherStatus.onlyMeDone => (
+        label: '等 TA',
+        color: AppColors.reminder,
+        icon: Icons.hourglass_top_rounded,
+      ),
+      TogetherStatus.meNotDone => (
+        label: '我待打卡',
+        color: AppColors.deepPink,
+        icon: Icons.radio_button_unchecked_rounded,
+      ),
+    },
+  };
+}
+
+bool _isToday(DateTime date) => _isSameDate(date, DateTime.now());
+
+DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+
+bool _isSameDate(DateTime a, DateTime b) {
+  return a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 class _RecentCheckinsCard extends StatelessWidget {
